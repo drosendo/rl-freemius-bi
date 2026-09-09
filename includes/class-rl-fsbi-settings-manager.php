@@ -9,33 +9,36 @@
 class RL_FSBI_Settings_Manager {
 
 	/**
-	 * Framework instance
+	 * Framework instance.
 	 *
 	 * @var RL_Options_Framework
 	 */
 	private $framework;
 
 	/**
-	 * Constructor
+	 * Ensure save hook registration happens once.
+	 *
+	 * @var bool
+	 */
+	private static $hooks_registered = false;
+
+	/**
+	 * Constructor.
 	 */
 	public function __construct() {
-		// Load and initialize framework immediately
 		$this->init_framework();
 	}
 
 	/**
-	 * Initialize the options framework
+	 * Initialize the options framework.
 	 */
 	public function init_framework() {
-		// Only initialize once
 		if ( $this->framework ) {
 			return;
 		}
 
-		// Load the standalone framework copy bundled with this plugin
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/main.php';
 
-		// Framework is completely independent—loaded from plugin's own copy
 		$this->framework = new RL_Options_Framework(
 			array(
 				'option_name'    => 'rl_fsbi_settings',
@@ -51,20 +54,17 @@ class RL_FSBI_Settings_Manager {
 			)
 		);
 
-		// Initialize framework immediately (this registers the admin_menu hook)
 		$this->framework->init();
-
-		// Now define tabs, sections, and fields
 		$this->add_tabs();
 		$this->add_sections();
 		$this->add_fields();
+		$this->register_framework_hooks();
 	}
 
 	/**
-	 * Add tabs to settings page
+	 * Add tabs to settings page.
 	 */
 	private function add_tabs() {
-		// API Configuration Tab
 		$this->framework->add_tab(
 			'api_config',
 			array(
@@ -72,7 +72,13 @@ class RL_FSBI_Settings_Manager {
 			)
 		);
 
-		// General Settings Tab
+		$this->framework->add_tab(
+			'plugin_scope',
+			array(
+				'label' => esc_html__( 'Plugin Scope', 'rl-freemius-bi' ),
+			)
+		);
+
 		$this->framework->add_tab(
 			'general',
 			array(
@@ -80,7 +86,6 @@ class RL_FSBI_Settings_Manager {
 			)
 		);
 
-		// Information Tab
 		$this->framework->add_tab(
 			'info',
 			array(
@@ -90,20 +95,27 @@ class RL_FSBI_Settings_Manager {
 	}
 
 	/**
-	 * Add sections to tabs
+	 * Add sections to tabs.
 	 */
 	private function add_sections() {
-		// API Configuration Section
 		$this->framework->add_section(
 			'api_config',
 			'freemius_api',
 			array(
 				'title' => esc_html__( 'Freemius REST API Credentials', 'rl-freemius-bi' ),
-				'desc'  => esc_html__( 'Enter your Freemius API credentials to sync data. Get these from developer.freemius.com', 'rl-freemius-bi' ),
+				'desc'  => esc_html__( 'Enter your Freemius API credentials, save, and the plugin catalog will be discovered automatically.', 'rl-freemius-bi' ),
 			)
 		);
 
-		// General Settings Sections
+		$this->framework->add_section(
+			'plugin_scope',
+			'plugin_selection',
+			array(
+				'title' => esc_html__( 'Select Plugins To Track', 'rl-freemius-bi' ),
+				'desc'  => esc_html__( 'Choose which discovered plugins will be synced and shown under the Freemius BI menu.', 'rl-freemius-bi' ),
+			)
+		);
+
 		$this->framework->add_section(
 			'general',
 			'sync_settings',
@@ -122,7 +134,6 @@ class RL_FSBI_Settings_Manager {
 			)
 		);
 
-		// Info Section
 		$this->framework->add_section(
 			'info',
 			'database_info',
@@ -134,20 +145,22 @@ class RL_FSBI_Settings_Manager {
 	}
 
 	/**
-	 * Add fields to sections
+	 * Add fields to sections.
 	 */
 	private function add_fields() {
-		// ===== API Configuration Fields =====
+		$plugin_field_options = $this->get_discovered_plugin_field_options();
+
 		$this->framework->add_field(
 			'api_config',
 			'freemius_api',
 			array(
-				'id'          => 'rl_fsbi_developer_id',
-				'type'        => 'text',
-				'label'       => esc_html__( 'Developer ID', 'rl-freemius-bi' ),
-				'desc'        => esc_html__( 'Your Freemius Developer ID from developer.freemius.com', 'rl-freemius-bi' ),
-				'placeholder' => '123456',
-				'required'    => true,
+				'id'                => 'rl_fsbi_developer_id',
+				'type'              => 'text',
+				'label'             => esc_html__( 'Developer ID', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Your Freemius Developer ID from developer.freemius.com', 'rl-freemius-bi' ),
+				'placeholder'       => '123456',
+				'required'          => true,
+				'sanitize_callback' => array( $this, 'sanitize_developer_id' ),
 			)
 		);
 
@@ -155,12 +168,13 @@ class RL_FSBI_Settings_Manager {
 			'api_config',
 			'freemius_api',
 			array(
-				'id'          => 'rl_fsbi_public_key',
-				'type'        => 'text',
-				'label'       => esc_html__( 'Public API Key', 'rl-freemius-bi' ),
-				'desc'        => esc_html__( 'Your Freemius public API key (starts with pk_)', 'rl-freemius-bi' ),
-				'placeholder' => 'pk_xxxxxxxxxxxxxxxxxxxx',
-				'required'    => true,
+				'id'                => 'rl_fsbi_public_key',
+				'type'              => 'text',
+				'label'             => esc_html__( 'Public API Key', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Your Freemius public API key (starts with pk_)', 'rl-freemius-bi' ),
+				'placeholder'       => 'pk_xxxxxxxxxxxxxxxxxxxx',
+				'required'          => true,
+				'sanitize_callback' => array( $this, 'sanitize_freemius_key' ),
 			)
 		);
 
@@ -168,16 +182,40 @@ class RL_FSBI_Settings_Manager {
 			'api_config',
 			'freemius_api',
 			array(
-				'id'          => 'rl_fsbi_secret_key',
-				'type'        => 'password',
-				'label'       => esc_html__( 'Secret API Key', 'rl-freemius-bi' ),
-				'desc'        => esc_html__( 'Your Freemius secret API key (starts with sk_). Keep this secure!', 'rl-freemius-bi' ),
-				'placeholder' => 'sk_xxxxxxxxxxxxxxxxxxxx',
-				'required'    => true,
+				'id'                => 'rl_fsbi_secret_key',
+				'type'              => 'text',
+				'label'             => esc_html__( 'Secret API Key', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Case-sensitive key from Freemius. Special characters are preserved.', 'rl-freemius-bi' ),
+				'placeholder'       => 'sk_xxxxxxxxxxxxxxxxxxxx',
+				'required'          => true,
+				'sanitize_callback' => array( $this, 'sanitize_freemius_key' ),
 			)
 		);
 
-		// ===== Synchronization Settings =====
+		$this->framework->add_field(
+			'plugin_scope',
+			'plugin_selection',
+			array(
+				'id'      => 'rl_fsbi_plugin_scope_info',
+				'type'    => 'info',
+				'label'   => esc_html__( 'Discovery Status', 'rl-freemius-bi' ),
+				'content' => $this->get_plugin_scope_info_content( $plugin_field_options ),
+			)
+		);
+
+		$this->framework->add_field(
+			'plugin_scope',
+			'plugin_selection',
+			array(
+				'id'      => 'rl_fsbi_selected_plugins',
+				'type'    => 'multiselect',
+				'label'   => esc_html__( 'Tracked Plugins', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'Each selected plugin gets its own dashboard submenu and is included in sync jobs.', 'rl-freemius-bi' ),
+				'options' => $plugin_field_options,
+				'default' => array_keys( $plugin_field_options ),
+			)
+		);
+
 		$this->framework->add_field(
 			'general',
 			'sync_settings',
@@ -194,22 +232,16 @@ class RL_FSBI_Settings_Manager {
 			'general',
 			'sync_settings',
 			array(
-				'id'        => 'rl_fsbi_sync_interval',
-				'type'      => 'select',
-				'label'     => esc_html__( 'Sync Interval', 'rl-freemius-bi' ),
-				'desc'      => esc_html__( 'How often to synchronize data with Freemius', 'rl-freemius-bi' ),
-				'options'   => array(
+				'id'      => 'rl_fsbi_sync_interval',
+				'type'    => 'select',
+				'label'   => esc_html__( 'Sync Interval', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'How often to synchronize data with Freemius', 'rl-freemius-bi' ),
+				'options' => array(
 					'hourly'     => esc_html__( 'Hourly', 'rl-freemius-bi' ),
 					'twicedaily' => esc_html__( 'Twice Daily', 'rl-freemius-bi' ),
 					'daily'      => esc_html__( 'Daily', 'rl-freemius-bi' ),
 				),
-				'default'   => 'hourly',
-				'conditions' => array(
-					array(
-						'field'    => 'rl_fsbi_sync_enabled',
-						'operator' => 'truthy',
-					),
-				),
+				'default' => 'hourly',
 			)
 		);
 
@@ -227,7 +259,6 @@ class RL_FSBI_Settings_Manager {
 			)
 		);
 
-		// ===== Dashboard Display Settings =====
 		$this->framework->add_field(
 			'general',
 			'display_settings',
@@ -272,33 +303,31 @@ class RL_FSBI_Settings_Manager {
 			)
 		);
 
-		// ===== Locale Currency Format =====
 		$this->framework->add_field(
 			'general',
 			'display_settings',
 			array(
-				'id'      => 'rl_fsbi_locale_format',
-				'type'    => 'text',
-				'label'   => esc_html__( 'Locale Currency Format', 'rl-freemius-bi' ),
-				'desc'    => esc_html__( 'Language-sensitive number formatting. Examples: pt-PT, de-DE, ja-JP. Default: us-US', 'rl-freemius-bi' ),
-				'default' => 'us-US',
+				'id'          => 'rl_fsbi_locale_format',
+				'type'        => 'text',
+				'label'       => esc_html__( 'Locale Currency Format', 'rl-freemius-bi' ),
+				'desc'        => esc_html__( 'Language-sensitive number formatting. Examples: pt-PT, de-DE, ja-JP. Default: us-US', 'rl-freemius-bi' ),
+				'default'     => 'us-US',
 				'placeholder' => 'us-US',
 			)
 		);
 
-		// ===== Transferwise Token =====
 		$this->framework->add_field(
 			'general',
 			'display_settings',
 			array(
-				'id'      => 'rl_fsbi_transferwise_token',
-				'type'    => 'password',
-				'label'   => esc_html__( 'Transferwise Token', 'rl-freemius-bi' ),
-				'desc'    => esc_html__( 'API token for Transferwise currency conversion', 'rl-freemius-bi' ),
+				'id'                => 'rl_fsbi_transferwise_token',
+				'type'              => 'text',
+				'label'             => esc_html__( 'Transferwise Token', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'API token for Transferwise currency conversion', 'rl-freemius-bi' ),
+				'sanitize_callback' => array( $this, 'sanitize_freemius_key' ),
 			)
 		);
 
-		// ===== Transferwise Conversion Currency =====
 		$this->framework->add_field(
 			'general',
 			'display_settings',
@@ -306,7 +335,7 @@ class RL_FSBI_Settings_Manager {
 				'id'      => 'rl_fsbi_conversion_currency',
 				'type'    => 'select',
 				'label'   => esc_html__( 'Conversion Currency', 'rl-freemius-bi' ),
-				'desc'    => esc_html__( 'Base currency for payout display (currency conversion via Transferwise). Options: EUR, USD, GBP. Default: EUR', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'Base currency for payout display (EUR, USD, GBP).', 'rl-freemius-bi' ),
 				'options' => array(
 					'EUR' => 'EUR - Euro',
 					'USD' => 'USD - United States Dollar',
@@ -316,7 +345,6 @@ class RL_FSBI_Settings_Manager {
 			)
 		);
 
-		// ===== Database Info Field =====
 		$this->framework->add_field(
 			'info',
 			'database_info',
@@ -330,7 +358,208 @@ class RL_FSBI_Settings_Manager {
 	}
 
 	/**
-	 * Get database information content
+	 * Register framework lifecycle hooks.
+	 */
+	private function register_framework_hooks() {
+		if ( self::$hooks_registered ) {
+			return;
+		}
+
+		add_action( 'rl_fsbi_settings_settings_saved', array( $this, 'handle_settings_saved' ), 10, 1 );
+		self::$hooks_registered = true;
+	}
+
+	/**
+	 * Save handler to auto-discover plugin catalog from Freemius.
+	 *
+	 * @param array $saved Settings payload.
+	 */
+	public function handle_settings_saved( $saved ) {
+		if ( ! is_array( $saved ) ) {
+			return;
+		}
+
+		$developer_id = isset( $saved['rl_fsbi_developer_id'] ) ? trim( (string) $saved['rl_fsbi_developer_id'] ) : '';
+		$public_key   = isset( $saved['rl_fsbi_public_key'] ) ? trim( (string) $saved['rl_fsbi_public_key'] ) : '';
+		$secret_key   = isset( $saved['rl_fsbi_secret_key'] ) ? trim( (string) $saved['rl_fsbi_secret_key'] ) : '';
+
+		if ( '' === $developer_id || '' === $public_key || '' === $secret_key ) {
+			return;
+		}
+
+		$current_hash = md5( $developer_id . '|' . $public_key . '|' . $secret_key );
+		$existing_hash = isset( $saved['rl_fsbi_credentials_hash'] ) ? (string) $saved['rl_fsbi_credentials_hash'] : '';
+		$existing_catalog = isset( $saved['rl_fsbi_plugins_catalog'] ) && is_array( $saved['rl_fsbi_plugins_catalog'] ) ? $saved['rl_fsbi_plugins_catalog'] : array();
+
+		if ( $current_hash === $existing_hash && ! empty( $existing_catalog ) ) {
+			return;
+		}
+
+		$api = new RL_FSBI_API( $developer_id, $public_key, $secret_key );
+		$plugins = $api->retrieve_plugins();
+
+		if ( empty( $plugins ) ) {
+			$this->persist_settings_updates(
+				array(
+					'rl_fsbi_credentials_hash' => $current_hash,
+					'rl_fsbi_discovery_status' => esc_html__( 'Discovery failed. Verify your Freemius credentials and save again.', 'rl-freemius-bi' ),
+					'rl_fsbi_run_initial_sweep' => false,
+				)
+			);
+			return;
+		}
+
+		$catalog = array();
+		foreach ( $plugins as $plugin ) {
+			$plugin_id = (int) ( is_array( $plugin ) ? ( $plugin['id'] ?? 0 ) : ( $plugin->id ?? 0 ) );
+			if ( $plugin_id <= 0 ) {
+				continue;
+			}
+
+			$title = is_array( $plugin ) ? ( $plugin['title'] ?? '' ) : ( $plugin->title ?? '' );
+			$slug  = is_array( $plugin ) ? ( $plugin['slug'] ?? '' ) : ( $plugin->slug ?? '' );
+
+			$catalog[ (string) $plugin_id ] = array(
+				'id'    => $plugin_id,
+				'title' => sanitize_text_field( (string) $title ),
+				'slug'  => sanitize_key( (string) $slug ),
+			);
+		}
+
+		if ( empty( $catalog ) ) {
+			$this->persist_settings_updates(
+				array(
+					'rl_fsbi_credentials_hash' => $current_hash,
+					'rl_fsbi_discovery_status' => esc_html__( 'No plugins returned by Freemius for this account.', 'rl-freemius-bi' ),
+					'rl_fsbi_run_initial_sweep' => false,
+				)
+			);
+			return;
+		}
+
+		$selected_plugins = isset( $saved['rl_fsbi_selected_plugins'] ) && is_array( $saved['rl_fsbi_selected_plugins'] )
+			? array_values( array_map( 'strval', $saved['rl_fsbi_selected_plugins'] ) )
+			: array();
+
+		if ( empty( $selected_plugins ) ) {
+			$selected_plugins = array_keys( $catalog );
+		}
+
+		$selected_plugins = array_values( array_intersect( $selected_plugins, array_keys( $catalog ) ) );
+
+		$this->persist_settings_updates(
+			array(
+				'rl_fsbi_plugins_catalog'   => $catalog,
+				'rl_fsbi_selected_plugins'  => $selected_plugins,
+				'rl_fsbi_credentials_hash'  => $current_hash,
+				'rl_fsbi_discovery_status'  => sprintf(
+					/* translators: %d: number of discovered plugins */
+					esc_html__( 'Discovery completed. %d plugins found. Save once more if you change selection.', 'rl-freemius-bi' ),
+					count( $catalog )
+				),
+				'rl_fsbi_run_initial_sweep' => true,
+				'rl_fsbi_discovered_at_utc' => gmdate( 'Y-m-d H:i:s' ),
+			)
+		);
+	}
+
+	/**
+	 * Preserve exact keys from Freemius while removing only invisible control chars.
+	 *
+	 * @param mixed $value Raw key value.
+	 * @return string
+	 */
+	public function sanitize_freemius_key( $value ) {
+		$value = (string) $value;
+		$value = preg_replace( '/[\x00-\x1F\x7F]/u', '', $value );
+		return trim( $value );
+	}
+
+	/**
+	 * Sanitize developer ID.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return string
+	 */
+	public function sanitize_developer_id( $value ) {
+		return preg_replace( '/[^0-9]/', '', (string) $value );
+	}
+
+	/**
+	 * Persist partial settings into framework option row.
+	 *
+	 * @param array $updates Updates map.
+	 */
+	private function persist_settings_updates( $updates ) {
+		$settings = $this->get_all_settings();
+		foreach ( $updates as $key => $value ) {
+			$settings[ $key ] = $value;
+		}
+
+		update_option( 'rl_fsbi_settings', $settings );
+	}
+
+	/**
+	 * Build plugin multiselect options from discovered catalog.
+	 *
+	 * @return array
+	 */
+	private function get_discovered_plugin_field_options() {
+		$catalog = $this->framework->get_option( 'rl_fsbi_plugins_catalog', array() );
+		if ( ! is_array( $catalog ) ) {
+			return array();
+		}
+
+		$options = array();
+		foreach ( $catalog as $plugin_id => $plugin_data ) {
+			$plugin_id = (string) $plugin_id;
+			$title = '';
+			if ( is_array( $plugin_data ) && isset( $plugin_data['title'] ) ) {
+				$title = trim( (string) $plugin_data['title'] );
+			}
+
+			$options[ $plugin_id ] = '' !== $title ? sanitize_text_field( $title ) . ' (#' . $plugin_id . ')' : 'Plugin #' . $plugin_id;
+		}
+
+		return $options;
+	}
+
+	/**
+	 * Get plugin scope info content.
+	 *
+	 * @param array $plugin_field_options Options map.
+	 * @return string
+	 */
+	private function get_plugin_scope_info_content( $plugin_field_options ) {
+		$status = (string) $this->framework->get_option( 'rl_fsbi_discovery_status', '' );
+		$discovered_at = (string) $this->framework->get_option( 'rl_fsbi_discovered_at_utc', '' );
+		$last_sync_status = (string) $this->framework->get_option( 'rl_fsbi_last_sync_status', '' );
+		$last_sync_at = (string) $this->framework->get_option( 'rl_fsbi_last_sync_at_utc', '' );
+
+		$content = '<p>' . esc_html__( 'Save valid credentials in API Configuration to run discovery.', 'rl-freemius-bi' ) . '</p>';
+		$content .= '<p><strong>' . esc_html__( 'Discovered Plugins:', 'rl-freemius-bi' ) . '</strong> ' . (int) count( $plugin_field_options ) . '</p>';
+
+		if ( '' !== $status ) {
+			$content .= '<p><strong>' . esc_html__( 'Last Status:', 'rl-freemius-bi' ) . '</strong> ' . esc_html( $status ) . '</p>';
+		}
+
+		if ( '' !== $discovered_at ) {
+			$content .= '<p><strong>' . esc_html__( 'Last Discovery (UTC):', 'rl-freemius-bi' ) . '</strong> ' . esc_html( $discovered_at ) . '</p>';
+		}
+
+		if ( '' !== $last_sync_status ) {
+			$content .= '<p><strong>' . esc_html__( 'Last Sync Status:', 'rl-freemius-bi' ) . '</strong> ' . esc_html( $last_sync_status ) . '</p>';
+		}
+
+		if ( '' !== $last_sync_at ) {
+			$content .= '<p><strong>' . esc_html__( 'Last Sync (UTC):', 'rl-freemius-bi' ) . '</strong> ' . esc_html( $last_sync_at ) . '</p>';
+		}
+
+		return $content;
+	}
+
+	/**
+	 * Get database information content.
 	 *
 	 * @return string HTML content
 	 */
@@ -350,12 +579,22 @@ class RL_FSBI_Settings_Manager {
 
 		foreach ( $tables as $table ) {
 			$full_table_name = $wpdb->prefix . substr( $table, 3 );
-			$row_count       = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s', DB_NAME, $full_table_name ) );
-			$row_count       = $wpdb->get_var( "SELECT COUNT(*) FROM $full_table_name" );
+			$table_exists = (bool) $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s',
+					DB_NAME,
+					$full_table_name
+				)
+			);
+
+			$row_count = 0;
+			if ( $table_exists ) {
+				$row_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$full_table_name}" );
+			}
 
 			$content .= '<li>';
 			$content .= '<code>' . esc_html( $full_table_name ) . '</code> ';
-			$content .= '— ' . sprintf( esc_html__( '%d records', 'rl-freemius-bi' ), (int) $row_count );
+			$content .= '- ' . sprintf( esc_html__( '%d records', 'rl-freemius-bi' ), $row_count );
 			$content .= '</li>';
 		}
 
@@ -366,47 +605,50 @@ class RL_FSBI_Settings_Manager {
 	}
 
 	/**
-	 * Get option value using the framework
+	 * Get option value using the framework.
 	 *
-	 * @param  string $option_key Option key
-	 * @param  mixed  $default Default value
-	 * @return mixed Option value
+	 * @param string $option_key Option key.
+	 * @param mixed  $default    Default value.
+	 * @return mixed
 	 */
 	public function get_option( $option_key, $default = false ) {
 		return $this->framework->get_option( $option_key, $default );
 	}
 
 	/**
-	 * Get all settings
+	 * Get all settings.
 	 *
-	 * @return array All settings
+	 * @return array
 	 */
 	public function get_all_settings() {
-		return $this->framework->get_all_options();
+		$settings = get_option( 'rl_fsbi_settings', array() );
+		return is_array( $settings ) ? $settings : array();
 	}
 
 	/**
-	 * Update option value
+	 * Update a single option key in framework option row.
 	 *
-	 * @param string $option_key Option key
-	 * @param mixed  $value Option value
-	 * @return bool Success status
+	 * @param string $option_key Option key.
+	 * @param mixed  $value      Option value.
+	 * @return bool
 	 */
 	public function update_option( $option_key, $value ) {
-		return $this->framework->update_option( $option_key, $value );
+		$settings = $this->get_all_settings();
+		$settings[ $option_key ] = $value;
+		return (bool) update_option( 'rl_fsbi_settings', $settings );
 	}
 
 	/**
-	 * Initialize framework on admin_menu hook
+	 * Initialize framework on admin_menu hook.
 	 */
 	public function init() {
 		$this->framework->init();
 	}
 
 	/**
-	 * Get framework instance
+	 * Get framework instance.
 	 *
-	 * @return RL_Options_Framework Framework instance
+	 * @return RL_Options_Framework
 	 */
 	public function get_framework() {
 		return $this->framework;

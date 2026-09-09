@@ -8,21 +8,38 @@
 	const FSBI = {
 		charts: {},
 		dataTable: null,
+		currentReportCurrency: null,
 
 		init: function() {
+			this.applyDefaultFilters();
 			this.bindEvents();
-			this.loadInitialData();
+			this.loadData();
+		},
+
+		applyDefaultFilters: function() {
+			const currencyFilter = document.getElementById('rl-fsbi-currency-filter');
+			if (currencyFilter) {
+				// Always start from all currencies, then convert to report currency in backend.
+				currencyFilter.value = 'all';
+			}
+
+			const startField = document.getElementById('rl-fsbi-start-date');
+			const endField = document.getElementById('rl-fsbi-end-date');
+			if (startField && endField && !startField.value && !endField.value) {
+				const now = new Date();
+				const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+				startField.value = this.toISODate(monthStart);
+				endField.value = this.toISODate(now);
+			}
 		},
 
 		bindEvents: function() {
 			const self = this;
 
-			// Sync button
 			document.getElementById('rl-fsbi-sync-btn')?.addEventListener('click', function() {
 				self.syncData();
 			});
 
-			// Filters
 			document.getElementById('rl-fsbi-plugin-filter')?.addEventListener('change', function() {
 				self.loadData();
 			});
@@ -40,24 +57,87 @@
 			});
 		},
 
+		toISODate: function(dateObj) {
+			const pad = (v) => String(v).padStart(2, '0');
+			return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}`;
+		},
+
+		setText: function(id, value) {
+			const node = document.getElementById(id);
+			if (node) {
+				node.textContent = value;
+			}
+		},
+
+		setHtml: function(id, value) {
+			const node = document.getElementById(id);
+			if (node) {
+				node.innerHTML = value;
+			}
+		},
+
+		getChartAspectRatio: function(key, type) {
+			if (type === 'doughnut') {
+				return 1;
+			}
+
+			const map = {
+				salesActivity: 2.2,
+				revenueOverview: 2.0,
+				wporg: 2.2,
+				forecast: 1.7,
+				churn: 1.5,
+			};
+
+			return map[key] || 1.8;
+		},
+
 		getFilters: function() {
+			const forcedPlugin = Number.parseInt(rlFsbiAdmin.forcedPluginId || 0, 10);
+			const pluginField = document.getElementById('rl-fsbi-plugin-filter');
+			const pluginFallback = document.getElementById('rl-fsbi-plugin-filter-forced');
+			let pluginId = pluginField?.value || 'all';
+
+			if (forcedPlugin > 0) {
+				pluginId = String(forcedPlugin);
+			} else if (pluginField?.disabled && pluginFallback?.value) {
+				pluginId = pluginFallback.value;
+			}
+
 			return {
-				plugin_id: document.getElementById('rl-fsbi-plugin-filter')?.value || 'all',
+				plugin_id: pluginId,
 				currency: document.getElementById('rl-fsbi-currency-filter')?.value || 'all',
 				start_date: document.getElementById('rl-fsbi-start-date')?.value || '',
 				end_date: document.getElementById('rl-fsbi-end-date')?.value || '',
 			};
 		},
 
-		loadInitialData: function() {
-			this.loadData();
+		getDisplayCurrency: function() {
+			if (this.currentReportCurrency) {
+				return this.currentReportCurrency;
+			}
+			const selectedCurrency = document.getElementById('rl-fsbi-currency-filter')?.value || rlFsbiAdmin.defaultCurrency || 'USD';
+			return selectedCurrency === 'all' ? (rlFsbiAdmin.defaultCurrency || 'USD') : selectedCurrency;
+		},
+
+		formatCurrency: function(value, currency) {
+			const safe = Number.isFinite(Number(value)) ? Number(value) : 0;
+			return new Intl.NumberFormat(rlFsbiAdmin.localeFormat || 'en-US', {
+				style: 'currency',
+				currency: currency || this.getDisplayCurrency(),
+				maximumFractionDigits: 2,
+			}).format(safe);
+		},
+
+		formatPercent: function(value, decimals = 1) {
+			const safe = Number.isFinite(Number(value)) ? Number(value) : 0;
+			return `${safe.toFixed(decimals)}%`;
 		},
 
 		loadData: function() {
 			const self = this;
 			const filters = this.getFilters();
 
-			// Fetch data via AJAX
 			fetch(rlFsbiAdmin.ajaxUrl, {
 				method: 'POST',
 				headers: {
@@ -69,198 +149,388 @@
 					...filters,
 				}),
 			})
-			.then(response => response.json())
-			.then(data => {
-				if (data.success) {
-					self.updateKPIs(data.data);
-					self.updateCharts(data.data);
-					self.updateTable(data.data);
+			.then((response) => response.json())
+			.then((res) => {
+				if (!res.success) {
+					alert('Error: ' + (res.data || 'Failed to load dashboard data'));
+					return;
 				}
+
+				self.renderDashboard(res.data || {});
 			})
-			.catch(error => console.error('Error loading data:', error));
+			.catch((error) => {
+				console.error('Error loading dashboard data:', error);
+				alert('Failed to load dashboard data.');
+			});
 		},
 
-		updateKPIs: function(data) {
-			const formatCurrency = (value, currency = 'USD') => {
-				return new Intl.NumberFormat('en-US', {
-					style: 'currency',
-					currency: currency,
-				}).format(value);
-			};
+		renderDashboard: function(data) {
+			this.currentReportCurrency = data.report_currency || data?.summary?.report_currency || null;
+			this.updateTopCards(data);
+			this.updateMiniKpis(data);
+			this.updateMiniStats(data);
+			this.updateTrialPanel(data);
+			this.updateCharts(data);
+			this.updateMonthlyTable(data);
+		},
 
-			// Gross Revenue
-			const grossRevenue = document.getElementById('rl-fsbi-gross-revenue');
-			if (grossRevenue) {
-				grossRevenue.textContent = formatCurrency(data.gross_revenue || 0);
-			}
+		updateTopCards: function(data) {
+			const currency = this.getDisplayCurrency();
+			const summary = data.summary || {};
+			const netRevenue = Number(summary.net_revenue || 0);
+			const previousNet = Number(summary.previous_net_revenue || 0);
+			const deltaPct = previousNet > 0 ? (((netRevenue - previousNet) / previousNet) * 100) : 0;
+			const deltaSign = deltaPct > 0 ? '+' : '';
 
-			// Net Revenue
-			const netRevenue = document.getElementById('rl-fsbi-net-revenue');
-			if (netRevenue) {
-				netRevenue.textContent = formatCurrency(data.net_revenue || 0);
-			}
+			this.setText('rl-fsbi-net-revenue', this.formatCurrency(netRevenue, currency));
+			this.setText('rl-fsbi-net-comparison', `${deltaSign}${deltaPct.toFixed(1)}% vs previous period`);
+			this.setText('rl-fsbi-expected-payout', this.formatCurrency(Number(summary.expected_payout || 0), currency));
+			this.setText('rl-fsbi-payout-note', summary.payout_note || 'Based on current MRR pace');
 
-			// MRR
-			const mrr = document.getElementById('rl-fsbi-mrr');
-			if (mrr) {
-				mrr.textContent = formatCurrency(data.mrr || 0);
+			if (Number(summary.refunds_count || 0) === 0) {
+				this.setText('rl-fsbi-refunds-breakdown', 'No refunds');
+				this.setText('rl-fsbi-refunds-sub', 'Healthy retention signal');
+			} else {
+				this.setText('rl-fsbi-refunds-breakdown', this.formatCurrency(Number(summary.refunds_total || 0), currency));
+				this.setText('rl-fsbi-refunds-sub', `${Number(summary.refunds_count || 0)} refunds in period`);
 			}
+		},
 
-			// Active Subscriptions
-			const activeSubs = document.getElementById('rl-fsbi-active-subs');
-			if (activeSubs) {
-				activeSubs.textContent = (data.active_subscriptions || 0).toLocaleString();
-			}
+		updateMiniKpis: function(data) {
+			const currency = this.getDisplayCurrency();
+			const kpis = data.kpis || {};
+			const mrr = Number(kpis.mrr_converted ?? kpis.mrr ?? 0);
+			const arr = Number(kpis.arr_converted ?? kpis.arr ?? (mrr * 12));
+
+			this.setText('rl-fsbi-mrr', this.formatCurrency(mrr, currency));
+			this.setText('rl-fsbi-arr', this.formatCurrency(arr, currency));
+			this.setText('rl-fsbi-mrr-as-of', `As of ${kpis.metric_as_of || 'selected period end'}`);
+			this.setText('rl-fsbi-arr-as-of', `Annualized from ${kpis.metric_as_of || 'selected period end'}`);
+			this.setText('rl-fsbi-aov', this.formatCurrency(Number(kpis.aov || 0), currency));
+			this.setText('rl-fsbi-refund-rate', this.formatPercent(Number(kpis.refund_rate || 0), 1));
+			this.setText('rl-fsbi-churn-rate', this.formatPercent(Number(kpis.churn_rate || 0), 1));
+			this.setText('rl-fsbi-health-score', String(Math.round(Number(kpis.health_score || 0))));
+		},
+
+		updateMiniStats: function(data) {
+			const stats = data.stats || {};
+			this.setText('rl-fsbi-stat-purchases', Number(stats.purchases || 0).toLocaleString());
+			this.setText('rl-fsbi-stat-trials-conversions', `${Number(stats.trials || 0)}/${Number(stats.conversions || 0)}`);
+			this.setText('rl-fsbi-stat-refunds', Number(stats.refunds || 0).toLocaleString());
+			this.setText('rl-fsbi-stat-renewals', Number(stats.renewals || 0).toLocaleString());
+		},
+
+		updateTrialPanel: function(data) {
+			const trial = data.trial_conversion || {};
+			this.setText('rl-fsbi-trials-total', Number(trial.total_trials || 0).toLocaleString());
+			this.setText('rl-fsbi-trials-converted', Number(trial.converted || 0).toLocaleString());
+			this.setText('rl-fsbi-trials-rate', this.formatPercent(Number(trial.rate || 0), 1));
 		},
 
 		updateCharts: function(data) {
-			this.updateRevenueChart(data);
-			this.updateCurrencyChart(data);
+			const charts = data.charts || {};
+			const currency = this.getDisplayCurrency();
+
+			this.drawLineChart('salesActivity', 'rl-fsbi-sales-activity-chart', charts.sales_activity?.labels || [], [
+				{ label: 'Purchases', data: charts.sales_activity?.purchases || [], borderColor: '#5f6bff', backgroundColor: 'rgba(95,107,255,0.15)' },
+				{ label: 'Trials', data: charts.sales_activity?.trials || [], borderColor: '#22c89b', backgroundColor: 'rgba(34,200,155,0.15)' },
+				{ label: 'Refunds', data: charts.sales_activity?.refunds || [], borderColor: '#ff5a72', backgroundColor: 'rgba(255,90,114,0.15)' },
+				{ label: 'Conversions', data: charts.sales_activity?.conversions || [], borderColor: '#f4b942', backgroundColor: 'rgba(244,185,66,0.15)' },
+			], false);
+
+			this.drawBarChart('revenueOverview', 'rl-fsbi-revenue-overview-chart', charts.revenue_overview?.labels || [], [
+				{ label: 'Gross', data: charts.revenue_overview?.gross || [], backgroundColor: 'rgba(95,107,255,0.75)' },
+				{ label: 'Net', data: charts.revenue_overview?.net || [], backgroundColor: 'rgba(34,200,155,0.75)' },
+				{ label: 'Refunds', data: charts.revenue_overview?.refunds || [], backgroundColor: 'rgba(255,90,114,0.75)' },
+				{ label: 'Fees', data: charts.revenue_overview?.fees || [], backgroundColor: 'rgba(244,185,66,0.75)' },
+			], currency);
+
+			this.drawLineChart('forecast', 'rl-fsbi-forecast-chart', charts.revenue_forecast?.labels || [], [
+				{ label: 'Forecasted Revenue', data: charts.revenue_forecast?.values || [], borderColor: '#8e5dff', backgroundColor: 'rgba(142,93,255,0.15)' },
+			], true);
+
+			this.drawComboChart('churn', 'rl-fsbi-churn-chart', charts.churn_trend?.labels || [], charts.churn_trend?.canceled || [], charts.churn_trend?.churn_rate || []);
+			this.drawDoughnutChart('currency', 'rl-fsbi-currency-chart', charts.currency_distribution?.labels || [], charts.currency_distribution?.values || [], currency);
+			this.drawDoughnutChart('country', 'rl-fsbi-country-chart', charts.country_distribution?.labels || [], charts.country_distribution?.values || [], null, false);
+			this.drawDoughnutChart('plan', 'rl-fsbi-plan-chart', charts.plan_distribution?.labels || [], charts.plan_distribution?.values || [], null, false);
+			this.drawLineChart('wporg', 'rl-fsbi-wporg-chart', charts.wporg_growth?.labels || [], [
+				{ label: 'Daily Downloads / Activity', data: charts.wporg_growth?.values || [], borderColor: '#22c89b', backgroundColor: 'rgba(34,200,155,0.18)' },
+			], true);
 		},
 
-		updateRevenueChart: function(data) {
-			const ctx = document.getElementById('rl-fsbi-revenue-chart');
-			if (!ctx) return;
-
-			// Destroy existing chart if it exists
-			if (this.charts.revenue) {
-				this.charts.revenue.destroy();
-			}
-
-			const chartData = data.revenue_trend || {};
-			const labels = Object.keys(chartData).sort();
-			const values = labels.map(date => chartData[date] || 0);
-
-			this.charts.revenue = new Chart(ctx, {
-				type: 'line',
-				data: {
-					labels: labels,
-					datasets: [{
-						label: 'Daily Gross Revenue',
-						data: values,
-						borderColor: '#1f8d5c',
-						backgroundColor: 'rgba(31, 141, 92, 0.1)',
-						borderWidth: 2,
-						fill: true,
-						tension: 0.4,
-					}],
-				},
-				options: {
-					responsive: true,
-					plugins: {
-						legend: {
-							display: true,
-							position: 'top',
-						},
-					},
-					scales: {
-						y: {
-							beginAtZero: true,
-							ticks: {
-								callback: function(value) {
-									return '$' + value.toFixed(0);
-								},
-							},
-						},
-					},
-				},
-			});
-		},
-
-		updateCurrencyChart: function(data) {
-			const ctx = document.getElementById('rl-fsbi-currency-chart');
-			if (!ctx) return;
-
-			// Destroy existing chart if it exists
-			if (this.charts.currency) {
-				this.charts.currency.destroy();
-			}
-
-			const currencyData = data.currency_distribution || {};
-			const labels = Object.keys(currencyData);
-			const values = labels.map(currency => currencyData[currency] || 0);
-
-			const colors = ['#1f8d5c', '#0288d1', '#fbc02d', '#e91e63'];
-
-			this.charts.currency = new Chart(ctx, {
-				type: 'doughnut',
-				data: {
-					labels: labels,
-					datasets: [{
-						data: values,
-						backgroundColor: colors.slice(0, labels.length),
-						borderColor: '#fff',
-						borderWidth: 2,
-					}],
-				},
-				options: {
-					responsive: true,
-					plugins: {
-						legend: {
-							position: 'bottom',
-						},
-						tooltip: {
-							callbacks: {
-								label: function(context) {
-									const label = context.label || '';
-									const value = '$' + context.parsed.toFixed(2);
-									const total = context.dataset.data.reduce((a, b) => a + b, 0);
-									const percentage = ((context.parsed / total) * 100).toFixed(1);
-									return `${label}: ${value} (${percentage}%)`;
-								},
-							},
-						},
-					},
-				},
-			});
-		},
-
-		updateTable: function(data) {
-			const table = document.getElementById('rl-fsbi-payments-table');
-			if (!table) return;
-
-			const tbody = table.querySelector('tbody');
-			const payments = data.payments || [];
-
-			// Clear existing rows
-			tbody.innerHTML = '';
-
-			if (payments.length === 0) {
-				tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">No payments found for selected filters.</td></tr>';
+		drawLineChart: function(key, canvasId, labels, datasets, fill) {
+			const canvas = document.getElementById(canvasId);
+			if (!canvas || !window.Chart) {
 				return;
 			}
 
-			payments.forEach(payment => {
-				const row = document.createElement('tr');
-				const date = new Date(payment.transaction_date).toLocaleDateString();
-				const statusClass = 'rl-fsbi-status ' + payment.status;
-
-				row.innerHTML = `
-					<td>${payment.payment_id}</td>
-					<td>${date}</td>
-					<td>$${parseFloat(payment.gross).toFixed(2)}</td>
-					<td>$${parseFloat(payment.net).toFixed(2)}</td>
-					<td>${payment.currency}</td>
-					<td><span class="${statusClass}">${payment.status}</span></td>
-				`;
-
-				tbody.appendChild(row);
-			});
-
-			// Reinitialize DataTable if it exists
-			if (this.dataTable) {
-				this.dataTable.destroy();
+			if (this.charts[key]) {
+				this.charts[key].destroy();
 			}
 
-			this.dataTable = new DataTable(table, {
-				pageLength: 25,
-				order: [[1, 'desc']],
+			const normalizedDataSets = datasets.map((set) => ({
+				label: set.label,
+				data: set.data,
+				borderColor: set.borderColor,
+				backgroundColor: set.backgroundColor,
+				borderWidth: 2,
+				fill: !!fill,
+				tension: 0.3,
+				pointRadius: 1.5,
+			}));
+
+			this.charts[key] = new Chart(canvas, {
+				type: 'line',
+				data: {
+					labels: labels,
+					datasets: normalizedDataSets,
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: true,
+					aspectRatio: this.getChartAspectRatio(key, 'line'),
+					plugins: {
+						legend: { labels: { color: '#d7defd' } },
+					},
+					scales: {
+						x: { ticks: { color: '#9ca8d6' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+						y: { beginAtZero: true, ticks: { color: '#9ca8d6' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+					},
+				},
 			});
+		},
+
+		drawBarChart: function(key, canvasId, labels, datasets, currency) {
+			const canvas = document.getElementById(canvasId);
+			if (!canvas || !window.Chart) {
+				return;
+			}
+
+			if (this.charts[key]) {
+				this.charts[key].destroy();
+			}
+
+			this.charts[key] = new Chart(canvas, {
+				type: 'bar',
+				data: { labels: labels, datasets: datasets },
+				options: {
+					responsive: true,
+					maintainAspectRatio: true,
+					aspectRatio: this.getChartAspectRatio(key, 'bar'),
+					plugins: {
+						legend: { labels: { color: '#d7defd' } },
+						tooltip: {
+							callbacks: {
+								label: (ctx) => `${ctx.dataset.label}: ${this.formatCurrency(ctx.parsed.y || 0, currency)}`,
+							},
+						},
+					},
+					scales: {
+						x: { ticks: { color: '#9ca8d6' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+						y: { beginAtZero: true, ticks: { color: '#9ca8d6' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+					},
+				},
+			});
+		},
+
+		drawComboChart: function(key, canvasId, labels, bars, line) {
+			const canvas = document.getElementById(canvasId);
+			if (!canvas || !window.Chart) {
+				return;
+			}
+
+			if (this.charts[key]) {
+				this.charts[key].destroy();
+			}
+
+			this.charts[key] = new Chart(canvas, {
+				data: {
+					labels: labels,
+					datasets: [
+						{
+							type: 'bar',
+							label: 'Canceled',
+							data: bars,
+							backgroundColor: 'rgba(244,185,66,0.7)',
+							yAxisID: 'y',
+						},
+						{
+							type: 'line',
+							label: 'Churn Rate (%)',
+							data: line,
+							borderColor: '#ff5a72',
+							backgroundColor: 'rgba(255,90,114,0.2)',
+							borderWidth: 2,
+							tension: 0.3,
+							yAxisID: 'y1',
+						},
+					],
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: true,
+					aspectRatio: this.getChartAspectRatio(key, 'combo'),
+					plugins: { legend: { labels: { color: '#d7defd' } } },
+					scales: {
+						x: { ticks: { color: '#9ca8d6' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+						y: { beginAtZero: true, position: 'left', ticks: { color: '#9ca8d6' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+						y1: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { color: '#9ca8d6' } },
+					},
+				},
+			});
+		},
+
+		drawDoughnutChart: function(key, canvasId, labels, values, currency, asMoney = true) {
+			const canvas = document.getElementById(canvasId);
+			if (!canvas || !window.Chart) {
+				return;
+			}
+
+			if (this.charts[key]) {
+				this.charts[key].destroy();
+			}
+
+			const palette = ['#5f6bff', '#22c89b', '#f4b942', '#ff5a72', '#8e5dff', '#34c9ff', '#7bd66b', '#f187fd'];
+
+			this.charts[key] = new Chart(canvas, {
+				type: 'doughnut',
+				data: {
+					labels: labels,
+					datasets: [
+						{
+							data: values,
+							backgroundColor: palette.slice(0, labels.length),
+							borderColor: '#1f2538',
+							borderWidth: 1,
+						},
+					],
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: true,
+					aspectRatio: this.getChartAspectRatio(key, 'doughnut'),
+					cutout: '54%',
+					layout: {
+						padding: 8,
+					},
+					plugins: {
+						legend: { labels: { color: '#d7defd' }, position: 'bottom' },
+						tooltip: {
+							callbacks: {
+								label: (ctx) => {
+									const value = Number(ctx.parsed || 0);
+									if (!asMoney) {
+										return `${ctx.label}: ${value.toLocaleString()}`;
+									}
+									return `${ctx.label}: ${this.formatCurrency(value, currency || this.getDisplayCurrency())}`;
+								},
+							},
+						},
+					},
+				},
+			});
+		},
+
+		updateMonthlyTable: function(data) {
+			const table = document.getElementById('rl-fsbi-monthly-table');
+			if (!table) {
+				return;
+			}
+
+			const tbody = table.querySelector('tbody');
+			const tableData = data.table || {};
+			const rows = tableData.rows || [];
+			const totals = tableData.totals || {};
+			const reportCurrency = this.getDisplayCurrency();
+
+			tbody.innerHTML = '';
+
+			if (!rows.length) {
+				tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;">No monthly data for selected filters.</td></tr>';
+			} else {
+				rows.forEach((row) => {
+					const tr = document.createElement('tr');
+					if (row.is_next_payout) {
+						tr.classList.add('rl-fsbi-month-next');
+					}
+					if (row.is_current_payout) {
+						tr.classList.add('rl-fsbi-month-current');
+					}
+
+					const payoutTotalText = Number(row.payout_total || 0) > 0
+						? this.formatCurrency(Number(row.payout_total || 0), reportCurrency)
+						: 'Carryover';
+					const badges = [
+						row.show_period_badges && row.is_next_payout ? `<span class="rl-fsbi-month-badge rl-fsbi-badge-next">NEXT PAYOUT ${payoutTotalText}</span>` : '',
+						row.show_period_badges && row.is_current_payout ? `<span class="rl-fsbi-month-badge rl-fsbi-badge-current">CURRENT PAYOUT ${payoutTotalText}</span>` : '',
+					].join('');
+
+					const periodCell = row.show_period_badges
+						? `${row.period || row.month || ''} ${badges}`
+						: '';
+
+					const subsCell = [
+						`<span class="rl-fsbi-subs-pill rl-fsbi-subs-new">${Number(row.new || 0)} NEW</span>`,
+						`<span class="rl-fsbi-subs-pill rl-fsbi-subs-renew">${Number(row.renewals || 0)} RENEWALS</span>`,
+					].join('');
+
+					let payoutCell = '';
+					if (row.show_payout) {
+						const payoutBreakdown = Object.entries(row.payout_breakdown || {})
+							.filter(([, value]) => Number(value || 0) > 0)
+							.map(([code, value]) => `<div class="rl-fsbi-payout-line"><span>${code}</span><strong>${this.formatCurrency(Number(value || 0), reportCurrency)}</strong></div>`)
+							.join('');
+
+						if (payoutBreakdown) {
+							payoutCell = `${payoutBreakdown}<div class="rl-fsbi-payout-total">PAYOUT: ${this.formatCurrency(Number(row.payout_total || 0), reportCurrency)}</div>`;
+						} else {
+							payoutCell = '<span class="rl-fsbi-payout-carry">Below threshold, carryover.</span>';
+						}
+					}
+
+					const rowCurrency = row.currency || reportCurrency;
+
+					tr.innerHTML = [
+						`<td>${periodCell}</td>`,
+						`<td>${subsCell}</td>`,
+						`<td>${this.formatCurrency(Number(row.gross || 0), rowCurrency)}</td>`,
+						`<td class="rl-fsbi-negative">${this.formatCurrency(Number(row.refunds || 0), rowCurrency)}</td>`,
+						`<td>${this.formatCurrency(Number(row.fees || 0), rowCurrency)}</td>`,
+						`<td class="${Number(row.net || 0) >= 0 ? 'rl-fsbi-positive' : 'rl-fsbi-negative'}">${this.formatCurrency(Number(row.net || 0), rowCurrency)}</td>`,
+						`<td><strong>${rowCurrency}</strong></td>`,
+						`<td>${payoutCell || '-'}</td>`,
+					].join('');
+
+					tbody.appendChild(tr);
+				});
+			}
+
+			this.setText('rl-fsbi-total-gross', this.formatCurrency(Number(totals.gross || 0), reportCurrency));
+			this.setText('rl-fsbi-total-refunds', this.formatCurrency(Number(totals.refunds || 0), reportCurrency));
+			this.setText('rl-fsbi-total-fees', this.formatCurrency(Number(totals.fees || 0), reportCurrency));
+			this.setText('rl-fsbi-total-net', this.formatCurrency(Number(totals.net || 0), reportCurrency));
+			this.setText('rl-fsbi-total-currency', totals.currency || reportCurrency);
+
+			if (window.jQuery && window.jQuery.fn && window.jQuery.fn.DataTable && window.jQuery.fn.DataTable.isDataTable(table)) {
+				window.jQuery(table).DataTable().destroy();
+			}
+
+			if (window.jQuery && window.jQuery.fn && window.jQuery.fn.DataTable) {
+				this.dataTable = window.jQuery(table).DataTable({
+					pageLength: Number.parseInt(rlFsbiAdmin.tableRows || 25, 10),
+					ordering: false,
+					searching: false,
+					lengthChange: false,
+					info: false,
+				});
+			}
 		},
 
 		syncData: function() {
 			const btn = document.getElementById('rl-fsbi-sync-btn');
-			if (!btn) return;
+			if (!btn) {
+				return;
+			}
 
 			const originalText = btn.textContent;
 			btn.disabled = true;
@@ -276,33 +546,84 @@
 					nonce: rlFsbiAdmin.nonce,
 				}),
 			})
-			.then(response => response.json())
-			.then(data => {
-				btn.disabled = false;
-				btn.textContent = originalText;
-
+			.then((response) => response.json())
+			.then((data) => {
 				if (data.success) {
-					alert(data.data.message);
-					this.loadData();
+					const state = data?.data?.state;
+					if (state) {
+						this.syncDataBatch(state, btn, originalText);
+					} else {
+						btn.disabled = false;
+						btn.textContent = originalText;
+						alert(data?.data?.message || 'Sync completed.');
+						this.loadData();
+					}
 				} else {
+					btn.disabled = false;
+					btn.textContent = originalText;
 					alert('Error: ' + data.data);
 				}
 			})
-			.catch(error => {
+			.catch((error) => {
 				btn.disabled = false;
 				btn.textContent = originalText;
 				console.error('Sync error:', error);
 				alert('An error occurred during sync. Check console for details.');
 			});
 		},
+
+		syncDataBatch: function(state, btn, originalText) {
+			if (!state || !btn) {
+				return;
+			}
+
+			fetch(rlFsbiAdmin.ajaxUrl, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: new URLSearchParams({
+					action: 'rl_fsbi_sync_batch',
+					nonce: rlFsbiAdmin.nonce,
+					sync_state: JSON.stringify(state),
+				}),
+			})
+			.then((response) => response.json())
+			.then((data) => {
+				if (!data.success) {
+					btn.disabled = false;
+					btn.textContent = originalText;
+					alert('Error: ' + data.data);
+					return;
+				}
+
+				const payload = data.data || {};
+				btn.textContent = payload.progress_label || 'Syncing...';
+
+				if (payload.done) {
+					btn.disabled = false;
+					btn.textContent = originalText;
+					alert(payload.message || 'Sync completed.');
+					this.loadData();
+					return;
+				}
+
+				setTimeout(() => {
+					this.syncDataBatch(payload.state, btn, originalText);
+				}, 60);
+			})
+			.catch((error) => {
+				btn.disabled = false;
+				btn.textContent = originalText;
+				console.error('Sync batch error:', error);
+				alert('An error occurred during batch sync. Check console for details.');
+			});
+		},
 	};
 
-	// Initialize when DOM is ready
 	document.addEventListener('DOMContentLoaded', function() {
 		FSBI.init();
 	});
 
-	// Expose FSBI to global scope for debugging
 	window.FSBI = FSBI;
-
 })();

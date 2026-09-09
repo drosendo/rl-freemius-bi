@@ -1,270 +1,469 @@
-/* RL Freemius BI Admin Dashboard Styles */
+/* RL Freemius BI v2 Dashboard */
 
 .rl-fsbi-dashboard {
-	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-	max-width: 1400px;
+	--fsbi-bg: #111521;
+	--fsbi-bg-2: #191e2e;
+	--fsbi-bg-3: #202640;
+	--fsbi-text: #e7ebff;
+	--fsbi-muted: #9aa4cc;
+	--fsbi-accent: #5f6bff;
+	--fsbi-accent-2: #22c89b;
+	--fsbi-warning: #f4b942;
+	--fsbi-danger: #ff5a72;
+	--fsbi-border: #2b3150;
+	max-width: 1450px;
 	margin: 0 auto;
+	padding: 8px 0 24px;
+	color: var(--fsbi-text);
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Text", sans-serif;
 }
 
-.rl-fsbi-header {
-	background: #fff;
-	border: 1px solid #ccc;
-	border-radius: 4px;
-	padding: 20px;
-	margin: 20px 0;
+.rl-fsbi-dashboard h1 {
+	color: #0f172a;
+	font-size: 30px;
+	letter-spacing: 0.2px;
+	margin: 10px 0 16px;
+}
+
+.rl-fsbi-toolbar {
+	background: #ffffff;
+	border: 1px solid #dfe4f2;
+	border-radius: 12px;
+	padding: 14px;
+	margin-bottom: 14px;
 }
 
 .rl-fsbi-controls {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-	gap: 15px;
-	align-items: flex-end;
+	grid-template-columns: 120px 1fr 120px 1fr 120px 1fr auto;
+	gap: 10px;
+	align-items: center;
 }
 
 .rl-fsbi-controls label {
-	display: block;
-	margin-bottom: 5px;
 	font-weight: 600;
-	font-size: 14px;
+	font-size: 12px;
+	color: #374151;
 }
 
 .rl-fsbi-controls select,
 .rl-fsbi-controls input {
 	width: 100%;
-	padding: 8px 12px;
-	border: 1px solid #ccc;
-	border-radius: 4px;
-	font-size: 14px;
-}
-
-#rl-fsbi-sync-btn {
-	justify-self: start;
-}
-
-/* KPI Cards */
-.rl-fsbi-kpi-section {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-	gap: 20px;
-	margin: 20px 0;
-}
-
-.rl-fsbi-kpi-card {
-	background: #fff;
-	border: 1px solid #ccc;
-	border-radius: 4px;
-	padding: 20px;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.rl-fsbi-kpi-card h3 {
-	margin: 0 0 10px 0;
-	font-size: 14px;
-	font-weight: 600;
-	color: #666;
-}
-
-.rl-fsbi-kpi-value {
-	font-size: 32px;
-	font-weight: bold;
-	color: #1f8d5c;
-	margin: 10px 0;
-	font-family: 'Monaco', 'Courier New', monospace;
-}
-
-.rl-fsbi-trend {
-	font-size: 12px;
-	color: #999;
-	margin-top: 10px;
-}
-
-.rl-fsbi-trend.positive {
-	color: #1f8d5c;
-}
-
-.rl-fsbi-trend.negative {
-	color: #d32f2f;
-}
-
-/* Charts Section */
-.rl-fsbi-charts-section {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-	gap: 20px;
-	margin: 20px 0;
-}
-
-.rl-fsbi-chart-container {
-	background: #fff;
-	border: 1px solid #ccc;
-	border-radius: 4px;
-	padding: 20px;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.rl-fsbi-chart-container h3 {
-	margin: 0 0 20px 0;
-	font-size: 16px;
-	font-weight: 600;
-}
-
-.rl-fsbi-chart-container canvas {
-	max-height: 300px;
-}
-
-/* Table Section */
-.rl-fsbi-table-section {
-	background: #fff;
-	border: 1px solid #ccc;
-	border-radius: 4px;
-	padding: 20px;
-	margin: 20px 0;
-}
-
-.rl-fsbi-table-section h3 {
-	margin: 0 0 20px 0;
-	font-size: 16px;
-	font-weight: 600;
-}
-
-#rl-fsbi-payments-table {
-	width: 100%;
-	border-collapse: collapse;
-}
-
-#rl-fsbi-payments-table thead {
-	background: #f5f5f5;
-	border-bottom: 2px solid #ccc;
-}
-
-#rl-fsbi-payments-table th {
-	padding: 12px;
-	text-align: left;
-	font-weight: 600;
-	font-size: 14px;
-}
-
-#rl-fsbi-payments-table td {
-	padding: 12px;
-	border-bottom: 1px solid #eee;
-	font-size: 14px;
-}
-
-#rl-fsbi-payments-table tbody tr:hover {
-	background: #f9f9f9;
-}
-
-/* Status Badges */
-.rl-fsbi-status {
-	display: inline-block;
-	padding: 4px 8px;
-	border-radius: 3px;
-	font-size: 12px;
-	font-weight: 600;
-	text-transform: uppercase;
-}
-
-.rl-fsbi-status.completed {
-	background: #d4edda;
-	color: #155724;
-}
-
-.rl-fsbi-status.pending {
-	background: #fff3cd;
-	color: #856404;
-}
-
-.rl-fsbi-status.failed {
-	background: #f8d7da;
-	color: #721c24;
-}
-
-/* Settings Page */
-.rl-fsbi-settings {
-	max-width: 800px;
-}
-
-.rl-fsbi-settings .form-table th {
-	width: 200px;
-}
-
-.rl-fsbi-settings hr {
-	margin: 40px 0;
-	border: none;
-	border-top: 1px solid #ccc;
-}
-
-.rl-fsbi-settings h2 {
-	margin-top: 30px;
-	font-size: 20px;
-}
-
-.rl-fsbi-settings ol,
-.rl-fsbi-settings ul {
-	margin-left: 20px;
-}
-
-.rl-fsbi-settings li {
-	margin-bottom: 8px;
-}
-
-.rl-fsbi-settings code {
-	background: #f5f5f5;
-	padding: 2px 6px;
-	border-radius: 3px;
-	font-family: 'Monaco', 'Courier New', monospace;
+	min-height: 36px;
+	padding: 6px 10px;
+	border: 1px solid #cfd7e8;
+	border-radius: 8px;
 	font-size: 13px;
 }
 
-/* Loading State */
-.rl-fsbi-loading {
-	opacity: 0.6;
-	pointer-events: none;
+.rl-fsbi-controls span {
+	text-align: center;
+	color: #6b7280;
 }
 
-.rl-fsbi-spinner {
+#rl-fsbi-sync-btn {
+	min-height: 36px;
+	padding: 0 16px;
+	border-radius: 8px;
+	font-weight: 600;
+}
+
+.rl-fsbi-top-grid,
+.rl-fsbi-mini-kpis,
+.rl-fsbi-content-grid {
+	display: grid;
+	gap: 12px;
+}
+
+.rl-fsbi-top-grid {
+	grid-template-columns: 2fr 1fr 1fr;
+}
+
+.rl-fsbi-mini-kpis {
+	grid-template-columns: repeat(6, minmax(130px, 1fr));
+	margin-top: 12px;
+}
+
+.rl-fsbi-content-grid {
+	grid-template-columns: 2fr 1fr 1fr;
+	margin-top: 12px;
+}
+
+.rl-fsbi-card {
+	background: radial-gradient(circle at top left, #222946, #141a29 70%);
+	border: 1px solid var(--fsbi-border);
+	border-radius: 12px;
+	padding: 14px;
+	box-shadow: 0 10px 30px rgba(8, 10, 20, 0.28);
+}
+
+.rl-fsbi-hero-card {
+	background: linear-gradient(125deg, #4f5bff, #9346ff);
+	border-color: rgba(255, 255, 255, 0.16);
+}
+
+.rl-fsbi-card-label {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.9px;
+	color: var(--fsbi-muted);
+	margin-bottom: 8px;
+}
+
+.rl-fsbi-hero-card .rl-fsbi-card-label {
+	color: rgba(255, 255, 255, 0.78);
+}
+
+.rl-fsbi-hero-value {
+	font-size: 48px;
+	line-height: 1;
+	font-weight: 800;
+	margin-bottom: 6px;
+	color: #ffffff;
+}
+
+.rl-fsbi-card-value {
+	font-size: 34px;
+	line-height: 1.1;
+	font-weight: 700;
+	margin-bottom: 6px;
+	color: #ffffff;
+}
+
+.rl-fsbi-card-sub {
+	font-size: 12px;
+	color: var(--fsbi-muted);
+}
+
+.rl-fsbi-hero-card .rl-fsbi-card-sub {
+	color: rgba(255, 255, 255, 0.86);
+}
+
+.rl-fsbi-mini-kpi {
+	background: linear-gradient(180deg, #1f253a, #171c2c);
+	border: 1px solid var(--fsbi-border);
+	border-radius: 10px;
+	padding: 10px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.rl-fsbi-mini-kpi span {
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.8px;
+	color: #91a0ce;
+}
+
+.rl-fsbi-mini-kpi strong {
+	font-size: 24px;
+	line-height: 1.1;
+	color: #ecf1ff;
+}
+
+.rl-fsbi-mini-kpi small {
+	font-size: 10px;
+	line-height: 1.2;
+	color: #8996c2;
+}
+
+.rl-fsbi-panel-title {
+	font-size: 13px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.6px;
+	color: #d4ddff;
+	margin-bottom: 10px;
+}
+
+.rl-fsbi-span-2 {
+	grid-column: span 2;
+}
+
+.rl-fsbi-span-3 {
+	grid-column: span 3;
+}
+
+.rl-fsbi-mini-stat-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+}
+
+.rl-fsbi-mini-stat {
+	min-height: 106px;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 6px;
+}
+
+.rl-fsbi-mini-stat span {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.7px;
+	color: #99a4cf;
+}
+
+.rl-fsbi-mini-stat strong {
+	font-size: 36px;
+	font-weight: 800;
+	line-height: 1;
+}
+
+.rl-fsbi-trial-panel {
+	min-height: 180px;
+}
+
+.rl-fsbi-trial-numbers {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(120px, 1fr));
+	gap: 12px;
+	padding-top: 8px;
+}
+
+.rl-fsbi-trial-numbers div {
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 8px;
+	padding: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.rl-fsbi-trial-numbers span {
+	font-size: 11px;
+	text-transform: uppercase;
+	color: #9ea8d6;
+}
+
+.rl-fsbi-trial-numbers strong {
+	font-size: 28px;
+	line-height: 1.1;
+	color: #ecf1ff;
+}
+
+#rl-fsbi-sales-activity-chart,
+#rl-fsbi-revenue-overview-chart,
+#rl-fsbi-wporg-chart {
+	width: 100% !important;
+	height: 260px !important;
+	display: block;
+}
+
+#rl-fsbi-forecast-chart,
+#rl-fsbi-churn-chart {
+	width: 100% !important;
+	height: 240px !important;
+	display: block;
+}
+
+#rl-fsbi-currency-chart,
+#rl-fsbi-country-chart,
+#rl-fsbi-plan-chart {
+	width: min(100%, 300px) !important;
+	height: 260px !important;
+	display: block;
+	margin: 0 auto;
+}
+
+.rl-fsbi-mini-stat-grid .rl-fsbi-card {
+	padding: 12px;
+}
+
+.rl-fsbi-table-card {
+	margin-top: 12px;
+}
+
+.rl-fsbi-table-wrap {
+	overflow-x: auto;
+}
+
+#rl-fsbi-monthly-table {
+	width: 100%;
+	border-collapse: collapse;
+	color: #dce3ff;
+	background: transparent;
+}
+
+#rl-fsbi-monthly-table thead th,
+#rl-fsbi-monthly-table tfoot th,
+#rl-fsbi-monthly-table td {
+	border-bottom: 1px solid #2b3250;
+	padding: 10px;
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+#rl-fsbi-monthly-table thead th,
+#rl-fsbi-monthly-table tfoot th {
+	text-transform: uppercase;
+	font-size: 10px;
+	letter-spacing: 0.8px;
+	color: #9ea8d6;
+}
+
+#rl-fsbi-monthly-table tbody tr:hover {
+	background: rgba(255, 255, 255, 0.03);
+}
+
+#rl-fsbi-monthly-table tbody tr.rl-fsbi-month-current {
+	background: rgba(58, 193, 151, 0.16);
+}
+
+#rl-fsbi-monthly-table tbody tr.rl-fsbi-month-next {
+	background: rgba(102, 178, 245, 0.18);
+}
+
+.rl-fsbi-month-badge {
 	display: inline-block;
-	width: 20px;
-	height: 20px;
-	border: 3px solid #f3f3f3;
-	border-top: 3px solid #1f8d5c;
-	border-radius: 50%;
-	animation: spin 1s linear infinite;
+	font-size: 10px;
+	padding: 2px 6px;
+	border-radius: 20px;
+	margin-left: 6px;
+	font-weight: 700;
+	letter-spacing: 0.4px;
 }
 
-@keyframes spin {
-	0% {
-		transform: rotate(0deg);
-	}
-	100% {
-		transform: rotate(360deg);
-	}
+.rl-fsbi-badge-current {
+	background: rgba(34, 200, 155, 0.2);
+	color: #57efc5;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
+.rl-fsbi-badge-next {
+	background: rgba(95, 107, 255, 0.25);
+	color: #a6b0ff;
+}
+
+.rl-fsbi-currency-chip,
+.rl-fsbi-plan-chip {
+	display: inline-block;
+	font-size: 10px;
+	padding: 2px 6px;
+	border-radius: 999px;
+	margin: 2px 4px 2px 0;
+	background: rgba(255, 255, 255, 0.08);
+	color: #cfd7fb;
+}
+
+.rl-fsbi-subs-pill {
+	display: inline-block;
+	font-size: 10px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	margin: 0 6px 4px 0;
+	font-weight: 700;
+	letter-spacing: 0.3px;
+}
+
+.rl-fsbi-subs-new {
+	background: rgba(70, 214, 167, 0.2);
+	color: #9bf0d5;
+}
+
+.rl-fsbi-subs-renew {
+	background: rgba(124, 154, 255, 0.25);
+	color: #c8d5ff;
+}
+
+.rl-fsbi-payout-line {
+	display: flex;
+	justify-content: space-between;
+	gap: 14px;
+	padding: 2px 0;
+	font-size: 12px;
+	border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+.rl-fsbi-payout-line span {
+	color: #9fb0dc;
+	font-weight: 700;
+}
+
+.rl-fsbi-payout-line strong {
+	color: #dce3ff;
+}
+
+.rl-fsbi-payout-total {
+	display: inline-block;
+	margin-top: 6px;
+	padding: 3px 9px;
+	border-radius: 999px;
+	background: #2478f0;
+	color: #fff;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.4px;
+}
+
+.rl-fsbi-payout-carry {
+	font-size: 11px;
+	color: #9ea8d6;
+}
+
+.rl-fsbi-positive {
+	color: var(--fsbi-accent-2);
+}
+
+.rl-fsbi-negative {
+	color: var(--fsbi-danger);
+}
+
+.dataTables_wrapper,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_paginate {
+	color: #b7c2ed !important;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+	color: #b7c2ed !important;
+}
+
+@media (max-width: 1220px) {
 	.rl-fsbi-controls {
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.rl-fsbi-mini-kpis {
+		grid-template-columns: repeat(3, minmax(120px, 1fr));
+	}
+
+	.rl-fsbi-content-grid {
 		grid-template-columns: 1fr;
 	}
 
-	.rl-fsbi-kpi-section {
+	.rl-fsbi-span-2,
+	.rl-fsbi-span-3 {
+		grid-column: span 1;
+	}
+}
+
+@media (max-width: 900px) {
+	.rl-fsbi-top-grid {
 		grid-template-columns: 1fr;
 	}
 
-	.rl-fsbi-charts-section {
+	.rl-fsbi-mini-kpis {
+		grid-template-columns: repeat(2, minmax(120px, 1fr));
+	}
+
+	.rl-fsbi-mini-stat-grid {
 		grid-template-columns: 1fr;
 	}
 
-	.rl-fsbi-kpi-value {
-		font-size: 24px;
+	.rl-fsbi-trial-numbers {
+		grid-template-columns: 1fr;
 	}
 
-	#rl-fsbi-payments-table {
-		font-size: 12px;
+	.rl-fsbi-hero-value {
+		font-size: 36px;
 	}
 
-	#rl-fsbi-payments-table th,
-	#rl-fsbi-payments-table td {
-		padding: 8px;
+	.rl-fsbi-card-value {
+		font-size: 28px;
 	}
 }

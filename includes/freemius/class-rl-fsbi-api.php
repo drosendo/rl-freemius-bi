@@ -9,6 +9,13 @@
 class RL_FSBI_API {
 
 	/**
+	 * SDK client cache.
+	 *
+	 * @var Freemius_Api_WordPress|null
+	 */
+	private $sdk_client = null;
+
+	/**
 	 * API base URLs
 	 */
 	const PRODUCTION_API_URL = 'https://api.freemius.com';
@@ -39,8 +46,8 @@ class RL_FSBI_API {
 	 */
 	public function __construct( $developer_id, $public_key, $secret_key, $use_sandbox = false ) {
 		$this->developer_id = (int) $developer_id;
-		$this->public_key   = sanitize_text_field( $public_key );
-		$this->secret_key   = sanitize_text_field( $secret_key );
+		$this->public_key   = trim( (string) $public_key );
+		$this->secret_key   = trim( (string) $secret_key );
 		$this->use_sandbox  = (bool) $use_sandbox;
 	}
 
@@ -108,6 +115,19 @@ class RL_FSBI_API {
 	 */
 	public function request( $endpoint, $method = 'GET', $body = array(), $query = array() ) {
 		$method = strtoupper( $method );
+
+		$sdk_client = $this->get_sdk_client();
+		if ( $sdk_client ) {
+			$sdk_path = $this->build_sdk_path( $endpoint, $query );
+			$sdk_result = $sdk_client->Api( $sdk_path, $method, $body );
+
+			if ( is_object( $sdk_result ) && isset( $sdk_result->error ) ) {
+				return false;
+			}
+
+			return $this->safe_response( json_decode( wp_json_encode( $sdk_result ), true ) );
+		}
+
 		$base_url = $this->use_sandbox ? self::SANDBOX_API_URL : self::PRODUCTION_API_URL;
 
 		// Build full URL
@@ -174,6 +194,65 @@ class RL_FSBI_API {
 	}
 
 	/**
+	 * Resolve and create Freemius SDK client when available.
+	 *
+	 * @return Freemius_Api_WordPress|null
+	 */
+	private function get_sdk_client() {
+		if ( null !== $this->sdk_client ) {
+			return $this->sdk_client;
+		}
+
+		if ( ! class_exists( 'Freemius_Api_WordPress' ) ) {
+			$sdk_file = WP_PLUGIN_DIR . '/fsbi-premium/freemius/includes/sdk/FreemiusWordPress.php';
+			if ( file_exists( $sdk_file ) ) {
+				require_once $sdk_file;
+			}
+		}
+
+		if ( ! class_exists( 'Freemius_Api_WordPress' ) ) {
+			return null;
+		}
+
+		$this->sdk_client = new Freemius_Api_WordPress(
+			'developer',
+			(int) $this->developer_id,
+			(string) $this->public_key,
+			(string) $this->secret_key,
+			(bool) $this->use_sandbox
+		);
+
+		return $this->sdk_client;
+	}
+
+	/**
+	 * Convert full developer endpoint to SDK relative path.
+	 *
+	 * @param string $endpoint API endpoint.
+	 * @param array  $query Query args.
+	 * @return string
+	 */
+	private function build_sdk_path( $endpoint, $query = array() ) {
+		$path = (string) $endpoint;
+		$prefix = '/v1/developers/' . $this->developer_id;
+
+		if ( 0 === strpos( $path, $prefix ) ) {
+			$path = substr( $path, strlen( $prefix ) );
+		}
+
+		if ( empty( $path ) || '/' !== $path[0] ) {
+			$path = '/' . ltrim( $path, '/' );
+		}
+
+		if ( ! empty( $query ) ) {
+			$query_string = http_build_query( $query, '', '&', PHP_QUERY_RFC3986 );
+			$path .= ( false === strpos( $path, '?' ) ? '?' : '&' ) . $query_string;
+		}
+
+		return $path;
+	}
+
+	/**
 	 * Execute request with exponential backoff retry
 	 *
 	 * @param string $url Full request URL.
@@ -218,11 +297,42 @@ class RL_FSBI_API {
 	 * @return array Validated response.
 	 */
 	private function safe_response( $response ) {
+		if ( is_object( $response ) ) {
+			$response = json_decode( wp_json_encode( $response ), true );
+		}
+
 		if ( ! is_array( $response ) ) {
 			return array();
 		}
 
 		return $response;
+	}
+
+	/**
+	 * Normalize collection responses with flexible envelopes.
+	 *
+	 * @param array  $response Raw decoded response.
+	 * @param string $key Expected top-level key (e.g. plugins/payments).
+	 * @return array
+	 */
+	private function extract_collection( $response, $key ) {
+		if ( isset( $response[ $key ] ) && is_array( $response[ $key ] ) ) {
+			return $response[ $key ];
+		}
+
+		if ( isset( $response['data'][ $key ] ) && is_array( $response['data'][ $key ] ) ) {
+			return $response['data'][ $key ];
+		}
+
+		if ( isset( $response['data'] ) && is_array( $response['data'] ) && isset( $response['data'][0] ) ) {
+			return $response['data'];
+		}
+
+		if ( isset( $response[0] ) ) {
+			return $response;
+		}
+
+		return array();
 	}
 
 	/**
@@ -240,7 +350,7 @@ class RL_FSBI_API {
 			return array();
 		}
 
-		return isset( $response['plugins'] ) ? $response['plugins'] : array();
+		return $this->extract_collection( $response, 'plugins' );
 	}
 
 	/**
@@ -292,7 +402,7 @@ class RL_FSBI_API {
 
 		$response = $this->request( $endpoint, 'GET', array(), $query );
 
-		return isset( $response['payments'] ) ? $response['payments'] : array();
+		return $this->extract_collection( $response, 'payments' );
 	}
 
 	/**
@@ -314,7 +424,7 @@ class RL_FSBI_API {
 
 		$response = $this->request( $endpoint, 'GET', array(), $query );
 
-		return isset( $response['subscriptions'] ) ? $response['subscriptions'] : array();
+		return $this->extract_collection( $response, 'subscriptions' );
 	}
 
 	/**
@@ -336,7 +446,7 @@ class RL_FSBI_API {
 
 		$response = $this->request( $endpoint, 'GET', array(), $query );
 
-		return isset( $response['licenses'] ) ? $response['licenses'] : array();
+		return $this->extract_collection( $response, 'licenses' );
 	}
 
 	/**
@@ -351,7 +461,7 @@ class RL_FSBI_API {
 		$endpoint = "/v1/developers/{$this->developer_id}/plugins/{$plugin_id}/plans.json";
 		$response = $this->request( $endpoint, 'GET' );
 
-		return isset( $response['plans'] ) ? $response['plans'] : array();
+		return $this->extract_collection( $response, 'plans' );
 	}
 
 	/**
