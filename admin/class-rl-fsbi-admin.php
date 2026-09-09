@@ -33,6 +33,30 @@ class RL_FSBI_Admin {
 	private $settings;
 
 	/**
+	 * Locale currency format (e.g., en-US, pt-PT, de-DE)
+	 *
+	 * @access   private
+	 * @var      string $locale_format
+	 */
+	private $locale_format;
+
+	/**
+	 * Transferwise API token
+	 *
+	 * @access   private
+	 * @var      string $transferwise_token
+	 */
+	private $transferwise_token;
+
+	/**
+	 * Transferwise conversion base currency (EUR, USD, GBP)
+	 *
+	 * @access   private
+	 * @var      string $conversion_currency
+	 */
+	private $conversion_currency;
+
+	/**
 	 * Initialize the class and set its properties.
 	 *
 	 * @param string $plugin_name The name of this plugin.
@@ -42,6 +66,12 @@ class RL_FSBI_Admin {
 		$this->plugin_name = $plugin_name;
 		$this->version     = $version;
 		$this->settings    = new RL_FSBI_Settings_Manager();
+
+		// Load display settings
+		$this->locale_format = trim( $this->settings->get_option( 'rl_fsbi_locale_format' ) ) ?: 'us-US';
+		$this->transferwise_token = trim( $this->settings->get_option( 'rl_fsbi_transferwise_token' ) );
+		$conversion_currency = strtoupper( trim( $this->settings->get_option( 'rl_fsbi_conversion_currency' ) ) );
+		$this->conversion_currency = in_array( $conversion_currency, array( 'EUR', 'USD', 'GBP' ), true ) ? $conversion_currency : 'EUR';
 	}
 
 	/**
@@ -420,5 +450,32 @@ class RL_FSBI_Admin {
 		}
 
 		return $distribution;
+	}
+
+	/**
+	 * Get locale format setting
+	 *
+	 * @return string Locale format (e.g., en-US, pt-PT)
+	 */
+	public function get_locale_format() {
+		return $this->locale_format;
+	}
+
+	/**
+	 * Get Transferwise API token
+	 *
+	 * @return string Transferwise token
+	 */
+	public function get_transferwise_token() {
+		return $this->transferwise_token;
+	}
+
+	/**
+	 * Get conversion currency for Transferwise
+	 *
+	 * @return string Conversion currency (EUR, USD, GBP)
+	 */
+	public function get_conversion_currency() {
+		return $this->conversion_currency;
 	}
 }

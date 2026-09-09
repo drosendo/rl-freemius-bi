@@ -272,6 +272,50 @@ class RL_FSBI_Settings_Manager {
 			)
 		);
 
+		// ===== Locale Currency Format =====
+		$this->framework->add_field(
+			'general',
+			'display_settings',
+			array(
+				'id'      => 'rl_fsbi_locale_format',
+				'type'    => 'text',
+				'label'   => esc_html__( 'Locale Currency Format', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'Language-sensitive number formatting. Examples: pt-PT, de-DE, ja-JP. Default: us-US', 'rl-freemius-bi' ),
+				'default' => 'us-US',
+				'placeholder' => 'us-US',
+			)
+		);
+
+		// ===== Transferwise Token =====
+		$this->framework->add_field(
+			'general',
+			'display_settings',
+			array(
+				'id'      => 'rl_fsbi_transferwise_token',
+				'type'    => 'password',
+				'label'   => esc_html__( 'Transferwise Token', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'API token for Transferwise currency conversion', 'rl-freemius-bi' ),
+			)
+		);
+
+		// ===== Transferwise Conversion Currency =====
+		$this->framework->add_field(
+			'general',
+			'display_settings',
+			array(
+				'id'      => 'rl_fsbi_conversion_currency',
+				'type'    => 'select',
+				'label'   => esc_html__( 'Conversion Currency', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'Base currency for payout display (currency conversion via Transferwise). Options: EUR, USD, GBP. Default: EUR', 'rl-freemius-bi' ),
+				'options' => array(
+					'EUR' => 'EUR - Euro',
+					'USD' => 'USD - United States Dollar',
+					'GBP' => 'GBP - British Pound',
+				),
+				'default' => 'EUR',
+			)
+		);
+
 		// ===== Database Info Field =====
 		$this->framework->add_field(
 			'info',
