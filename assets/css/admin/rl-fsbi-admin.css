@@ -1,0 +1,270 @@
+/* RL Freemius BI Admin Dashboard Styles */
+
+.rl-fsbi-dashboard {
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+	max-width: 1400px;
+	margin: 0 auto;
+}
+
+.rl-fsbi-header {
+	background: #fff;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	padding: 20px;
+	margin: 20px 0;
+}
+
+.rl-fsbi-controls {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 15px;
+	align-items: flex-end;
+}
+
+.rl-fsbi-controls label {
+	display: block;
+	margin-bottom: 5px;
+	font-weight: 600;
+	font-size: 14px;
+}
+
+.rl-fsbi-controls select,
+.rl-fsbi-controls input {
+	width: 100%;
+	padding: 8px 12px;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	font-size: 14px;
+}
+
+#rl-fsbi-sync-btn {
+	justify-self: start;
+}
+
+/* KPI Cards */
+.rl-fsbi-kpi-section {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+	gap: 20px;
+	margin: 20px 0;
+}
+
+.rl-fsbi-kpi-card {
+	background: #fff;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	padding: 20px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.rl-fsbi-kpi-card h3 {
+	margin: 0 0 10px 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: #666;
+}
+
+.rl-fsbi-kpi-value {
+	font-size: 32px;
+	font-weight: bold;
+	color: #1f8d5c;
+	margin: 10px 0;
+	font-family: 'Monaco', 'Courier New', monospace;
+}
+
+.rl-fsbi-trend {
+	font-size: 12px;
+	color: #999;
+	margin-top: 10px;
+}
+
+.rl-fsbi-trend.positive {
+	color: #1f8d5c;
+}
+
+.rl-fsbi-trend.negative {
+	color: #d32f2f;
+}
+
+/* Charts Section */
+.rl-fsbi-charts-section {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+	gap: 20px;
+	margin: 20px 0;
+}
+
+.rl-fsbi-chart-container {
+	background: #fff;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	padding: 20px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.rl-fsbi-chart-container h3 {
+	margin: 0 0 20px 0;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.rl-fsbi-chart-container canvas {
+	max-height: 300px;
+}
+
+/* Table Section */
+.rl-fsbi-table-section {
+	background: #fff;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	padding: 20px;
+	margin: 20px 0;
+}
+
+.rl-fsbi-table-section h3 {
+	margin: 0 0 20px 0;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+#rl-fsbi-payments-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+#rl-fsbi-payments-table thead {
+	background: #f5f5f5;
+	border-bottom: 2px solid #ccc;
+}
+
+#rl-fsbi-payments-table th {
+	padding: 12px;
+	text-align: left;
+	font-weight: 600;
+	font-size: 14px;
+}
+
+#rl-fsbi-payments-table td {
+	padding: 12px;
+	border-bottom: 1px solid #eee;
+	font-size: 14px;
+}
+
+#rl-fsbi-payments-table tbody tr:hover {
+	background: #f9f9f9;
+}
+
+/* Status Badges */
+.rl-fsbi-status {
+	display: inline-block;
+	padding: 4px 8px;
+	border-radius: 3px;
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.rl-fsbi-status.completed {
+	background: #d4edda;
+	color: #155724;
+}
+
+.rl-fsbi-status.pending {
+	background: #fff3cd;
+	color: #856404;
+}
+
+.rl-fsbi-status.failed {
+	background: #f8d7da;
+	color: #721c24;
+}
+
+/* Settings Page */
+.rl-fsbi-settings {
+	max-width: 800px;
+}
+
+.rl-fsbi-settings .form-table th {
+	width: 200px;
+}
+
+.rl-fsbi-settings hr {
+	margin: 40px 0;
+	border: none;
+	border-top: 1px solid #ccc;
+}
+
+.rl-fsbi-settings h2 {
+	margin-top: 30px;
+	font-size: 20px;
+}
+
+.rl-fsbi-settings ol,
+.rl-fsbi-settings ul {
+	margin-left: 20px;
+}
+
+.rl-fsbi-settings li {
+	margin-bottom: 8px;
+}
+
+.rl-fsbi-settings code {
+	background: #f5f5f5;
+	padding: 2px 6px;
+	border-radius: 3px;
+	font-family: 'Monaco', 'Courier New', monospace;
+	font-size: 13px;
+}
+
+/* Loading State */
+.rl-fsbi-loading {
+	opacity: 0.6;
+	pointer-events: none;
+}
+
+.rl-fsbi-spinner {
+	display: inline-block;
+	width: 20px;
+	height: 20px;
+	border: 3px solid #f3f3f3;
+	border-top: 3px solid #1f8d5c;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+	0% {
+		transform: rotate(0deg);
+	}
+	100% {
+		transform: rotate(360deg);
+	}
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+	.rl-fsbi-controls {
+		grid-template-columns: 1fr;
+	}
+
+	.rl-fsbi-kpi-section {
+		grid-template-columns: 1fr;
+	}
+
+	.rl-fsbi-charts-section {
+		grid-template-columns: 1fr;
+	}
+
+	.rl-fsbi-kpi-value {
+		font-size: 24px;
+	}
+
+	#rl-fsbi-payments-table {
+		font-size: 12px;
+	}
+
+	#rl-fsbi-payments-table th,
+	#rl-fsbi-payments-table td {
+		padding: 8px;
+	}
+}
