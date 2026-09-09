@@ -159,6 +159,150 @@ class RL_FSBI_Admin {
 	}
 
 	/**
+	 * Add the portfolio analytics widget to the main WordPress Dashboard.
+	 */
+	public function register_wordpress_dashboard_widget() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		wp_add_dashboard_widget(
+			'rl_fsbi_portfolio_widget',
+			esc_html__( 'Portfolio Performance', 'rl-freemius-bi' ),
+			array( $this, 'render_wordpress_dashboard_widget' )
+		);
+	}
+
+	/**
+	 * Render live portfolio analytics for the WordPress Dashboard.
+	 */
+	public function render_wordpress_dashboard_widget() {
+		$data = $this->get_wordpress_dashboard_portfolio_data();
+		$currency = $data['currency'];
+		$format = function( $value ) use ( $currency ) {
+			return esc_html( number_format_i18n( (float) $value, 2 ) ) . ' ' . esc_html( $currency );
+		};
+		?>
+		<style>
+			#rl_fsbi_portfolio_widget .inside{background:#111521;padding:14px;color:#e7ebff}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-widget{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 12px}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-metric{padding:11px 12px;border:1px solid #2b3150;border-radius:8px;background:#1f253a;min-width:0}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-metric span{display:block;color:#9aa4cc;font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-metric strong{font-size:18px;color:#ecf1ff;overflow-wrap:anywhere}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-chart-wrap{position:relative}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-chart{display:flex;align-items:flex-end;gap:8px;height:125px;padding:12px 8px 22px;border:1px solid #2b3150;border-radius:8px;background:#191e2e;overflow:visible}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-axis-x{margin:5px 0 0;color:#9aa4cc;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-bar{flex:1;min-width:10px;background:#5f6bff;border-radius:4px 4px 0 0;position:relative;max-height:92px}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-bar.rl-fsbi-wp-current{background:#1fb897}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-bar.rl-fsbi-wp-next{background:#6678d8}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-bar.rl-fsbi-wp-neutral{background:#5f6bff}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-bar strong{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:4px;color:#dce3ff;font-size:9px;white-space:nowrap}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-bar small{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:5px;color:#9aa4cc;font-size:10px;white-space:nowrap}
+			#rl_fsbi_portfolio_widget .inside table.widefat{background:#191e2e;color:#e7ebff;border-color:#2b3150}
+			#rl_fsbi_portfolio_widget .inside table.widefat thead th{background:#202640;color:#b8c3eb;text-transform:uppercase;font-size:10px;border-color:#2b3150}
+			#rl_fsbi_portfolio_widget .inside table.widefat tbody tr,
+			#rl_fsbi_portfolio_widget .inside table.widefat tbody tr:nth-child(odd),
+			#rl_fsbi_portfolio_widget .inside table.widefat tbody tr:nth-child(even){background:#191e2e}
+			#rl_fsbi_portfolio_widget .inside table.widefat tbody td{color:#dce3ff !important;border-color:#2b3150}
+			#rl_fsbi_portfolio_widget .inside table.widefat tbody tr.rl-fsbi-wp-current{background:#21464d !important}
+			#rl_fsbi_portfolio_widget .inside table.widefat tbody tr.rl-fsbi-wp-next{background:#304b77 !important}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-payout-badge{display:inline-block;margin-left:5px;padding:2px 5px;border-radius:999px;font-size:9px;font-weight:700;white-space:nowrap}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-payout-current{background:#1fb897;color:#062c2b}
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-payout-next{background:#6678d8;color:#fff}
+			@media(max-width:900px){#rl_fsbi_portfolio_widget .rl-fsbi-wp-widget{grid-template-columns:repeat(2,minmax(0,1fr))}}
+		</style>
+		<div class="rl-fsbi-wp-widget">
+			<div class="rl-fsbi-wp-metric"><span><?php echo esc_html__( 'Net Revenue', 'rl-freemius-bi' ); ?></span><strong><?php echo $format( $data['net_revenue'] ); ?></strong></div>
+			<div class="rl-fsbi-wp-metric"><span><?php echo esc_html__( 'MRR', 'rl-freemius-bi' ); ?></span><strong><?php echo $format( $data['mrr'] ); ?></strong></div>
+			<div class="rl-fsbi-wp-metric"><span><?php echo esc_html__( 'ARR', 'rl-freemius-bi' ); ?></span><strong><?php echo $format( $data['arr'] ); ?></strong></div>
+			<div class="rl-fsbi-wp-metric"><span><?php echo esc_html__( 'Active Subscribers', 'rl-freemius-bi' ); ?></span><strong><?php echo esc_html( number_format_i18n( $data['active_subscriptions'] ) ); ?></strong></div>
+		</div>
+		<div class="rl-fsbi-wp-chart-wrap" aria-label="<?php echo esc_attr__( 'Three month net revenue trend', 'rl-freemius-bi' ); ?>">
+			<div class="rl-fsbi-wp-chart">
+			<?php foreach ( $data['trend'] as $point ) : ?>
+				<div class="rl-fsbi-wp-bar <?php echo esc_attr( 'current' === $point['payout_status'] ? 'rl-fsbi-wp-current' : ( 'next' === $point['payout_status'] ? 'rl-fsbi-wp-next' : 'rl-fsbi-wp-neutral' ) ); ?>" style="height: <?php echo esc_attr( $point['height'] ); ?>%;" title="<?php echo esc_attr( $point['month'] . ': ' . $format( $point['value'] ) ); ?>"><strong><?php echo esc_html( $format( $point['value'] ) ); ?></strong><small><?php echo esc_html( $point['month'] ); ?></small></div>
+			<?php endforeach; ?>
+			</div>
+			<div class="rl-fsbi-wp-axis-x"><?php echo esc_html__( 'Net revenue by month', 'rl-freemius-bi' ); ?></div>
+		</div>
+		<table class="widefat striped" style="margin-top:18px"><thead><tr><th><?php echo esc_html__( 'Month', 'rl-freemius-bi' ); ?></th><th><?php echo esc_html__( 'Gross', 'rl-freemius-bi' ); ?></th><th><?php echo esc_html__( 'Refunds', 'rl-freemius-bi' ); ?></th><th><?php echo esc_html__( 'Fees', 'rl-freemius-bi' ); ?></th><th><?php echo esc_html__( 'Net', 'rl-freemius-bi' ); ?></th></tr></thead><tbody>
+			<?php foreach ( $data['trend'] as $point ) : ?>
+				<tr class="<?php echo esc_attr( 'current' === $point['payout_status'] ? 'rl-fsbi-wp-current' : ( 'next' === $point['payout_status'] ? 'rl-fsbi-wp-next' : '' ) ); ?>"><td><?php echo esc_html( $point['month'] ); ?><?php if ( 'current' === $point['payout_status'] ) : ?><span class="rl-fsbi-wp-payout-badge rl-fsbi-wp-payout-current">CURRENT PAYOUT</span><?php elseif ( 'next' === $point['payout_status'] ) : ?><span class="rl-fsbi-wp-payout-badge rl-fsbi-wp-payout-next">NEXT PAYOUT</span><?php endif; ?></td><td><?php echo $format( $point['gross'] ); ?></td><td><?php echo $format( $point['refunds'] ); ?></td><td><?php echo $format( $point['fees'] ); ?></td><td><strong><?php echo $format( $point['value'] ); ?></strong></td></tr>
+			<?php endforeach; ?>
+		</tbody></table>
+		<?php
+	}
+
+	private function get_wordpress_dashboard_portfolio_data() {
+		$plugin_ids = $this->get_selected_plugin_ids();
+		$currency = strtoupper( (string) $this->settings->get_option( 'rl_fsbi_default_currency', 'EUR' ) );
+		$currency = in_array( $currency, array( 'USD', 'EUR', 'GBP' ), true ) ? $currency : 'EUR';
+		$repo = new RL_FSBI_Repository();
+		$today = current_time( 'Y-m-d' );
+		$month_start = wp_date( 'Y-m-01', current_time( 'timestamp' ) );
+		$payments = array();
+		$trend = array();
+
+		for ( $i = 0; $i <= 2; $i++ ) {
+			$month = wp_date( 'Y-m', strtotime( '-' . $i . ' months', current_time( 'timestamp' ) ) );
+			$start = $month . '-01';
+			$end = wp_date( 'Y-m-t', strtotime( $start ) );
+			$month_payments = array();
+			foreach ( $plugin_ids as $plugin_id ) {
+				$month_payments = array_merge( $month_payments, $repo->get_payments( $plugin_id, $start, $end, null ) );
+			}
+			$payments = array_merge( $payments, $month_payments );
+			$gross = 0.0;
+			$refunds = 0.0;
+			$fees = 0.0;
+			$net = 0.0;
+			foreach ( $month_payments as $payment ) {
+				$amounts = $this->resolve_payment_amounts( $payment, 7.0 );
+				$source_currency = strtoupper( (string) ( $payment->currency ?? $currency ) );
+				$date = (string) ( $payment->transaction_date ?? $start );
+				$gross += $this->convert_currency_amount( (float) $amounts['gross'], $source_currency, $currency, $date );
+				$fees += $this->convert_currency_amount( (float) $amounts['fee'], $source_currency, $currency, $date );
+				$net += $this->convert_currency_amount( (float) $amounts['net'], $source_currency, $currency, $date );
+				if ( $this->is_refund_payment( $payment ) ) {
+					$refund_value = abs( (float) $amounts['net'] ) > 0 ? abs( (float) $amounts['net'] ) : abs( (float) $amounts['gross'] );
+					$refunds += $this->convert_currency_amount( $refund_value, $source_currency, $currency, $date );
+				}
+			}
+			$trend[] = array(
+				'month' => wp_date( 'M', strtotime( $start ) ),
+				'value' => $net,
+				'gross' => $gross,
+				'refunds' => $refunds,
+				'fees' => $fees,
+				'payout_status' => $month === wp_date( 'Y-m', strtotime( '-2 months', current_time( 'timestamp' ) ) ) ? 'current' : ( $month === wp_date( 'Y-m', strtotime( '-1 month', current_time( 'timestamp' ) ) ) ? 'next' : '' ),
+			);
+		}
+
+		$net_revenue = 0.0;
+		foreach ( $payments as $payment ) {
+			$net_revenue += (float) $this->resolve_payment_amounts( $payment, 7.0 )['net'];
+		}
+
+		$subscriptions = $this->get_subscriptions_for_dashboard( 0, null );
+		$mrr = $this->calculate_period_mrr( $subscriptions, $today, $currency )['converted'];
+		$stats = $this->calculate_subscription_stats( $subscriptions, $today );
+		$max = max( 1, max( array_column( $trend, 'value' ) ) );
+		foreach ( $trend as &$point ) {
+			$point['height'] = max( 8, round( ( $point['value'] / $max ) * 100, 1 ) );
+		}
+		unset( $point );
+
+		return array(
+			'currency' => $currency,
+			'net_revenue' => $net_revenue,
+			'mrr' => $mrr,
+			'arr' => $mrr * 12,
+			'active_subscriptions' => (int) $stats['active'],
+			'trend' => $trend,
+		);
+	}
+
+	/**
 	 * Render the admin page.
 	 */
 	public function display_admin_page() {
@@ -269,6 +413,25 @@ class RL_FSBI_Admin {
 		}
 
 		wp_send_json_success( $result );
+	}
+
+	/**
+	 * Cancel a pending batch sync before the next batch starts.
+	 */
+	public function handle_sync_cancel_ajax() {
+		check_ajax_referer( 'rl_fsbi_nonce', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( esc_html__( 'Unauthorized', 'rl-freemius-bi' ) );
+		}
+
+		$sync_id = isset( $_POST['sync_id'] ) ? sanitize_key( wp_unslash( $_POST['sync_id'] ) ) : '';
+		if ( empty( $sync_id ) ) {
+			wp_send_json_error( esc_html__( 'Missing sync identifier.', 'rl-freemius-bi' ) );
+		}
+
+		set_transient( 'rl_fsbi_cancel_' . $sync_id, 1, HOUR_IN_SECONDS );
+		wp_send_json_success( array( 'message' => esc_html__( 'Sync cancellation requested.', 'rl-freemius-bi' ) ) );
 	}
 
 	/**
@@ -572,6 +735,7 @@ class RL_FSBI_Admin {
 	 */
 	private function init_sync_state( $plugin_ids ) {
 		return array(
+			'sync_id'        => wp_generate_password( 20, false, false ),
 			'plugin_ids'     => array_values( array_map( 'intval', $plugin_ids ) ),
 			'plugin_cursor'  => 0,
 			'stage'          => 'payments',
@@ -612,6 +776,16 @@ class RL_FSBI_Admin {
 		$state['processed'] = isset( $state['processed'] ) && is_array( $state['processed'] ) ? $state['processed'] : array();
 		$state['progress_ticks'] = isset( $state['progress_ticks'] ) ? (int) $state['progress_ticks'] : 0;
 		$state['display_progress'] = isset( $state['display_progress'] ) ? (int) $state['display_progress'] : 0;
+		$sync_id = isset( $state['sync_id'] ) ? sanitize_key( (string) $state['sync_id'] ) : '';
+
+		if ( $sync_id && get_transient( 'rl_fsbi_cancel_' . $sync_id ) ) {
+			delete_transient( 'rl_fsbi_cancel_' . $sync_id );
+			return array(
+				'done'    => true,
+				'canceled' => true,
+				'message' => esc_html__( 'Sync canceled. Data saved before cancellation was preserved.', 'rl-freemius-bi' ),
+			);
+		}
 
 		if ( empty( $state['plugin_ids'] ) ) {
 			return array(
@@ -1094,8 +1268,9 @@ class RL_FSBI_Admin {
 		$currency      = 'all' === strtolower( $currency_raw ) ? null : strtoupper( $currency_raw );
 
 		$today = current_time( 'Y-m-d' );
+		$current_month_end = wp_date( 'Y-m-t', current_time( 'timestamp' ) );
 		$start_date = isset( $_POST['start_date'] ) ? sanitize_text_field( wp_unslash( $_POST['start_date'] ) ) : gmdate( 'Y-m-01' );
-		$end_date   = isset( $_POST['end_date'] ) ? sanitize_text_field( wp_unslash( $_POST['end_date'] ) ) : $today;
+		$end_date   = isset( $_POST['end_date'] ) ? sanitize_text_field( wp_unslash( $_POST['end_date'] ) ) : $current_month_end;
 
 		if ( empty( $start_date ) || ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $start_date ) ) {
 			$start_date = gmdate( 'Y-m-01' );
@@ -1197,6 +1372,9 @@ class RL_FSBI_Admin {
 	 */
 	private function build_dashboard_payload( $payments, $annual_payments, $subscriptions, $balances, $start_date, $end_date, $gross_revenue, $net_revenue, $active_subscriptions, $previous_net, $currency ) {
 		$commission_rate = $this->get_balance_commission_rate( $balances );
+		if ( $commission_rate <= 0 ) {
+			$commission_rate = $this->get_legacy_commission_rate( $annual_payments, $payments );
+		}
 		$default_currency = strtoupper( (string) $this->settings->get_option( 'rl_fsbi_default_currency', 'USD' ) );
 		if ( ! in_array( $default_currency, array( 'USD', 'EUR', 'GBP' ), true ) ) {
 			$default_currency = strtoupper( (string) $this->conversion_currency );
@@ -1224,12 +1402,10 @@ class RL_FSBI_Admin {
 			if ( $is_refund ) {
 				$refund_count++;
 				$refund_total += abs( $payment_net ) > 0 ? abs( $payment_net ) : abs( $payment_gross );
+			} elseif ( $this->is_renewal_payment( $payment ) ) {
+				$renewal_count++;
 			} else {
 				$purchase_count++;
-			}
-
-			if ( ! empty( $payment->subscription_id ) && ! $is_refund ) {
-				$renewal_count++;
 			}
 
 			$fees_total += $payment_fee;
@@ -1297,7 +1473,7 @@ class RL_FSBI_Admin {
 		$churn_trend = $this->build_churn_trend_series( $subscriptions );
 
 		$currency_distribution = $this->build_distribution_series( $payments, 'currency', 'gross', $commission_rate, $report_currency );
-		$country_distribution = $this->build_distribution_series( $payments, 'country_code', 'gross', $commission_rate, $report_currency );
+		$country_distribution = $this->build_distribution_series( $payments, 'country_code', 'net', $commission_rate, $report_currency );
 		$plan_distribution = $this->build_plan_distribution_series( $subscriptions );
 		$wporg_growth = $this->build_wporg_growth_series( $annual_payments );
 
@@ -1396,11 +1572,15 @@ class RL_FSBI_Admin {
 	private function calculate_period_mrr( $subscriptions, $as_of_date, $report_currency ) {
 		$native = array();
 		$as_of_timestamp = strtotime( $as_of_date . ' 23:59:59' );
-		$conversion_date = $as_of_date . ' 23:59:59';
 
 		foreach ( $subscriptions as $subscription ) {
 			$status = strtolower( (string) ( $subscription->status ?? '' ) );
+			$meta = json_decode( (string) ( $subscription->metadata ?? '' ), true );
 			if ( in_array( $status, array( 'cancelled', 'canceled', 'expired', 'inactive' ), true ) ) {
+				continue;
+			}
+			$canceled_at = is_array( $meta ) && ! empty( $meta['canceled_at'] ) ? strtotime( (string) $meta['canceled_at'] ) : false;
+			if ( false !== $canceled_at && $canceled_at <= $as_of_timestamp ) {
 				continue;
 			}
 
@@ -1414,24 +1594,14 @@ class RL_FSBI_Admin {
 				continue;
 			}
 
-			$meta = json_decode( (string) ( $subscription->metadata ?? '' ), true );
 			$currency = strtoupper( (string) ( $subscription->currency ?? 'USD' ) );
-			$renewal_amount = 0.0;
-			if ( is_array( $meta ) ) {
-				if ( isset( $meta['renewal_amount'] ) ) {
-					$renewal_amount = (float) $meta['renewal_amount'];
-				} elseif ( isset( $meta['outstanding_balance'] ) ) {
-					$renewal_amount = (float) $meta['outstanding_balance'];
-				}
-			}
-			if ( $renewal_amount <= 0 ) {
-				$renewal_amount = (float) ( $subscription->outstanding_balance ?? 0 );
-			}
+			$renewal_amount = $this->get_forecast_renewal_amount( $subscription );
 			if ( $renewal_amount <= 0 ) {
 				continue;
 			}
 
 			$cycle_value = $subscription->billing_cycle ?? null;
+			$meta = json_decode( (string) ( $subscription->metadata ?? '' ), true );
 			if ( is_array( $meta ) && isset( $meta['billing_cycle'] ) ) {
 				$cycle_value = $meta['billing_cycle'];
 			}
@@ -1446,10 +1616,9 @@ class RL_FSBI_Admin {
 			$native[ $currency ] += $renewal_amount / $months;
 		}
 
-		$converted = 0.0;
-		foreach ( $native as $source_currency => $amount ) {
-			$converted += $this->convert_currency_amount( $amount, $source_currency, $report_currency, $conversion_date );
-		}
+		// Legacy FSBI displays the native MRR bucket for the selected currency.
+		// Cross-currency conversion is reserved for payout/revenue aggregation.
+		$converted = isset( $native[ $report_currency ] ) ? (float) $native[ $report_currency ] : 0.0;
 
 		ksort( $native );
 		return array(
@@ -1608,6 +1777,7 @@ class RL_FSBI_Admin {
 
 		foreach ( $subscriptions as $subscription ) {
 			$status = strtolower( (string) ( $subscription->status ?? '' ) );
+			$meta = json_decode( (string) ( $subscription->metadata ?? '' ), true );
 			$created_at = ! empty( $subscription->created_at ) ? strtotime( (string) $subscription->created_at ) : false;
 			$expires_at = ! empty( $subscription->expires_at ) ? strtotime( (string) $subscription->expires_at ) : false;
 			if ( false !== $created_at && $created_at > $as_of_timestamp ) {
@@ -1616,7 +1786,10 @@ class RL_FSBI_Admin {
 			if ( false !== $expires_at && $expires_at < strtotime( ( $as_of_date ?: gmdate( 'Y-m-d' ) ) . ' 00:00:00' ) ) {
 				continue;
 			}
-			$meta = json_decode( (string) ( $subscription->metadata ?? '' ), true );
+			$canceled_at = is_array( $meta ) && ! empty( $meta['canceled_at'] ) ? strtotime( (string) $meta['canceled_at'] ) : false;
+			if ( false !== $canceled_at && $canceled_at <= $as_of_timestamp ) {
+				continue;
+			}
 			$cycle_value = $subscription->billing_cycle ?? null;
 			if ( is_array( $meta ) && isset( $meta['billing_cycle'] ) ) {
 				$cycle_value = $meta['billing_cycle'];
@@ -1755,8 +1928,12 @@ class RL_FSBI_Admin {
 	 */
 	private function build_revenue_forecast_series( $subscriptions, $fallback_mrr, $report_currency = 'EUR' ) {
 		$labels = array();
-		$values = array();
-		$bucket = array();
+		$buckets = array(
+			'USD' => array(),
+			'EUR' => array(),
+			'GBP' => array(),
+		);
+		$merged_bucket = array();
 		$forecast_start = new DateTime( 'first day of this month 00:00:00', wp_timezone() );
 
 		for ( $i = 0; $i < 12; $i++ ) {
@@ -1764,7 +1941,11 @@ class RL_FSBI_Admin {
 			$month_date->modify( '+' . $i . ' months' );
 			$key = $month_date->format( 'Y-m' );
 			$labels[] = $key;
-			$bucket[ $key ] = 0.0;
+			foreach ( $buckets as $currency => &$bucket ) {
+				$bucket[ $key ] = 0.0;
+			}
+			$merged_bucket[ $key ] = 0.0;
+			unset( $bucket );
 		}
 
 		foreach ( $subscriptions as $subscription ) {
@@ -1773,7 +1954,8 @@ class RL_FSBI_Admin {
 				continue;
 			}
 
-			$next_renewal = ! empty( $subscription->next_renewal ) ? new DateTime( (string) $subscription->next_renewal, wp_timezone() ) : null;
+			$next_renewal_value = $this->get_subscription_next_renewal( $subscription );
+			$next_renewal = ! empty( $next_renewal_value ) ? new DateTime( (string) $next_renewal_value, wp_timezone() ) : null;
 			if ( ! $next_renewal ) {
 				continue;
 			}
@@ -1786,36 +1968,44 @@ class RL_FSBI_Admin {
 
 			$source_currency = ! empty( $subscription->currency ) ? strtoupper( (string) $subscription->currency ) : $report_currency;
 			for ( $i = 0; $i < 12; $i++ ) {
+				$renewal_date = clone $next_renewal;
+				if ( 12 === $cycle_months ) {
+					$renewal_date->modify( '+' . floor( $i / 12 ) . ' years' );
+				} elseif ( 1 === $cycle_months ) {
+					$renewal_date->modify( '+' . $i . ' months' );
+				} else {
+					$renewal_date->modify( '+' . ( floor( $i / $cycle_months ) * $cycle_months ) . ' months' );
+				}
+
 				$projection_date = clone $forecast_start;
 				$projection_date->modify( '+' . $i . ' months' );
 				$projection_key = $projection_date->format( 'Y-m' );
-				$renewal_date = clone $next_renewal;
-
-				while ( $renewal_date->format( 'Y-m' ) < $projection_key ) {
-					$renewal_date->modify( '+' . $cycle_months . ' months' );
-				}
-
 				if ( $renewal_date->format( 'Y-m' ) === $projection_key ) {
-					$amount = $this->convert_currency_amount( $renewal_amount, $source_currency, $report_currency, $renewal_date->format( 'Y-m-d H:i:s' ) );
-					$bucket[ $projection_key ] += $amount;
+					if ( ! isset( $buckets[ $source_currency ] ) ) {
+						$buckets[ $source_currency ] = array_fill_keys( $labels, 0.0 );
+					}
+					$buckets[ $source_currency ][ $projection_key ] += $renewal_amount;
+					$merged_bucket[ $projection_key ] += $this->convert_currency_amount( $renewal_amount, $source_currency, $report_currency, $renewal_date->format( 'Y-m-d H:i:s' ) );
 				}
 			}
 		}
 
-		foreach ( $labels as $label ) {
-			$values[] = round( (float) $bucket[ $label ], 2 );
+		$series = array();
+		foreach ( $buckets as $currency => $bucket ) {
+			$series[ strtolower( $currency ) ] = array_map( 'round', array_values( $bucket ), array_fill( 0, count( $bucket ), 2 ) );
 		}
 
 		return array(
 			'labels' => $labels,
-			'values' => $values,
+			'currency' => $series,
+			'values' => array_map( 'round', array_values( $merged_bucket ), array_fill( 0, count( $merged_bucket ), 2 ) ),
 		);
 	}
 
 	private function get_subscription_renewal_amount( $subscription ) {
 		$meta = json_decode( (string) ( $subscription->metadata ?? '' ), true );
 		if ( is_array( $meta ) ) {
-			foreach ( array( 'renewal_amount', 'amount', 'outstanding_balance' ) as $key ) {
+			foreach ( array( 'renewal_amount', 'amount_per_cycle', 'amount', 'outstanding_balance' ) as $key ) {
 				if ( isset( $meta[ $key ] ) && (float) $meta[ $key ] > 0 ) {
 					return (float) $meta[ $key ];
 				}
@@ -1823,6 +2013,32 @@ class RL_FSBI_Admin {
 		}
 
 		return (float) ( $subscription->outstanding_balance ?? 0 );
+	}
+
+	private function get_forecast_renewal_amount( $subscription ) {
+		$meta = json_decode( (string) ( $subscription->metadata ?? '' ), true );
+		if ( is_array( $meta ) && isset( $meta['renewal_amount'] ) && (float) $meta['renewal_amount'] > 0 ) {
+			return (float) $meta['renewal_amount'];
+		}
+
+		return (float) ( $subscription->renewal_amount ?? 0 );
+	}
+
+	private function get_subscription_next_renewal( $subscription ) {
+		if ( ! empty( $subscription->next_renewal ) ) {
+			return (string) $subscription->next_renewal;
+		}
+
+		$meta = json_decode( (string) ( $subscription->metadata ?? '' ), true );
+		if ( is_array( $meta ) ) {
+			foreach ( array( 'next_payment', 'next_billing', 'next_renewal' ) as $key ) {
+				if ( ! empty( $meta[ $key ] ) ) {
+					return (string) $meta[ $key ];
+				}
+			}
+		}
+
+		return '';
 	}
 
 	private function get_subscription_cycle_months( $subscription ) {
@@ -1852,13 +2068,22 @@ class RL_FSBI_Admin {
 
 		foreach ( $subscriptions as $subscription ) {
 			$status = strtolower( (string) $subscription->status );
+			$meta = json_decode( (string) ( $subscription->metadata ?? '' ), true );
+			$created_at = ! empty( $subscription->created_at ) ? strtotime( (string) $subscription->created_at ) : 0;
+			$canceled_at = is_array( $meta ) && ! empty( $meta['canceled_at'] ) ? strtotime( (string) $meta['canceled_at'] ) : 0;
 			$updated_month = ! empty( $subscription->updated_at ) ? substr( (string) $subscription->updated_at, 0, 7 ) : '';
 
-			if ( isset( $active[ $updated_month ] ) && in_array( $status, array( 'active', 'paid', 'trialing' ), true ) ) {
-				$active[ $updated_month ]++;
+			foreach ( $labels as $label ) {
+				$month_end = strtotime( $label . '-01 +1 month -1 second' );
+				$exists = ! $created_at || $created_at <= $month_end;
+				$was_canceled = $canceled_at && $canceled_at <= $month_end;
+
+				if ( $exists && ! $was_canceled && in_array( $status, array( 'active', 'paid', 'trialing', 'trial_ended' ), true ) ) {
+					$active[ $label ]++;
+				}
 			}
 
-			if ( isset( $canceled[ $updated_month ] ) && in_array( $status, array( 'cancelled', 'canceled' ), true ) ) {
+			if ( in_array( $status, array( 'cancelled', 'canceled' ), true ) && isset( $canceled[ $updated_month ] ) ) {
 				$canceled[ $updated_month ]++;
 			}
 		}
@@ -1970,16 +2195,8 @@ class RL_FSBI_Admin {
 	private function build_monthly_breakdown( $payments, $report_currency, $commission_rate = 0.0 ) {
 		$report_currency = strtoupper( (string) $report_currency );
 		$months = array();
-		$refunds_by_subscription_month = array();
-
-		foreach ( $payments as $payment ) {
-			if ( ! $this->is_refund_payment( $payment ) || empty( $payment->subscription_id ) ) {
-				continue;
-			}
-			$month_key = substr( (string) $payment->transaction_date, 0, 7 );
-			$map_key = (string) $payment->subscription_id . '|' . $month_key;
-			$refunds_by_subscription_month[ $map_key ] = true;
-		}
+		$positive_payments = array();
+		$refund_events = array();
 
 		for ( $i = 11; $i >= 0; $i-- ) {
 			$key = gmdate( 'Y-m', strtotime( '-' . $i . ' months' ) );
@@ -2014,11 +2231,11 @@ class RL_FSBI_Admin {
 					'fees'              => 0.0,
 					'refunds'           => 0.0,
 					'net'               => 0.0,
+					'sales_net'         => 0.0,
 					'gross_converted'   => 0.0,
 					'fees_converted'    => 0.0,
 					'refunds_converted' => 0.0,
 					'net_converted'     => 0.0,
-					'to_refund_source'  => 0.0,
 					'subscriptions'     => 0,
 					'new'               => 0,
 					'renewals'          => 0,
@@ -2041,15 +2258,26 @@ class RL_FSBI_Admin {
 				$refund_converted_value = abs( (float) $converted_amounts['net'] ) > 0 ? abs( (float) $converted_amounts['net'] ) : abs( (float) $converted_amounts['gross'] );
 				$bucket['refunds'] += $refund_source_value;
 				$bucket['refunds_converted'] += $refund_converted_value;
+				$refund_events[] = array(
+					'currency'        => $source_currency,
+					'subscription_id' => (string) ( $payment->subscription_id ?? '' ),
+					'payment_id'      => (string) ( $payment->refund_id ?? '' ),
+					'month'           => $key,
+					'date'            => (string) ( $payment->transaction_date ?? '' ),
+					'amount'          => $refund_source_value,
+					'metadata'        => json_decode( (string) ( $payment->metadata ?? '' ), true ),
+				);
 			} else {
 				$bucket['subscriptions']++;
-				if ( ! empty( $payment->subscription_id ) && (float) $raw_amounts['gross'] > 0 ) {
-					$refund_map_key = (string) $payment->subscription_id . '|' . $key;
-					if ( empty( $refunds_by_subscription_month[ $refund_map_key ] ) ) {
-						$bucket['to_refund_source'] += abs( (float) $raw_amounts['gross'] );
-					}
-				}
-				if ( ! empty( $payment->subscription_id ) ) {
+				$bucket['sales_net'] += (float) $raw_amounts['net'];
+				$positive_payments[] = array(
+					'payment_id'      => (string) ( $payment->payment_id ?? '' ),
+					'currency'        => $source_currency,
+					'subscription_id' => (string) ( $payment->subscription_id ?? '' ),
+					'month'           => $key,
+					'date'            => (string) ( $payment->transaction_date ?? '' ),
+				);
+				if ( $this->is_renewal_payment( $payment ) ) {
 					$bucket['renewals']++;
 				} else {
 					$bucket['new']++;
@@ -2058,12 +2286,46 @@ class RL_FSBI_Admin {
 			unset( $bucket );
 		}
 
+		// Freemius calculates month X earnings after X+1 closes. Refunds in X/X+1
+		// reduce X sales; older refunds are late refunds against the processing month.
+		foreach ( $refund_events as $refund ) {
+			$refund_month = $refund['month'];
+			$original_month = '';
+			$metadata = is_array( $refund['metadata'] ) ? $refund['metadata'] : array();
+			$bound_payment_id = ! empty( $metadata['bound_payment_id'] ) ? (string) $metadata['bound_payment_id'] : $refund['payment_id'];
+
+			foreach ( $positive_payments as $positive ) {
+				if ( $positive['currency'] !== $refund['currency'] || $positive['subscription_id'] !== $refund['subscription_id'] ) {
+					continue;
+				}
+				if ( $bound_payment_id && $positive['payment_id'] === $bound_payment_id ) {
+					$original_month = $positive['month'];
+					break;
+				}
+				if ( $positive['date'] <= $refund['date'] ) {
+					$original_month = $positive['month'];
+				}
+			}
+
+			$target_month = $refund_month;
+			if ( $original_month ) {
+				$original_timestamp = strtotime( $original_month . '-01' );
+				$refund_timestamp = strtotime( $refund_month . '-01' );
+				$month_difference = ( (int) gmdate( 'Y', $refund_timestamp ) - (int) gmdate( 'Y', $original_timestamp ) ) * 12 + (int) gmdate( 'n', $refund_timestamp ) - (int) gmdate( 'n', $original_timestamp );
+				if ( $month_difference <= 1 ) {
+					$target_month = $original_month;
+				}
+			}
+
+			if ( isset( $months[ $target_month ]['currencies'][ $refund['currency'] ] ) ) {
+				$months[ $target_month ]['currencies'][ $refund['currency'] ]['refunds_for_payout'] = (float) ( $months[ $target_month ]['currencies'][ $refund['currency'] ]['refunds_for_payout'] ?? 0 ) + (float) $refund['amount'];
+			}
+		}
+
 		$current_payout_month = gmdate( 'Y-m', strtotime( '-2 months' ) );
 		$next_payout_month = gmdate( 'Y-m', strtotime( '-1 month' ) );
 		$payout_threshold = 100.0;
 		$carry_by_currency = array();
-		$payout_cycle_refund_by_currency = array();
-		$payout_cycle_index_by_currency = array();
 
 		ksort( $months );
 		foreach ( $months as $month_key => $month_stats ) {
@@ -2073,42 +2335,31 @@ class RL_FSBI_Admin {
 
 			foreach ( $month_stats['currencies'] as $currency_code => $bucket ) {
 				$carry = isset( $carry_by_currency[ $currency_code ] ) ? (float) $carry_by_currency[ $currency_code ] : 0.0;
-				$cycle_index = isset( $payout_cycle_index_by_currency[ $currency_code ] ) ? (int) $payout_cycle_index_by_currency[ $currency_code ] : 1;
-				$pending_refund = isset( $payout_cycle_refund_by_currency[ $currency_code ] ) ? (float) $payout_cycle_refund_by_currency[ $currency_code ] : 0.0;
-
-				$payout_basis_source = (float) $bucket['net'];
-				if ( $cycle_index <= 2 ) {
-					$pending_refund += (float) $bucket['to_refund_source'];
-					$cycle_index++;
-				} else {
-					$payout_basis_source = (float) $bucket['net'] - $pending_refund;
-					$pending_refund = (float) $bucket['to_refund_source'];
-					$cycle_index = 1;
-				}
+				$payout_basis_source = (float) $bucket['sales_net'] - (float) ( $bucket['refunds_for_payout'] ?? 0 );
 
 				$payout_date = gmdate( 'Y-m-d H:i:s', strtotime( $month_key . '-10 +2 months' ) );
-				$payout_basis_converted = $this->convert_currency_amount( $payout_basis_source, $currency_code, $report_currency, $payout_date );
 
-				$payout_cycle_refund_by_currency[ $currency_code ] = $pending_refund;
-				$payout_cycle_index_by_currency[ $currency_code ] = $cycle_index;
-
-				$eligible_pool = $carry + (float) $payout_basis_converted;
-				$is_eligible = $eligible_pool >= $payout_threshold;
+				// Freemius applies the minimum independently per native currency.
+				$eligible_pool_native = $carry + (float) $payout_basis_source;
+				$is_eligible = $eligible_pool_native >= $payout_threshold;
 
 				if ( $is_eligible ) {
-					$payout_amount = round( $eligible_pool, 2 );
+					$payout_amount_native = round( $eligible_pool_native, 2 );
+					$payout_amount = $this->convert_currency_amount( $payout_amount_native, $currency_code, $report_currency, $payout_date );
 					$months[ $month_key ]['payout_breakdown'][ $currency_code ] = $payout_amount;
-					$months[ $month_key ]['payout_total'] += $payout_amount;
+					$months[ $month_key ]['payout_total'] += (float) $payout_amount;
 					$months[ $month_key ]['payout_eligible'] = true;
 					$months[ $month_key ]['currencies'][ $currency_code ]['payout_amount'] = $payout_amount;
 					$months[ $month_key ]['currencies'][ $currency_code ]['carry_after'] = 0.0;
-					$months[ $month_key ]['currencies'][ $currency_code ]['payout_basis_converted'] = round( (float) $payout_basis_converted, 2 );
+					$months[ $month_key ]['currencies'][ $currency_code ]['payout_basis_native'] = $payout_amount_native;
+					$months[ $month_key ]['currencies'][ $currency_code ]['payout_basis_converted'] = $payout_amount;
 					$carry_by_currency[ $currency_code ] = 0.0;
 				} else {
 					$months[ $month_key ]['currencies'][ $currency_code ]['payout_amount'] = 0.0;
-					$months[ $month_key ]['currencies'][ $currency_code ]['carry_after'] = round( $eligible_pool, 2 );
-					$months[ $month_key ]['currencies'][ $currency_code ]['payout_basis_converted'] = round( (float) $payout_basis_converted, 2 );
-					$carry_by_currency[ $currency_code ] = $eligible_pool;
+					$months[ $month_key ]['currencies'][ $currency_code ]['carry_after'] = round( $eligible_pool_native, 2 );
+					$months[ $month_key ]['currencies'][ $currency_code ]['payout_basis_native'] = round( (float) $payout_basis_source, 2 );
+					$months[ $month_key ]['currencies'][ $currency_code ]['payout_basis_converted'] = 0.0;
+					$carry_by_currency[ $currency_code ] = $eligible_pool_native;
 				}
 			}
 
@@ -2231,6 +2482,15 @@ class RL_FSBI_Admin {
 			|| 'refund' === $status;
 	}
 
+	private function is_renewal_payment( $payment ) {
+		$meta = json_decode( (string) ( $payment->metadata ?? '' ), true );
+		if ( is_array( $meta ) && array_key_exists( 'is_renewal', $meta ) ) {
+			return (bool) $meta['is_renewal'];
+		}
+
+		return ! empty( $payment->subscription_id );
+	}
+
 	/**
 	 * Resolve payment amounts and convert them to report currency when needed.
 	 */
@@ -2309,7 +2569,8 @@ class RL_FSBI_Admin {
 				'timeout' => 15,
 				'headers' => array(
 					'Authorization' => 'Bearer ' . $this->transferwise_token,
-					'Accept'        => 'application/json',
+					'Application-Type' => 'application/json',
+					'Accept'           => 'application/json',
 				),
 			)
 		);
@@ -2351,6 +2612,37 @@ class RL_FSBI_Admin {
 		}
 
 		return 0.0;
+	}
+
+	/**
+	 * Mirror the legacy FSBI progressive revenue-share tier.
+	 *
+	 * Legacy behavior uses the accumulated gross volume to select the rate:
+	 * 27% up to 1,000, 17% above 1,000, and 7% above 5,000.
+	 *
+	 * @param array $annual_payments Annual payment rows.
+	 * @param array $payments Current period payment rows.
+	 * @return float
+	 */
+	private function get_legacy_commission_rate( $annual_payments, $payments = array() ) {
+		$gross_total = 0.0;
+		$source_rows = ! empty( $annual_payments ) ? $annual_payments : $payments;
+
+		foreach ( $source_rows as $payment ) {
+			if ( $this->is_refund_payment( $payment ) ) {
+				continue;
+			}
+			$gross_total += abs( (float) ( $payment->gross ?? 0 ) );
+		}
+
+		if ( $gross_total > 5000 ) {
+			return 7.0;
+		}
+		if ( $gross_total > 1000 ) {
+			return 17.0;
+		}
+
+		return 27.0;
 	}
 
 	/**

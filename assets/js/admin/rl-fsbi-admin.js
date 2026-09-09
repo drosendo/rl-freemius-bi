@@ -9,6 +9,9 @@
 		charts: {},
 		dataTable: null,
 		currentReportCurrency: null,
+		syncController: null,
+		activeSyncId: null,
+		syncCanceled: false,
 
 		init: function() {
 			this.applyDefaultFilters();
@@ -28,8 +31,9 @@
 			if (startField && endField && !startField.value && !endField.value) {
 				const now = new Date();
 				const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+				const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 				startField.value = this.toISODate(monthStart);
-				endField.value = this.toISODate(now);
+				endField.value = this.toISODate(monthEnd);
 			}
 		},
 
@@ -38,6 +42,10 @@
 
 			document.getElementById('rl-fsbi-sync-btn')?.addEventListener('click', function() {
 				self.syncData();
+			});
+
+			document.getElementById('rl-fsbi-sync-cancel-btn')?.addEventListener('click', function() {
+				self.cancelSync();
 			});
 
 			document.getElementById('rl-fsbi-plugin-filter')?.addEventListener('change', function() {
@@ -78,7 +86,7 @@
 
 		getChartAspectRatio: function(key, type) {
 			if (type === 'doughnut') {
-				return 1;
+				return key === 'country' ? 1.8 : 1;
 			}
 
 			const map = {
@@ -210,6 +218,11 @@
 			this.setText('rl-fsbi-refund-rate', this.formatPercent(Number(kpis.refund_rate || 0), 1));
 			this.setText('rl-fsbi-churn-rate', this.formatPercent(Number(kpis.churn_rate || 0), 1));
 			this.setText('rl-fsbi-health-score', String(Math.round(Number(kpis.health_score || 0))));
+			this.setText('rl-fsbi-portfolio-revenue', this.formatCurrency(Number(data.summary?.net_revenue || 0), currency));
+			this.setText('rl-fsbi-portfolio-mrr', this.formatCurrency(mrr, currency));
+			this.setText('rl-fsbi-portfolio-arr', this.formatCurrency(arr, currency));
+			this.setText('rl-fsbi-portfolio-subs', Number(kpis.active_subscriptions || 0).toLocaleString());
+			this.setText('rl-fsbi-portfolio-health', `${Math.round(Number(kpis.health_score || 0))}/100`);
 		},
 
 		updateMiniStats: function(data) {
@@ -244,6 +257,9 @@
 				{ label: 'Refunds', data: charts.revenue_overview?.refunds || [], backgroundColor: 'rgba(255,90,114,0.75)' },
 				{ label: 'Fees', data: charts.revenue_overview?.fees || [], backgroundColor: 'rgba(244,185,66,0.75)' },
 			], currency);
+			this.drawLineChart('portfolio', 'rl-fsbi-portfolio-chart', charts.revenue_overview?.labels || [], [
+				{ label: 'Net Revenue', data: charts.revenue_overview?.net || [], borderColor: '#7d8cff', backgroundColor: 'rgba(125,140,255,0.18)' },
+			], true);
 
 			this.drawLineChart('forecast', 'rl-fsbi-forecast-chart', charts.revenue_forecast?.labels || [], [
 				{ label: 'Forecasted Revenue', data: charts.revenue_forecast?.values || [], borderColor: '#8e5dff', backgroundColor: 'rgba(142,93,255,0.15)' },
@@ -287,14 +303,26 @@
 				},
 				options: {
 					responsive: true,
-					maintainAspectRatio: true,
-					aspectRatio: this.getChartAspectRatio(key, 'line'),
+					maintainAspectRatio: false,
 					plugins: {
 						legend: { labels: { color: '#d7defd' } },
+						tooltip: {
+							mode: 'index',
+							intersect: false,
+							callbacks: {
+								label: (ctx) => {
+									const value = Number(ctx.parsed.y || 0);
+									const formatted = key === 'forecast' || key === 'portfolio'
+										? this.formatCurrency(value, this.getDisplayCurrency())
+										: value.toLocaleString();
+									return `${ctx.dataset.label}: ${formatted}`;
+								},
+							},
+						},
 					},
 					scales: {
 						x: { ticks: { color: '#9ca8d6' }, grid: { color: 'rgba(255,255,255,0.08)' } },
-						y: { beginAtZero: true, ticks: { color: '#9ca8d6' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+						y: { beginAtZero: true, ticks: { color: '#9ca8d6', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.08)' } },
 					},
 				},
 			});
@@ -315,8 +343,7 @@
 				data: { labels: labels, datasets: datasets },
 				options: {
 					responsive: true,
-					maintainAspectRatio: true,
-					aspectRatio: this.getChartAspectRatio(key, 'bar'),
+					maintainAspectRatio: false,
 					plugins: {
 						legend: { labels: { color: '#d7defd' } },
 						tooltip: {
@@ -368,8 +395,7 @@
 				},
 				options: {
 					responsive: true,
-					maintainAspectRatio: true,
-					aspectRatio: this.getChartAspectRatio(key, 'combo'),
+					maintainAspectRatio: false,
 					plugins: { legend: { labels: { color: '#d7defd' } } },
 					scales: {
 						x: { ticks: { color: '#9ca8d6' }, grid: { color: 'rgba(255,255,255,0.08)' } },
@@ -407,14 +433,16 @@
 				},
 				options: {
 					responsive: true,
-					maintainAspectRatio: true,
-					aspectRatio: this.getChartAspectRatio(key, 'doughnut'),
+					maintainAspectRatio: false,
 					cutout: '54%',
 					layout: {
 						padding: 8,
 					},
 					plugins: {
-						legend: { labels: { color: '#d7defd' }, position: 'bottom' },
+						legend: {
+							labels: { color: '#d7defd' },
+							position: key === 'country' ? 'right' : 'bottom',
+						},
 						tooltip: {
 							callbacks: {
 								label: (ctx) => {
@@ -528,13 +556,19 @@
 
 		syncData: function() {
 			const btn = document.getElementById('rl-fsbi-sync-btn');
+			const cancelBtn = document.getElementById('rl-fsbi-sync-cancel-btn');
 			if (!btn) {
 				return;
 			}
 
 			const originalText = btn.textContent;
+			this.syncCanceled = false;
+			this.syncController = new AbortController();
 			btn.disabled = true;
 			btn.textContent = 'Syncing...';
+			if (cancelBtn) {
+				cancelBtn.hidden = false;
+			}
 
 			fetch(rlFsbiAdmin.ajaxUrl, {
 				method: 'POST',
@@ -545,28 +579,34 @@
 					action: 'rl_fsbi_sync_data',
 					nonce: rlFsbiAdmin.nonce,
 				}),
+				 signal: this.syncController.signal,
 			})
 			.then((response) => response.json())
 			.then((data) => {
 				if (data.success) {
 					const state = data?.data?.state;
 					if (state) {
+						this.activeSyncId = state.sync_id || null;
 						this.syncDataBatch(state, btn, originalText);
 					} else {
 						btn.disabled = false;
 						btn.textContent = originalText;
+						if (cancelBtn) cancelBtn.hidden = true;
 						alert(data?.data?.message || 'Sync completed.');
 						this.loadData();
 					}
 				} else {
 					btn.disabled = false;
 					btn.textContent = originalText;
+					if (cancelBtn) cancelBtn.hidden = true;
 					alert('Error: ' + data.data);
 				}
 			})
 			.catch((error) => {
 				btn.disabled = false;
 				btn.textContent = originalText;
+				if (cancelBtn) cancelBtn.hidden = true;
+				if (this.syncCanceled) return;
 				console.error('Sync error:', error);
 				alert('An error occurred during sync. Check console for details.');
 			});
@@ -587,12 +627,14 @@
 					nonce: rlFsbiAdmin.nonce,
 					sync_state: JSON.stringify(state),
 				}),
+				signal: this.syncController?.signal,
 			})
 			.then((response) => response.json())
 			.then((data) => {
 				if (!data.success) {
 					btn.disabled = false;
 					btn.textContent = originalText;
+					document.getElementById('rl-fsbi-sync-cancel-btn')?.setAttribute('hidden', 'hidden');
 					alert('Error: ' + data.data);
 					return;
 				}
@@ -603,6 +645,10 @@
 				if (payload.done) {
 					btn.disabled = false;
 					btn.textContent = originalText;
+					document.getElementById('rl-fsbi-sync-cancel-btn')?.setAttribute('hidden', 'hidden');
+					this.syncController = null;
+					this.activeSyncId = null;
+					if (payload.canceled) return;
 					alert(payload.message || 'Sync completed.');
 					this.loadData();
 					return;
@@ -615,9 +661,40 @@
 			.catch((error) => {
 				btn.disabled = false;
 				btn.textContent = originalText;
+				document.getElementById('rl-fsbi-sync-cancel-btn')?.setAttribute('hidden', 'hidden');
+				if (this.syncCanceled) return;
 				console.error('Sync batch error:', error);
 				alert('An error occurred during batch sync. Check console for details.');
 			});
+		},
+
+		cancelSync: function() {
+			const btn = document.getElementById('rl-fsbi-sync-btn');
+			const cancelBtn = document.getElementById('rl-fsbi-sync-cancel-btn');
+			this.syncCanceled = true;
+
+			if (this.activeSyncId) {
+				fetch(rlFsbiAdmin.ajaxUrl, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+					body: new URLSearchParams({
+						action: 'rl_fsbi_sync_cancel',
+						nonce: rlFsbiAdmin.nonce,
+						sync_id: this.activeSyncId,
+					}),
+				}).catch(() => {});
+			}
+
+			this.syncController?.abort();
+			this.syncController = null;
+			this.activeSyncId = null;
+			if (btn) {
+				btn.disabled = false;
+				btn.textContent = 'Sync Now';
+			}
+			if (cancelBtn) {
+				cancelBtn.hidden = true;
+			}
 		},
 	};
 

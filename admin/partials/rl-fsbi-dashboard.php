@@ -44,6 +44,7 @@ if ( ! defined( 'WPINC' ) ) {
 			<input type="date" id="rl-fsbi-end-date" />
 
 			<button id="rl-fsbi-sync-btn" class="button button-primary"><?php echo esc_html__( 'Sync Now', 'rl-freemius-bi' ); ?></button>
+			<button id="rl-fsbi-sync-cancel-btn" class="button" type="button" hidden><?php echo esc_html__( 'Cancel Sync', 'rl-freemius-bi' ); ?></button>
 		</div>
 	</div>
 
@@ -63,6 +64,23 @@ if ( ! defined( 'WPINC' ) ) {
 			<div class="rl-fsbi-card-value" id="rl-fsbi-refunds-breakdown">—</div>
 			<div class="rl-fsbi-card-sub" id="rl-fsbi-refunds-sub">—</div>
 		</div>
+	</div>
+
+	<div class="rl-fsbi-card rl-fsbi-portfolio-widget">
+		<div class="rl-fsbi-portfolio-header">
+			<div>
+				<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Portfolio Performance', 'rl-freemius-bi' ); ?></div>
+				<div class="rl-fsbi-card-sub"><?php echo esc_html__( 'A concise view of recurring strength and recent momentum.', 'rl-freemius-bi' ); ?></div>
+			</div>
+			<strong id="rl-fsbi-portfolio-health">—</strong>
+		</div>
+		<div class="rl-fsbi-portfolio-metrics">
+			<div><span><?php echo esc_html__( 'Net Revenue', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-portfolio-revenue">—</strong></div>
+			<div><span><?php echo esc_html__( 'MRR', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-portfolio-mrr">—</strong></div>
+			<div><span><?php echo esc_html__( 'ARR', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-portfolio-arr">—</strong></div>
+			<div><span><?php echo esc_html__( 'Active Subscribers', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-portfolio-subs">—</strong></div>
+		</div>
+		<canvas id="rl-fsbi-portfolio-chart"></canvas>
 	</div>
 
 	<div class="rl-fsbi-mini-kpis">
@@ -101,11 +119,15 @@ if ( ! defined( 'WPINC' ) ) {
 			</div>
 		</div>
 
+		<div class="rl-fsbi-forecast-row">
 		<div class="rl-fsbi-card">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( '12-Month Revenue Forecast', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Expected renewal amount from the selected date onward if subscriptions are not canceled.', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-forecast-chart"></canvas>
 		</div>
+		</div>
 
+		<div class="rl-fsbi-four-chart-row">
 		<div class="rl-fsbi-card">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Churn Trend', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-churn-chart"></canvas>
@@ -124,6 +146,7 @@ if ( ! defined( 'WPINC' ) ) {
 		<div class="rl-fsbi-card">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Plan Distribution', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-plan-chart"></canvas>
+		</div>
 		</div>
 
 		<div class="rl-fsbi-card rl-fsbi-span-3">
