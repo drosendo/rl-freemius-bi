@@ -53,6 +53,18 @@ register_activation_hook( __FILE__, 'activate_rl_fsbi' );
 register_deactivation_hook( __FILE__, 'deactivate_rl_fsbi' );
 
 /**
+ * Load translations on init (WP 6.7+ requirement).
+ */
+function load_rl_fsbi_textdomain() {
+	load_plugin_textdomain(
+		'rl-freemius-bi',
+		false,
+		dirname( plugin_basename( __FILE__ ) ) . '/languages'
+	);
+}
+add_action( 'init', 'load_rl_fsbi_textdomain', 1 );
+
+/**
  * The core plugin class that is used to define internationalization,
  * admin-specific hooks, and public-facing site hooks.
  */
@@ -66,4 +78,4 @@ function run_rl_fsbi() {
 	$plugin->run();
 }
 
-add_action( 'plugins_loaded', 'run_rl_fsbi', 20 );
+add_action( 'init', 'run_rl_fsbi', 20 );

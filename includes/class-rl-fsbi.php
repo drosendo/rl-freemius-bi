@@ -40,7 +40,6 @@ class RL_FSBI {
 		$this->plugin_name  = 'rl-freemius-bi';
 
 		$this->load_dependencies();
-		$this->set_locale();
 		$this->define_admin_hooks();
 	}
 
@@ -61,16 +60,6 @@ class RL_FSBI {
 	}
 
 	/**
-	 * Define the locale for this plugin for internationalization.
-	 *
-	 * @access   private
-	 */
-	private function set_locale() {
-		$plugin_i18n = new RL_FSBI_i18n();
-		$this->loader->add_action( 'plugins_loaded', $plugin_i18n, 'load_plugin_textdomain' );
-	}
-
-	/**
 	 * Register all of the hooks related to the admin area functionality.
 	 *
 	 * @access   private
@@ -81,11 +70,13 @@ class RL_FSBI {
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_styles' );
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'maybe_run_initial_sweep' );
+		$this->loader->add_action( 'admin_init', $plugin_admin, 'ensure_hourly_sync_cron' );
 		$this->loader->add_action( 'admin_menu', $plugin_admin, 'add_plugin_admin_menu' );
 		$this->loader->add_action( 'wp_dashboard_setup', $plugin_admin, 'register_wordpress_dashboard_widget' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_sync_data', $plugin_admin, 'handle_sync_ajax' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_sync_batch', $plugin_admin, 'handle_sync_batch_ajax' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_sync_cancel', $plugin_admin, 'handle_sync_cancel_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_refresh_latest', $plugin_admin, 'handle_refresh_latest_ajax' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_get_dashboard_data', $plugin_admin, 'handle_get_dashboard_data_ajax' );
 		$this->loader->add_action( 'rl_fsbi_scheduled_sync', $plugin_admin, 'scheduled_sync' );
 	}
