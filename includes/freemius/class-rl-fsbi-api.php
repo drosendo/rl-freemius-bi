@@ -554,6 +554,32 @@ class RL_FSBI_API
 	}
 
 	/**
+	 * Retrieve plugin tags (deployments/versions)
+	 *
+	 * GET /v1/developers/{developer_id}/plugins/{plugin_id}/tags.json
+	 *
+	 * @param int $plugin_id Plugin ID.
+	 * @return array Tags array or empty array.
+	 */
+	public function retrieve_plugin_tags($plugin_id)
+	{
+		$this->log('retrieve_plugin_tags() called', array('plugin_id' => $plugin_id));
+
+		$endpoint = "/v1/developers/{$this->developer_id}/plugins/{$plugin_id}/tags.json";
+		$response = $this->request($endpoint, 'GET');
+
+		if (! is_array($response)) {
+			$this->log('retrieve_plugin_tags() failed: response is not array', array('type' => gettype($response)));
+			return array();
+		}
+
+		$tags = $this->extract_collection($response, 'tags');
+		$this->log('retrieve_plugin_tags() completed', array('count' => count($tags)));
+
+		return $tags;
+	}
+
+	/**
 	 * Retrieve payments (transactions)
 	 *
 	 * GET /v1/developers/{developer_id}/plugins/{plugin_id}/payments.json

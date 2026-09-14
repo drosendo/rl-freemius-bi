@@ -12,11 +12,13 @@
 		syncController: null,
 		activeSyncId: null,
 		syncCanceled: false,
+		latestRefreshDone: false,
+		monthlyTableData: null,
 
 		init: function() {
 			this.applyDefaultFilters();
 			this.bindEvents();
-			this.loadData();
+			this.refreshLatestData().finally(() => this.loadData());
 		},
 
 		applyDefaultFilters: function() {
@@ -49,6 +51,18 @@
 			});
 
 			document.getElementById('rl-fsbi-plugin-filter')?.addEventListener('change', function() {
+				const selectedOption = this.options[this.selectedIndex];
+				if (selectedOption) {
+					const cleanTitle = selectedOption.value === 'all'
+						? 'All Plugins'
+						: selectedOption.text.replace(/\s*\(#\d+\)$/, '');
+					self.setText('rl-fsbi-active-plugin-title', cleanTitle);
+
+					const versionWrap = document.getElementById('rl-fsbi-active-plugin-version');
+					if (versionWrap && selectedOption.value === 'all') {
+						versionWrap.style.display = 'none';
+					}
+				}
 				self.loadData();
 			});
 
@@ -62,6 +76,14 @@
 
 			document.getElementById('rl-fsbi-end-date')?.addEventListener('change', function() {
 				self.loadData();
+			});
+
+			document.getElementById('rl-fsbi-export-monthly-csv')?.addEventListener('click', function() {
+				self.exportMonthlyCsv();
+			});
+
+			document.getElementById('rl-fsbi-export-3yr-csv')?.addEventListener('click', function() {
+				self.export3YearCsv();
 			});
 		},
 
@@ -142,6 +164,26 @@
 			return `${safe.toFixed(decimals)}%`;
 		},
 
+		refreshLatestData: function() {
+			if (this.latestRefreshDone) {
+				return Promise.resolve();
+			}
+			this.latestRefreshDone = true;
+
+			return fetch(rlFsbiAdmin.ajaxUrl, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: new URLSearchParams({
+					action: 'rl_fsbi_refresh_latest',
+					nonce: rlFsbiAdmin.nonce,
+				}),
+			})
+			.then((response) => response.json())
+			.catch((error) => {
+				console.warn('Latest Freemius refresh failed:', error);
+			});
+		},
+
 		loadData: function() {
 			const self = this;
 			const filters = this.getFilters();
@@ -174,12 +216,32 @@
 
 		renderDashboard: function(data) {
 			this.currentReportCurrency = data.report_currency || data?.summary?.report_currency || null;
+			this.updatePageHeader(data);
 			this.updateTopCards(data);
 			this.updateMiniKpis(data);
 			this.updateMiniStats(data);
 			this.updateTrialPanel(data);
 			this.updateCharts(data);
 			this.updateMonthlyTable(data);
+		},
+
+		updatePageHeader: function(data) {
+			if (data.plugin_title) {
+				this.setText('rl-fsbi-active-plugin-title', data.plugin_title);
+			}
+
+			const versionWrap = document.getElementById('rl-fsbi-active-plugin-version');
+			const versionVal = document.getElementById('rl-fsbi-active-plugin-version-val');
+
+			if (versionWrap && versionVal) {
+				const isAllPlugins = !data.plugin_id || data.plugin_id === 'all' || Number(data.plugin_id) === 0;
+				if (!isAllPlugins && data.plugin_version) {
+					versionVal.textContent = data.plugin_version;
+					versionWrap.style.display = 'inline-flex';
+				} else {
+					versionWrap.style.display = 'none';
+				}
+			}
 		},
 
 		updateTopCards: function(data) {
@@ -244,12 +306,17 @@
 			const charts = data.charts || {};
 			const currency = this.getDisplayCurrency();
 
+			console.log(charts.sales_activity)
+
 			this.drawLineChart('salesActivity', 'rl-fsbi-sales-activity-chart', charts.sales_activity?.labels || [], [
 				{ label: 'Purchases', data: charts.sales_activity?.purchases || [], borderColor: '#5f6bff', backgroundColor: 'rgba(95,107,255,0.15)' },
+				{ label: 'Renewals', data: charts.sales_activity?.renewals || [], borderColor: '#2aa84a', backgroundColor: 'rgba(42,168,74,0.15)' },
 				{ label: 'Trials', data: charts.sales_activity?.trials || [], borderColor: '#22c89b', backgroundColor: 'rgba(34,200,155,0.15)' },
 				{ label: 'Refunds', data: charts.sales_activity?.refunds || [], borderColor: '#ff5a72', backgroundColor: 'rgba(255,90,114,0.15)' },
 				{ label: 'Conversions', data: charts.sales_activity?.conversions || [], borderColor: '#f4b942', backgroundColor: 'rgba(244,185,66,0.15)' },
 			], false);
+
+			this.drawExpectedRenewalsChart(charts.expected_renewals, currency);
 
 			this.drawBarChart('revenueOverview', 'rl-fsbi-revenue-overview-chart', charts.revenue_overview?.labels || [], [
 				{ label: 'Gross', data: charts.revenue_overview?.gross || [], backgroundColor: 'rgba(95,107,255,0.75)' },
@@ -406,6 +473,144 @@
 			});
 		},
 
+		drawExpectedRenewalsChart: function(expectedRenewals, currency) {
+			const canvas = document.getElementById('rl-fsbi-expected-renewals-chart');
+			if (!canvas || !window.Chart || !expectedRenewals) {
+				return;
+			}
+
+			const summary = expectedRenewals.summary || {};
+			const totalBadge = document.getElementById('rl-fsbi-renewals-total-badge');
+			const completedBadge = document.getElementById('rl-fsbi-renewals-completed-badge');
+			const upcomingBadge = document.getElementById('rl-fsbi-renewals-upcoming-badge');
+			const titleEl = document.getElementById('rl-fsbi-expected-renewals-title');
+
+			if (titleEl && expectedRenewals.month_label) {
+				titleEl.textContent = `Expected Renewals: ${expectedRenewals.month_label}`;
+			}
+			if (totalBadge) {
+				const totalRev = this.formatCurrency(summary.total_revenue || 0, currency);
+				const totalCnt = summary.total_count || 0;
+				totalBadge.textContent = `Total: ${totalRev} (${totalCnt} ${totalCnt === 1 ? 'sub' : 'subs'})`;
+			}
+			if (completedBadge) {
+				const compRev = this.formatCurrency(summary.completed_revenue || 0, currency);
+				const compCnt = summary.completed_count || 0;
+				completedBadge.textContent = `Renewed: ${compRev} (${compCnt})`;
+			}
+			if (upcomingBadge) {
+				const upRev = this.formatCurrency(summary.upcoming_revenue || 0, currency);
+				const upCnt = summary.upcoming_count || 0;
+				upcomingBadge.textContent = `Upcoming: ${upRev} (${upCnt})`;
+			}
+
+			if (this.charts['expectedRenewals']) {
+				this.charts['expectedRenewals'].destroy();
+			}
+
+			const labels = expectedRenewals.labels || [];
+			const dayLabels = labels.map(function(dateStr) {
+				const parts = dateStr.split('-');
+				return parts.length === 3 ? parts[2] : dateStr;
+			});
+
+			const self = this;
+			this.charts['expectedRenewals'] = new Chart(canvas, {
+				data: {
+					labels: dayLabels,
+					datasets: [
+						{
+							type: 'bar',
+							label: 'Completed Renewals',
+							data: expectedRenewals.completed_amounts || [],
+							backgroundColor: 'rgba(42, 168, 74, 0.75)',
+							borderColor: '#2aa84a',
+							borderWidth: 1,
+							stack: 'renewals',
+							yAxisID: 'y',
+						},
+						{
+							type: 'bar',
+							label: 'Upcoming Expected',
+							data: expectedRenewals.upcoming_amounts || [],
+							backgroundColor: 'rgba(95, 107, 255, 0.75)',
+							borderColor: '#5f6bff',
+							borderWidth: 1,
+							stack: 'renewals',
+							yAxisID: 'y',
+						},
+						{
+							type: 'line',
+							label: 'Subscriptions',
+							data: expectedRenewals.total_counts || [],
+							borderColor: '#f4b942',
+							backgroundColor: 'rgba(244, 185, 66, 0.2)',
+							borderWidth: 2,
+							tension: 0.25,
+							pointRadius: 2.5,
+							yAxisID: 'y1',
+						},
+					],
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					interaction: {
+						mode: 'index',
+						intersect: false,
+					},
+					plugins: {
+						legend: {
+							labels: { color: '#d7defd' },
+						},
+						tooltip: {
+							callbacks: {
+								title: function(items) {
+									const idx = items[0]?.dataIndex;
+									return idx !== undefined && labels[idx] ? `Date: ${labels[idx]}` : '';
+								},
+								label: function(ctx) {
+									if (ctx.dataset.yAxisID === 'y1') {
+										const count = Number(ctx.parsed.y || 0);
+										return `${ctx.dataset.label}: ${count} ${count === 1 ? 'subscription' : 'subscriptions'}`;
+									}
+									const amount = Number(ctx.parsed.y || 0);
+									return `${ctx.dataset.label}: ${self.formatCurrency(amount, currency)}`;
+								},
+							},
+						},
+					},
+					scales: {
+						x: {
+							ticks: { color: '#9ca8d6', maxRotation: 0 },
+							grid: { color: 'rgba(255,255,255,0.06)' },
+						},
+						y: {
+							beginAtZero: true,
+							position: 'left',
+							ticks: {
+								color: '#9ca8d6',
+								callback: function(value) {
+									return self.formatCurrency(value, currency);
+								},
+							},
+							grid: { color: 'rgba(255,255,255,0.08)' },
+						},
+						y1: {
+							beginAtZero: true,
+							position: 'right',
+							grid: { display: false },
+							ticks: {
+								color: '#f4b942',
+								stepSize: 1,
+								precision: 0,
+							},
+						},
+					},
+				},
+			});
+		},
+
 		drawDoughnutChart: function(key, canvasId, labels, values, currency, asMoney = true) {
 			const canvas = document.getElementById(canvasId);
 			if (!canvas || !window.Chart) {
@@ -470,6 +675,8 @@
 			const rows = tableData.rows || [];
 			const totals = tableData.totals || {};
 			const reportCurrency = this.getDisplayCurrency();
+
+			this.monthlyTableData = tableData;
 
 			tbody.innerHTML = '';
 
@@ -554,6 +761,172 @@
 			}
 		},
 
+		exportMonthlyCsv: function() {
+			const tableData = this.monthlyTableData || {};
+			const rows = tableData.rows || [];
+			const totals = tableData.totals || {};
+			const reportCurrency = this.getDisplayCurrency();
+
+			if (!rows.length) {
+				alert('No monthly revenue data available to export.');
+				return;
+			}
+
+			const csvRows = [];
+			csvRows.push([
+				'Period',
+				'Month',
+				'New Subscriptions',
+				'Renewal Subscriptions',
+				'Total Subscriptions',
+				'Gross Revenue',
+				'Refunds',
+				'Fees',
+				'Net Revenue',
+				'Currency',
+				'Payout Total',
+				'Payout Status',
+			]);
+
+			rows.forEach((row) => {
+				const rowCurrency = row.currency || reportCurrency;
+				const payoutTotal = Number(row.payout_total || 0);
+				const payoutText = payoutTotal > 0
+					? payoutTotal.toFixed(2)
+					: (row.show_payout ? 'Carryover' : '');
+
+				let status = '';
+				if (row.is_current_payout) {
+					status = 'CURRENT PAYOUT';
+				} else if (row.is_next_payout) {
+					status = 'NEXT PAYOUT';
+				}
+
+				csvRows.push([
+					row.period || '',
+					row.month || '',
+					Number(row.new || 0),
+					Number(row.renewals || 0),
+					Number(row.subscriptions || 0),
+					Number(row.gross || 0).toFixed(2),
+					Number(row.refunds || 0).toFixed(2),
+					Number(row.fees || 0).toFixed(2),
+					Number(row.net || 0).toFixed(2),
+					rowCurrency,
+					payoutText,
+					status,
+				]);
+			});
+
+			csvRows.push([
+				'Total (12m Converted)',
+				'',
+				'',
+				'',
+				Number(totals.transactions || 0),
+				Number(totals.gross || 0).toFixed(2),
+				Number(totals.refunds || 0).toFixed(2),
+				Number(totals.fees || 0).toFixed(2),
+				Number(totals.net || 0).toFixed(2),
+				totals.currency || reportCurrency,
+				'',
+				'',
+			]);
+
+			const csvString = csvRows.map((row) => {
+				return row.map((field) => {
+					const stringField = String(field ?? '');
+					if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n') || stringField.includes('\r')) {
+						return '"' + stringField.replace(/"/g, '""') + '"';
+					}
+					return stringField;
+				}).join(',');
+			}).join('\r\n');
+
+			const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+
+			const pluginFilter = document.getElementById('rl-fsbi-plugin-filter');
+			const pluginSlug = pluginFilter && pluginFilter.value !== 'all' ? `plugin-${pluginFilter.value}` : 'all-plugins';
+			const dateStamp = new Date().toISOString().slice(0, 10);
+			link.setAttribute('href', url);
+			link.setAttribute('download', `fsbi-monthly-revenue-${pluginSlug}-${reportCurrency.toLowerCase()}-${dateStamp}.csv`);
+			link.style.visibility = 'hidden';
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			URL.revokeObjectURL(url);
+		},
+
+		export3YearCsv: function() {
+			const btn = document.getElementById('rl-fsbi-export-3yr-csv');
+			const originalHtml = btn ? btn.innerHTML : '';
+			const pluginFilter = document.getElementById('rl-fsbi-plugin-filter');
+			const currencyFilter = document.getElementById('rl-fsbi-currency-filter');
+			const endDateInput = document.getElementById('rl-fsbi-end-date');
+
+			const pluginId = pluginFilter ? pluginFilter.value : 'all';
+			const currency = currencyFilter ? currencyFilter.value : 'all';
+			const endDate = endDateInput ? endDateInput.value : '';
+
+			if (btn) {
+				btn.disabled = true;
+				btn.textContent = 'Generating 3Y CSV...';
+			}
+
+			const params = new URLSearchParams({
+				action: 'rl_fsbi_export_monthly_csv',
+				nonce: rlFsbiAdmin.nonce,
+				period: '3y',
+				plugin_id: pluginId,
+				currency: currency,
+				end_date: endDate,
+			});
+
+			fetch(rlFsbiAdmin.ajaxUrl + '?' + params.toString(), {
+				method: 'GET',
+				headers: {
+					'Accept': 'text/csv',
+				},
+			})
+				.then((response) => {
+					if (!response.ok) {
+						throw new Error('Network response was not ok');
+					}
+					let filename = `fsbi-monthly-revenue-3years-${pluginId !== 'all' ? 'plugin-' + pluginId : 'all-plugins'}-${currency.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+					const disposition = response.headers.get('Content-Disposition');
+					if (disposition && disposition.includes('filename=')) {
+						const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+						if (match && match[1]) {
+							filename = match[1].replace(/['"]/g, '').trim();
+						}
+					}
+					return response.blob().then((blob) => ({ blob, filename }));
+				})
+				.then(({ blob, filename }) => {
+					const url = URL.createObjectURL(blob);
+					const link = document.createElement('a');
+					link.setAttribute('href', url);
+					link.setAttribute('download', filename);
+					link.style.visibility = 'hidden';
+					document.body.appendChild(link);
+					link.click();
+					document.body.removeChild(link);
+					URL.revokeObjectURL(url);
+				})
+				.catch((error) => {
+					console.error('FSBI 3-Year CSV export failed:', error);
+					alert('Failed to generate 3-Year CSV export. Please try again.');
+				})
+				.finally(() => {
+					if (btn) {
+						btn.disabled = false;
+						btn.innerHTML = originalHtml;
+					}
+				});
+		},
+
 		syncData: function() {
 			const btn = document.getElementById('rl-fsbi-sync-btn');
 			const cancelBtn = document.getElementById('rl-fsbi-sync-cancel-btn');
@@ -565,24 +938,35 @@
 			this.syncCanceled = false;
 			this.syncController = new AbortController();
 			btn.disabled = true;
-			btn.textContent = 'Syncing...';
+			btn.textContent = 'Checking latest...';
 			if (cancelBtn) {
 				cancelBtn.hidden = false;
 			}
 
-			fetch(rlFsbiAdmin.ajaxUrl, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/x-www-form-urlencoded',
-				},
-				body: new URLSearchParams({
-					action: 'rl_fsbi_sync_data',
-					nonce: rlFsbiAdmin.nonce,
-				}),
-				 signal: this.syncController.signal,
-			})
-			.then((response) => response.json())
-			.then((data) => {
+			this.latestRefreshDone = false;
+			this.refreshLatestData()
+				.then(() => {
+					if (this.syncCanceled) {
+						return null;
+					}
+					btn.textContent = 'Syncing...';
+					return fetch(rlFsbiAdmin.ajaxUrl, {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/x-www-form-urlencoded',
+						},
+						body: new URLSearchParams({
+							action: 'rl_fsbi_sync_data',
+							nonce: rlFsbiAdmin.nonce,
+						}),
+						signal: this.syncController.signal,
+					});
+				})
+				.then((response) => response ? response.json() : null)
+				.then((data) => {
+					if (!data) {
+						return;
+					}
 				if (data.success) {
 					const state = data?.data?.state;
 					if (state) {

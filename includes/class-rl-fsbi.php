@@ -78,6 +78,7 @@ class RL_FSBI {
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_sync_cancel', $plugin_admin, 'handle_sync_cancel_ajax' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_refresh_latest', $plugin_admin, 'handle_refresh_latest_ajax' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_get_dashboard_data', $plugin_admin, 'handle_get_dashboard_data_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_export_monthly_csv', $plugin_admin, 'handle_export_monthly_csv_ajax' );
 		$this->loader->add_action( 'rl_fsbi_scheduled_sync', $plugin_admin, 'scheduled_sync' );
 	}
 

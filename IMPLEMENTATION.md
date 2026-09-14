@@ -373,25 +373,37 @@ FSBI.bindEvents()              // Attach event listeners
 FSBI.loadData()                // Fetch dashboard data via AJAX
 FSBI.loadInitialData()         // Load data on page load
 FSBI.getFilters()              // Return current filter values
+FSBI.updatePageHeader( data )  // Update page title and latest version badge
 FSBI.updateKPIs( data )        // Update KPI card values
 FSBI.updateCharts( data )      // Render charts
-FSBI.updateTable( data )       // Populate DataTable
+FSBI.updateMonthlyTable( data )// Populate Monthly Revenue Breakdown table
+FSBI.exportMonthlyCsv()        // Export 12-month revenue breakdown as CSV
+FSBI.export3YearCsv()          // Export 3-year (36-month) revenue breakdown as CSV
 FSBI.syncData()                // Trigger data sync
 ```
 
 **Chart Integration:**
 - Chart.js 3.9.1 loaded from CDN
-- Two charts:
-  1. **Revenue Trend:** Line chart (daily amounts)
-  2. **Currency Distribution:** Doughnut chart (by-currency totals)
+- Interactive charts:
+  1. **Sales Activity:** Line chart (purchases, renewals, trials, refunds, conversions for current month)
+  2. **Expected Renewals by Day:** Stacked bar + dual-axis line chart for current month daily expected renewals (completed renewals + upcoming scheduled renewals by day, dual-axis for revenue amounts and subscription counts, with total/completed/upcoming badge counters)
+  3. **Revenue Overview:** Bar chart (gross, net, refunds, fees)
+  4. **Portfolio Performance:** Area line chart (net revenue)
+  5. **12-Month Revenue Forecast:** Forward projected renewal revenue line chart
+  6. **Churn Trend:** Combo bar + line chart (canceled subscriptions and churn rate)
+  7. **Currency Distribution:** Doughnut chart (by-currency totals)
+  8. **Country & Plan Distribution:** Doughnut charts
+  9. **WP.org Growth:** Daily downloads & activity line chart
 - Charts destroyed and recreated on filter change
 
-**DataTable Integration:**
+**DataTable & Export Integration:**
 - DataTables 1.13.4 loaded from CDN
-- Payments table with:
-  - Sorting on all columns
-  - Default 25 rows per page
-  - Default sort: date descending
+- Monthly Revenue Breakdown table with:
+  - 12-month rolling history with multi-currency breakdown
+  - Subscriptions (New vs Renewal pills)
+  - Payout status badges (Current Payout, Next Payout, Carryover)
+  - One-click CSV Export for 12 months (client-side in-memory) and 3 years (server-side stream via AJAX) with RFC 4180 escaping and UTF-8 BOM encoding
+- Dedicated AJAX CSV endpoint: `wp_ajax_rl_fsbi_export_monthly_csv` supporting `period=12m` or `period=3y`
 
 **Event Binding:**
 ```javascript
@@ -400,6 +412,8 @@ FSBI.syncData()                // Trigger data sync
 #rl-fsbi-currency-filter.change   → FSBI.loadData()
 #rl-fsbi-start-date.change        → FSBI.loadData()
 #rl-fsbi-end-date.change          → FSBI.loadData()
+#rl-fsbi-export-monthly-csv.click → FSBI.exportMonthlyCsv()
+#rl-fsbi-export-3yr-csv.click     → FSBI.export3YearCsv()
 ```
 
 ---

@@ -18,8 +18,9 @@ The plugin integrates directly with the Freemius REST API using HMAC-SHA256 auth
 - **Real-Time Data Sync:** Scheduled hourly sync via WP-Cron with manual on-demand refresh capability
 - **Multi-Currency Support:** Segregate and analyze revenue by USD, EUR, GBP, and other currencies
 - **Interactive Filters:** One-click currency and plugin filters with date range selection
+- **Dynamic Plugin Header:** Displays the clean title of the plugin currently being viewed along with a badge indicating its latest deployed version (cached from Freemius tags API)
 - **KPI Dashboards:** Visual progress bars, trend indicators, and percentage growth metrics
-- **Revenue Analytics:** Daily/monthly trend charts, currency distribution pie charts
+- **Revenue Analytics:** Daily/monthly trend charts, current month expected renewals by day, currency distribution pie charts
 - **Transaction Reports:** DataTables-powered sortable payment history with status badges
 - **Business Metrics:**
   - Gross Revenue (total transaction amount)
@@ -173,6 +174,8 @@ Stores developer payout and balance information.
 Displays:
 - **KPI Cards:** Gross Revenue, Net Revenue, MRR, Active Subscriptions
 - **Filter Controls:** Plugin selector, currency toggle, date range picker
+- **Sales Activity Chart:** Current month daily purchases, renewals, trials, refunds, conversions
+- **Expected Renewals Chart:** Current month daily expected renewals (completed renewals + upcoming scheduled renewals by day, dual-axis for revenue amounts and subscription counts, with total/completed/upcoming badge counters)
 - **Revenue Trend Chart:** Daily/monthly gross revenue line chart
 - **Currency Distribution Chart:** Pie chart showing revenue by currency
 - **Recent Payments Table:** DataTables-powered transaction history
@@ -310,6 +313,16 @@ Fetches dashboard metrics and transaction data for display.
   }
 }
 ```
+
+### `wp_ajax_rl_fsbi_export_monthly_csv`
+Streams a CSV file containing 12-month or 3-year (36-month) rolling revenue breakdown data with currency breakdowns and totals.
+
+**Parameters:**
+- `nonce` (required)
+- `period` (optional): `12m` (default) or `3y` (last 36 months)
+- `plugin_id` (optional): Filter by plugin ID or `all`
+- `currency` (optional): Filter by currency or `all`
+- `end_date` (optional): YYYY-MM-DD format reference date
 
 ## Hooks and Filters
 

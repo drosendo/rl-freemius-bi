@@ -9,11 +9,33 @@ if ( ! defined( 'WPINC' ) ) {
 ?>
 
 <div class="wrap rl-fsbi-dashboard">
-	<h1><?php echo esc_html__( 'FSBI v2', 'rl-freemius-bi' ); ?></h1>
 	<?php
 	$forced_plugin_id = isset( $GLOBALS['rl_fsbi_forced_plugin_id'] ) ? (int) $GLOBALS['rl_fsbi_forced_plugin_id'] : 0;
-	$plugins_catalog = isset( $GLOBALS['rl_fsbi_plugins_catalog'] ) && is_array( $GLOBALS['rl_fsbi_plugins_catalog'] ) ? $GLOBALS['rl_fsbi_plugins_catalog'] : array();
+	$plugins_catalog  = isset( $GLOBALS['rl_fsbi_plugins_catalog'] ) && is_array( $GLOBALS['rl_fsbi_plugins_catalog'] ) ? $GLOBALS['rl_fsbi_plugins_catalog'] : array();
+	$raw_catalog      = isset( $GLOBALS['rl_fsbi_raw_catalog'] ) && is_array( $GLOBALS['rl_fsbi_raw_catalog'] ) ? $GLOBALS['rl_fsbi_raw_catalog'] : array();
+	$initial_version  = isset( $GLOBALS['rl_fsbi_plugin_version'] ) ? (string) $GLOBALS['rl_fsbi_plugin_version'] : '';
+
+	$initial_title = esc_html__( 'All Plugins', 'rl-freemius-bi' );
+	if ( $forced_plugin_id > 0 ) {
+		if ( ! empty( $raw_catalog[ (string) $forced_plugin_id ]['title'] ) ) {
+			$initial_title = $raw_catalog[ (string) $forced_plugin_id ]['title'];
+		} elseif ( ! empty( $plugins_catalog[ (string) $forced_plugin_id ] ) ) {
+			$initial_title = preg_replace( '/\s*\(#\d+\)$/', '', (string) $plugins_catalog[ (string) $forced_plugin_id ] );
+		} else {
+			$initial_title = sprintf( esc_html__( 'Plugin #%d', 'rl-freemius-bi' ), $forced_plugin_id );
+		}
+	}
 	?>
+
+	<div class="rl-fsbi-page-header">
+		<h1 class="rl-fsbi-page-title">
+			<span id="rl-fsbi-active-plugin-title"><?php echo esc_html( $initial_title ); ?></span>
+			<span id="rl-fsbi-active-plugin-version" class="rl-fsbi-version-badge"<?php echo empty( $initial_version ) ? ' style="display:none;"' : ''; ?>>
+				<span class="rl-fsbi-version-badge-label"><?php echo esc_html__( 'Latest version', 'rl-freemius-bi' ); ?></span>
+				<span class="rl-fsbi-version-badge-val" id="rl-fsbi-active-plugin-version-val"><?php echo esc_html( $initial_version ); ?></span>
+			</span>
+		</h1>
+	</div>
 
 	<div class="rl-fsbi-toolbar">
 		<div class="rl-fsbi-controls">
@@ -106,6 +128,21 @@ if ( ! defined( 'WPINC' ) ) {
 		</div>
 
 		<div class="rl-fsbi-card rl-fsbi-span-3">
+			<div class="rl-fsbi-card-header-flex">
+				<div>
+					<div class="rl-fsbi-panel-title" id="rl-fsbi-expected-renewals-title"><?php echo esc_html__( 'Expected Renewals: Current Month', 'rl-freemius-bi' ); ?></div>
+					<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Daily projected subscription renewals and expected revenue for the current month.', 'rl-freemius-bi' ); ?></div>
+				</div>
+				<div class="rl-fsbi-renewals-badges">
+					<span class="rl-fsbi-renewals-badge rl-fsbi-renewals-badge--total" id="rl-fsbi-renewals-total-badge">—</span>
+					<span class="rl-fsbi-renewals-badge rl-fsbi-renewals-badge--completed" id="rl-fsbi-renewals-completed-badge">—</span>
+					<span class="rl-fsbi-renewals-badge rl-fsbi-renewals-badge--upcoming" id="rl-fsbi-renewals-upcoming-badge">—</span>
+				</div>
+			</div>
+			<canvas id="rl-fsbi-expected-renewals-chart"></canvas>
+		</div>
+
+		<div class="rl-fsbi-card rl-fsbi-span-3">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Revenue Overview', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-revenue-overview-chart"></canvas>
 		</div>
@@ -156,7 +193,22 @@ if ( ! defined( 'WPINC' ) ) {
 	</div>
 
 	<div class="rl-fsbi-card rl-fsbi-table-card">
-		<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Monthly Revenue Breakdown', 'rl-freemius-bi' ); ?></div>
+		<div class="rl-fsbi-card-header-flex">
+			<div>
+				<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Monthly Revenue Breakdown', 'rl-freemius-bi' ); ?></div>
+				<div class="rl-fsbi-card-sub"><?php echo esc_html__( '12-month rolling revenue, subscription activity, and payout history.', 'rl-freemius-bi' ); ?></div>
+			</div>
+			<div class="rl-fsbi-export-actions">
+				<button type="button" id="rl-fsbi-export-monthly-csv" class="button rl-fsbi-export-btn" title="<?php echo esc_attr__( 'Export last 12 months to CSV', 'rl-freemius-bi' ); ?>">
+					<span class="dashicons dashicons-download" style="vertical-align: text-bottom; margin-right: 4px; font-size: 16px; width: 16px; height: 16px;"></span>
+					<?php echo esc_html__( 'Export 12M CSV', 'rl-freemius-bi' ); ?>
+				</button>
+				<button type="button" id="rl-fsbi-export-3yr-csv" class="button rl-fsbi-export-btn" title="<?php echo esc_attr__( 'Export last 3 years (36 months) to CSV', 'rl-freemius-bi' ); ?>">
+					<span class="dashicons dashicons-download" style="vertical-align: text-bottom; margin-right: 4px; font-size: 16px; width: 16px; height: 16px;"></span>
+					<?php echo esc_html__( 'Export 3 Years CSV', 'rl-freemius-bi' ); ?>
+				</button>
+			</div>
+		</div>
 		<div class="rl-fsbi-table-wrap">
 			<table id="rl-fsbi-monthly-table" class="display">
 				<thead>
