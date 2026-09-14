@@ -256,6 +256,48 @@
 	color: #91a0ce;
 }
 
+.rl-fsbi-kpi-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.rl-fsbi-info-tooltip {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: #91a0ce;
+	cursor: pointer;
+	opacity: 0.75;
+	transition: opacity 0.15s ease, color 0.15s ease;
+	vertical-align: middle;
+}
+
+.rl-fsbi-info-tooltip:hover {
+	opacity: 1;
+	color: #ffffff;
+}
+
+.rl-fsbi-info-tooltip .dashicons {
+	font-size: 13px;
+	width: 13px;
+	height: 13px;
+	line-height: 13px;
+}
+
+.rl-fsbi-portfolio-health-wrap {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.rl-fsbi-portfolio-health-wrap .rl-fsbi-info-tooltip .dashicons {
+	font-size: 17px;
+	width: 17px;
+	height: 17px;
+	line-height: 17px;
+}
+
 .rl-fsbi-mini-kpi strong {
 	font-size: 24px;
 	line-height: 1.1;

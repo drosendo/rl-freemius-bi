@@ -153,6 +153,11 @@ class RL_FSBI_Admin
 			return;
 		}
 
+		$framework_assets = RL_FSBI_PLUGIN_URL . 'includes/library/rloptionsFramework/assets/';
+		wp_enqueue_style('tippy-css', $framework_assets . 'vendor/tippy/tippy.css', array(), '6.3.7');
+		wp_enqueue_script('popper-js', $framework_assets . 'vendor/popper/popper.min.js', array(), '2.11.8', false);
+		wp_enqueue_script('tippy-js', $framework_assets . 'vendor/tippy/tippy.umd.min.js', array('popper-js'), '6.3.7', false);
+
 		wp_enqueue_script('chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@3/dist/chart.min.js', array(), '3.9.1', false);
 		wp_enqueue_script('datatables-js', 'https://cdn.jsdelivr.net/npm/datatables.net@1/js/jquery.dataTables.min.js', array('jquery'), '1.13.4', false);
 		wp_enqueue_style('datatables-css', 'https://cdn.jsdelivr.net/npm/datatables.net-dt@1/css/jquery.dataTables.min.css', array(), '1.13.4', 'all');
@@ -160,7 +165,7 @@ class RL_FSBI_Admin
 		wp_enqueue_script(
 			$this->plugin_name . '-admin',
 			RL_FSBI_PLUGIN_URL . 'assets/js/admin/rl-fsbi-admin.js',
-			array('jquery', 'chart-js', 'datatables-js'),
+			array('jquery', 'chart-js', 'datatables-js', 'tippy-js'),
 			$this->version,
 			false
 		);

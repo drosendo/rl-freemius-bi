@@ -18,7 +18,22 @@
 		init: function() {
 			this.applyDefaultFilters();
 			this.bindEvents();
+			this.initTooltips();
 			this.refreshLatestData().finally(() => this.loadData());
+		},
+
+		initTooltips: function() {
+			if (typeof window.tippy === 'function') {
+				try {
+					window.tippy('.rl-fsbi-info-tooltip', {
+						theme: 'light-border',
+						placement: 'top',
+						arrow: true,
+						allowHTML: true,
+						interactive: true,
+					});
+				} catch (e) {}
+			}
 		},
 
 		applyDefaultFilters: function() {
