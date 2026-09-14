@@ -51,7 +51,23 @@ class RL_FSBI_Admin
 	private $transferwise_token;
 
 	/**
-	 * Transferwise conversion base currency (EUR, USD, GBP)
+	 * FreeCurrencyAPI Key
+	 *
+	 * @access   private
+	 * @var      string $freecurrencyapi_key
+	 */
+	private $freecurrencyapi_key;
+
+	/**
+	 * Conversion rate provider ('freecurrencyapi', 'wise', 'none')
+	 *
+	 * @access   private
+	 * @var      string $conversion_provider
+	 */
+	private $conversion_provider;
+
+	/**
+	 * Conversion base currency (all Freemius supported currencies)
 	 *
 	 * @access   private
 	 * @var      string $conversion_currency
@@ -70,11 +86,15 @@ class RL_FSBI_Admin
 		$this->version     = $version;
 		$this->settings    = new RL_FSBI_Settings_Manager();
 
-		// Load display settings
-		$this->locale_format = trim($this->settings->get_option('rl_fsbi_locale_format')) ?: 'us-US';
-		$this->transferwise_token = trim($this->settings->get_option('rl_fsbi_transferwise_token'));
-		$conversion_currency = strtoupper(trim($this->settings->get_option('rl_fsbi_conversion_currency')));
-		$this->conversion_currency = in_array($conversion_currency, array('EUR', 'USD', 'GBP'), true) ? $conversion_currency : 'EUR';
+		// Load display & conversion settings
+		$this->locale_format       = trim((string) $this->settings->get_option('rl_fsbi_locale_format')) ?: 'en-US';
+		$this->conversion_provider = trim((string) $this->settings->get_option('rl_fsbi_conversion_provider')) ?: 'freecurrencyapi';
+		$this->freecurrencyapi_key = trim((string) $this->settings->get_option('rl_fsbi_freecurrencyapi_key'));
+		$this->transferwise_token  = trim((string) $this->settings->get_option('rl_fsbi_transferwise_token'));
+
+		$allowed_currencies = array('USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'PLN', 'ILS', 'RSD');
+		$conversion_currency = strtoupper(trim((string) $this->settings->get_option('rl_fsbi_conversion_currency')));
+		$this->conversion_currency = in_array($conversion_currency, $allowed_currencies, true) ? $conversion_currency : 'USD';
 	}
 
 	/**
@@ -86,11 +106,14 @@ class RL_FSBI_Admin
 			return;
 		}
 
+		$css_path = RL_FSBI_PLUGIN_DIR . 'assets/css/admin/rl-fsbi-admin.css';
+		$ver      = file_exists($css_path) ? filemtime($css_path) : $this->version;
+
 		wp_enqueue_style(
 			$this->plugin_name . '-admin',
 			RL_FSBI_PLUGIN_URL . 'assets/css/admin/rl-fsbi-admin.css',
 			array(),
-			$this->version,
+			$ver,
 			'all'
 		);
 	}
@@ -100,6 +123,32 @@ class RL_FSBI_Admin
 	 */
 	public function enqueue_scripts()
 	{
+		$page = isset($_GET['page']) ? sanitize_text_field(wp_unslash($_GET['page'])) : '';
+
+		if ('rl-freemius-bi-settings' === $page) {
+			wp_register_script('rl-freemius-bi-settings-rl-logger', false);
+
+			$settings_js_path = RL_FSBI_PLUGIN_DIR . 'assets/js/admin/rl-fsbi-settings.js';
+			$settings_js_ver  = file_exists($settings_js_path) ? filemtime($settings_js_path) : $this->version;
+
+			wp_enqueue_script(
+				$this->plugin_name . '-settings',
+				RL_FSBI_PLUGIN_URL . 'assets/js/admin/rl-fsbi-settings.js',
+				array('jquery'),
+				$settings_js_ver,
+				true
+			);
+
+			wp_localize_script(
+				$this->plugin_name . '-settings',
+				'rlFsbiSettingsData',
+				array(
+					'descriptions' => $this->settings ? $this->settings->get_field_descriptions() : array(),
+				)
+			);
+			return;
+		}
+
 		if (! $this->is_plugin_page()) {
 			return;
 		}
@@ -120,8 +169,8 @@ class RL_FSBI_Admin
 			'ajaxUrl'         => admin_url('admin-ajax.php'),
 			'nonce'           => wp_create_nonce('rl_fsbi_nonce'),
 			'localeFormat'    => $this->locale_format,
-			'defaultCurrency' => strtoupper((string) $this->settings->get_option('rl_fsbi_default_currency', 'USD')),
-			'tableRows'       => max(5, (int) $this->settings->get_option('rl_fsbi_table_rows', 25)),
+			'defaultCurrency' => strtoupper((string) $this->settings->get_option('rl_fsbi_conversion_currency', $this->settings->get_option('rl_fsbi_default_currency', 'USD'))),
+			'tableRows'       => 12,
 			'forcedPluginId'  => $this->get_forced_plugin_id_from_request(),
 			'pluginsCatalog'  => $this->get_plugins_catalog(),
 		));
@@ -430,7 +479,7 @@ class RL_FSBI_Admin
 	private function get_wordpress_dashboard_portfolio_data()
 	{
 		$plugin_ids = $this->get_selected_plugin_ids();
-		$currency = strtoupper((string) $this->settings->get_option('rl_fsbi_default_currency', 'EUR'));
+		$currency = strtoupper((string) $this->settings->get_option('rl_fsbi_conversion_currency', $this->settings->get_option('rl_fsbi_default_currency', 'EUR')));
 		$currency = in_array($currency, array('USD', 'EUR', 'GBP'), true) ? $currency : 'EUR';
 		$repo = new RL_FSBI_Repository();
 		$today = current_time('Y-m-d');
@@ -1519,15 +1568,8 @@ class RL_FSBI_Admin
 			return;
 		}
 
-		$sync_ok = $this->sync_freemius_data();
+		// Clear the flag so it never runs synchronously on web request
 		$this->settings->update_option('rl_fsbi_run_initial_sweep', false);
-
-		$status = $sync_ok
-			? esc_html__('Initial sweep completed successfully.', 'rl-freemius-bi')
-			: esc_html__('Initial sweep failed. Check API credentials and try Sync Now.', 'rl-freemius-bi');
-
-		$this->settings->update_option('rl_fsbi_last_sync_status', $status);
-		$this->settings->update_option('rl_fsbi_last_sync_at_utc', gmdate('Y-m-d H:i:s'));
 	}
 
 	/**
@@ -1890,7 +1932,7 @@ class RL_FSBI_Admin
 		if ($commission_rate <= 0) {
 			$commission_rate = $this->get_legacy_commission_rate($annual_payments);
 		}
-		$default_currency = strtoupper((string) $this->settings->get_option('rl_fsbi_default_currency', 'USD'));
+		$default_currency = strtoupper((string) $this->settings->get_option('rl_fsbi_conversion_currency', $this->settings->get_option('rl_fsbi_default_currency', 'USD')));
 		if (! in_array($default_currency, array('USD', 'EUR', 'GBP'), true)) {
 			$default_currency = strtoupper((string) $this->conversion_currency);
 		}
@@ -2032,7 +2074,7 @@ class RL_FSBI_Admin
 		if ($commission_rate <= 0) {
 			$commission_rate = $this->get_legacy_commission_rate($annual_payments, $payments);
 		}
-		$default_currency = strtoupper((string) $this->settings->get_option('rl_fsbi_default_currency', 'USD'));
+		$default_currency = strtoupper((string) $this->settings->get_option('rl_fsbi_conversion_currency', $this->settings->get_option('rl_fsbi_default_currency', 'USD')));
 		if (! in_array($default_currency, array('USD', 'EUR', 'GBP'), true)) {
 			$default_currency = strtoupper((string) $this->conversion_currency);
 		}
@@ -3047,11 +3089,12 @@ class RL_FSBI_Admin
 		for ($i = $months_count - 1; $i >= 0; $i--) {
 			$key = gmdate('Y-m', strtotime('-' . $i . ' months'));
 			$months[$key] = array(
-				'month'            => $key,
-				'currencies'       => array(),
-				'payout_breakdown' => array(),
-				'payout_total'     => 0.0,
-				'payout_eligible'  => false,
+				'month'                   => $key,
+				'currencies'              => array(),
+				'payout_breakdown'        => array(),
+				'payout_breakdown_native' => array(),
+				'payout_total'            => 0.0,
+				'payout_eligible'         => false,
 			);
 		}
 
@@ -3176,6 +3219,7 @@ class RL_FSBI_Admin
 		ksort($months);
 		foreach ($months as $month_key => $month_stats) {
 			$months[$month_key]['payout_breakdown'] = array();
+			$months[$month_key]['payout_breakdown_native'] = array();
 			$months[$month_key]['payout_total'] = 0.0;
 			$months[$month_key]['payout_eligible'] = false;
 
@@ -3193,6 +3237,7 @@ class RL_FSBI_Admin
 					$payout_amount_native = round($eligible_pool_native, 2);
 					$payout_amount = $this->convert_currency_amount($payout_amount_native, $currency_code, $report_currency, $payout_date);
 					$months[$month_key]['payout_breakdown'][$currency_code] = $payout_amount;
+					$months[$month_key]['payout_breakdown_native'][$currency_code] = $payout_amount_native;
 					$months[$month_key]['payout_total'] += (float) $payout_amount;
 					$months[$month_key]['payout_eligible'] = true;
 					$months[$month_key]['currencies'][$currency_code]['payout_amount'] = $payout_amount;
@@ -3241,10 +3286,11 @@ class RL_FSBI_Admin
 					'currency'           => $report_currency,
 					'show_period_badges' => true,
 					'show_payout'        => true,
-					'is_current_payout'  => $is_current_payout,
-					'is_next_payout'     => $is_next_payout,
-					'payout_breakdown'   => $stats['payout_breakdown'],
-					'payout_total'       => (float) $stats['payout_total'],
+					'is_current_payout'       => $is_current_payout,
+					'is_next_payout'          => $is_next_payout,
+					'payout_breakdown'        => $stats['payout_breakdown'],
+					'payout_breakdown_native' => $stats['payout_breakdown_native'] ?? array(),
+					'payout_total'            => (float) $stats['payout_total'],
 				);
 				continue;
 			}
@@ -3284,10 +3330,11 @@ class RL_FSBI_Admin
 					'currency'           => $currency_code,
 					'show_period_badges' => $first_row,
 					'show_payout'        => $first_row,
-					'is_current_payout'  => $is_current_payout,
-					'is_next_payout'     => $is_next_payout,
-					'payout_breakdown'   => $first_row ? $stats['payout_breakdown'] : array(),
-					'payout_total'       => $first_row ? (float) $stats['payout_total'] : 0.0,
+					'is_current_payout'       => $is_current_payout,
+					'is_next_payout'          => $is_next_payout,
+					'payout_breakdown'        => $first_row ? $stats['payout_breakdown'] : array(),
+					'payout_breakdown_native' => $first_row ? ($stats['payout_breakdown_native'] ?? array()) : array(),
+					'payout_total'            => $first_row ? (float) $stats['payout_total'] : 0.0,
 				);
 
 				$first_row = false;
@@ -3421,7 +3468,13 @@ class RL_FSBI_Admin
 	}
 
 	/**
-	 * Convert an amount from source to target currency using Wise historical rates.
+	 * Convert an amount from source to target currency using configured provider (FreeCurrencyAPI, Wise, or None).
+	 *
+	 * @param float       $amount          Amount to convert.
+	 * @param string      $source_currency Original currency code.
+	 * @param string      $target_currency Target currency code.
+	 * @param string|null $date_time       Optional transaction datetime.
+	 * @return float Converted amount rounded to 2 decimals.
 	 */
 	private function convert_currency_amount($amount, $source_currency, $target_currency, $date_time = null)
 	{
@@ -3433,16 +3486,98 @@ class RL_FSBI_Admin
 			return $amount;
 		}
 
-		if (empty($this->transferwise_token)) {
+		if ('none' === $this->conversion_provider) {
 			return $amount;
 		}
 
-		$rate = $this->get_wise_rate($source_currency, $target_currency, $date_time);
+		$rate = 0.0;
+
+		if ('freecurrencyapi' === $this->conversion_provider) {
+			$rate = $this->get_freecurrencyapi_rate($source_currency, $target_currency, $date_time);
+		} elseif ('wise' === $this->conversion_provider) {
+			$rate = $this->get_wise_rate($source_currency, $target_currency, $date_time);
+		} else {
+			if (! empty($this->freecurrencyapi_key)) {
+				$rate = $this->get_freecurrencyapi_rate($source_currency, $target_currency, $date_time);
+			} elseif (! empty($this->transferwise_token)) {
+				$rate = $this->get_wise_rate($source_currency, $target_currency, $date_time);
+			}
+		}
+
 		if ($rate <= 0) {
 			return $amount;
 		}
 
 		return round($amount * $rate, 2);
+	}
+
+	/**
+	 * Fetch and cache FreeCurrencyAPI exchange rate.
+	 *
+	 * @param string      $source_currency Source currency code (e.g. USD, EUR, GBP).
+	 * @param string      $target_currency Target currency code.
+	 * @param string|null $date_time       Optional date context.
+	 * @return float
+	 */
+	private function get_freecurrencyapi_rate($source_currency, $target_currency, $date_time = null)
+	{
+		$source_currency = strtoupper((string) $source_currency);
+		$target_currency = strtoupper((string) $target_currency);
+
+		if (empty($this->freecurrencyapi_key)) {
+			return 0.0;
+		}
+
+		$cache_key = 'rl_fsbi_fx_fca_' . md5($source_currency . '|' . $target_currency);
+		$cached_rate = get_transient($cache_key);
+		if (false !== $cached_rate) {
+			return (float) $cached_rate;
+		}
+
+		$request_url = add_query_arg(
+			array(
+				'apikey'        => $this->freecurrencyapi_key,
+				'base_currency' => $source_currency,
+				'currencies'    => $target_currency,
+			),
+			'https://api.freecurrencyapi.com/v1/latest'
+		);
+
+		$response = wp_remote_get(
+			$request_url,
+			array(
+				'timeout' => 15,
+				'headers' => array(
+					'Accept' => 'application/json',
+				),
+			)
+		);
+
+		if (is_wp_error($response)) {
+			set_transient($cache_key, 0.0, HOUR_IN_SECONDS);
+			return 0.0;
+		}
+
+		$status = wp_remote_retrieve_response_code($response);
+		$body   = wp_remote_retrieve_body($response);
+		if (200 !== (int) $status || empty($body)) {
+			set_transient($cache_key, 0.0, HOUR_IN_SECONDS);
+			return 0.0;
+		}
+
+		$decoded = json_decode($body, true);
+		$rate    = 0.0;
+		if (is_array($decoded) && isset($decoded['data'][$target_currency])) {
+			$rate = (float) $decoded['data'][$target_currency];
+		}
+
+		if ($rate > 0) {
+			set_transient($cache_key, $rate, DAY_IN_SECONDS);
+		} else {
+			set_transient($cache_key, 0.0, HOUR_IN_SECONDS);
+		}
+
+		return $rate;
 	}
 
 	/**

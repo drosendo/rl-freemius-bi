@@ -711,9 +711,28 @@
 
 					let payoutCell = '';
 					if (row.show_payout) {
+						const nativeBreakdown = row.payout_breakdown_native || {};
 						const payoutBreakdown = Object.entries(row.payout_breakdown || {})
 							.filter(([, value]) => Number(value || 0) > 0)
-							.map(([code, value]) => `<div class="rl-fsbi-payout-line"><span>${code}</span><strong>${this.formatCurrency(Number(value || 0), reportCurrency)}</strong></div>`)
+							.map(([code, value]) => {
+								const isConverted = code !== reportCurrency;
+								const nativeVal = nativeBreakdown[code];
+								const formattedVal = this.formatCurrency(Number(value || 0), reportCurrency);
+								const nativeFormatted = (nativeVal !== undefined && nativeVal !== null)
+									? this.formatCurrency(Number(nativeVal || 0), code)
+									: '';
+
+								let iconHtml = '';
+								if (isConverted) {
+									const tooltip = nativeFormatted
+										? `Converted from ${nativeFormatted} into ${reportCurrency}`
+										: `Conversion Value (${code} \u2192 ${reportCurrency})`;
+
+									iconHtml = ` <span class="rl-fsbi-fx-indicator" title="${tooltip}" data-tippy-content="${tooltip}"><svg class="rl-fsbi-fx-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg></span>`;
+								}
+
+								return `<div class="rl-fsbi-payout-line ${isConverted ? 'rl-fsbi-payout-converted' : ''}"><span class="rl-fsbi-payout-code">${code}${iconHtml}</span><strong>${formattedVal}</strong></div>`;
+							})
 							.join('');
 
 						if (payoutBreakdown) {
@@ -758,6 +777,16 @@
 					lengthChange: false,
 					info: false,
 				});
+			}
+
+			if (typeof window.tippy === 'function') {
+				try {
+					window.tippy('.rl-fsbi-fx-indicator', {
+						theme: 'light-border',
+						placement: 'top',
+						arrow: true,
+					});
+				} catch (e) {}
 			}
 		},
 

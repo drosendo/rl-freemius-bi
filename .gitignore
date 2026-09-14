@@ -31,7 +31,22 @@ temp/
 .cache/
 *.cache
 
+# Security & Certificates
+*.pem
+*.key
+*.cert
+*.crt
+*.sql
+*.dump
+*.bak
+
 # Environment
 .env
 .env.local
 .env.*.local
+
+# Documentation
+*.md
+**/*.md
+!README.md
+!readme.md

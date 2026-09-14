@@ -39,11 +39,11 @@ The plugin integrates directly with the Freemius REST API using HMAC-SHA256 auth
 1. Upload the `rl-freemius-bi` folder to `/wp-content/plugins/`
 2. Activate the plugin via the Plugins menu in WordPress admin
 3. Navigate to **Freemius BI → Settings**
-4. Enter your Freemius API credentials:
-   - **Developer ID:** Your Freemius developer account ID
-   - **Public API Key:** Public key (starts with `pk_`)
-   - **Secret API Key:** Secret key (starts with `sk_`)
-5. Save settings and click **Sync Now** to fetch your first batch of data
+4. Complete the 3-step configuration:
+   - **Step 1 (API Configuration):** Enter your Freemius Developer ID, Public API Key, and Secret API Key. Save changes to validate the connection and unlock the remaining tabs.
+   - **Step 2 (Plugin Scope):** Select which discovered plugins to track using the intuitive Checkbox List (with Select All / Deselect All).
+   - **Step 3 (Multi-Currency & Conversion):** Choose your dashboard display currency (converts all 9 Freemius currencies: USD, EUR, GBP, CAD, AUD, CHF, PLN, ILS, RSD), select your locale format, and pick your conversion tool (**FreeCurrencyAPI** or **Wise**).
+5. Click **Sync Now** on the Dashboard toolbar to fetch your latest data or let automatic background sync run.
 
 ### Obtaining Freemius API Credentials
 
