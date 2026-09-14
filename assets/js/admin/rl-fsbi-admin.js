@@ -1,20 +1,110 @@
 /**
  * RL Freemius BI Admin Dashboard JavaScript
+ *
+ * Handles client-side initialization, AJAX data loading, interactive filtering,
+ * Chart.js visualization rendering, DataTables integration, CSV exports,
+ * and batched Freemius API synchronization.
+ *
+ * @package    RL_Freemius_BI
+ * @subpackage RL_Freemius_BI/assets/js/admin
  */
 
 (function() {
 	'use strict';
 
+	/**
+	 * @typedef {Object} RlFsbiAdminConfig
+	 * @property {string} ajaxUrl - WordPress admin AJAX endpoint URL.
+	 * @property {string} nonce - Security nonce for AJAX verification.
+	 * @property {string} localeFormat - BCP 47 locale format tag (e.g. 'en-US').
+	 * @property {string} defaultCurrency - Default fallback currency code (e.g. 'USD').
+	 * @property {number|string} tableRows - Default rows per page for DataTables.
+	 * @property {number|string} forcedPluginId - Forced plugin ID scope if viewing a single plugin view.
+	 * @property {Object.<string, string>} pluginsCatalog - Map of plugin IDs to display names.
+	 */
+
+	/**
+	 * @typedef {Object} DashboardFilters
+	 * @property {string} plugin_id - Selected plugin ID or 'all'.
+	 * @property {string} currency - Selected currency filter code or 'all'.
+	 * @property {string} start_date - Start date in YYYY-MM-DD format.
+	 * @property {string} end_date - End date in YYYY-MM-DD format.
+	 */
+
+	/**
+	 * @typedef {Object} LineChartDataset
+	 * @property {string} label - Dataset series label.
+	 * @property {Array.<number>} data - Array of numeric data values.
+	 * @property {string} [borderColor] - Line stroke color.
+	 * @property {string} [backgroundColor] - Line fill or background color.
+	 * @property {number} [borderWidth] - Line stroke width.
+	 * @property {boolean} [fill] - Whether to fill the area under the line.
+	 * @property {number} [tension] - Bezier curve tension.
+	 * @property {number} [pointRadius] - Radius of data point dots.
+	 */
+
+	/**
+	 * Main Freemius BI Dashboard Controller object.
+	 *
+	 * @namespace FSBI
+	 */
 	const FSBI = {
+		/**
+		 * Cache of active Chart.js instances keyed by chart identifier.
+		 * @type {Object.<string, Object>}
+		 */
 		charts: {},
+
+		/**
+		 * Active DataTables instance for the monthly breakdown table.
+		 * @type {Object|null}
+		 */
 		dataTable: null,
+
+		/**
+		 * Currently active report currency code returned from backend payload.
+		 * @type {string|null}
+		 */
 		currentReportCurrency: null,
+
+		/**
+		 * AbortController instance for in-flight AJAX synchronization requests.
+		 * @type {AbortController|null}
+		 */
 		syncController: null,
+
+		/**
+		 * Active server-side synchronization task identifier.
+		 * @type {string|null}
+		 */
 		activeSyncId: null,
+
+		/**
+		 * Flag indicating whether synchronization was manually canceled by user.
+		 * @type {boolean}
+		 */
 		syncCanceled: false,
+
+		/**
+		 * Flag indicating whether initial background data refresh check has executed.
+		 * @type {boolean}
+		 */
 		latestRefreshDone: false,
+
+		/**
+		 * Cached monthly breakdown table data payload.
+		 * @type {Object|null}
+		 */
 		monthlyTableData: null,
 
+		/**
+		 * Initialize dashboard controller: apply default filters, bind events,
+		 * initialize tooltips, check latest data, and fetch initial dashboard payload.
+		 *
+		 * @function init
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
 		init: function() {
 			this.applyDefaultFilters();
 			this.bindEvents();
@@ -22,6 +112,13 @@
 			this.refreshLatestData().finally(() => this.loadData());
 		},
 
+		/**
+		 * Initialize interactive tooltips on all elements with `.rl-fsbi-info-tooltip`.
+		 *
+		 * @function initTooltips
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
 		initTooltips: function() {
 			if (typeof window.tippy === 'function') {
 				try {
@@ -32,10 +129,19 @@
 						allowHTML: true,
 						interactive: true,
 					});
-				} catch (e) {}
+				} catch (e) {
+					// Fallback to native browser title attribute.
+				}
 			}
 		},
 
+		/**
+		 * Apply initial filter defaults for currency and rolling month dates.
+		 *
+		 * @function applyDefaultFilters
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
 		applyDefaultFilters: function() {
 			const currencyFilter = document.getElementById('rl-fsbi-currency-filter');
 			if (currencyFilter) {
@@ -54,6 +160,13 @@
 			}
 		},
 
+		/**
+		 * Attach DOM event listeners to interactive toolbar controls and buttons.
+		 *
+		 * @function bindEvents
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
 		bindEvents: function() {
 			const self = this;
 
@@ -102,11 +215,28 @@
 			});
 		},
 
+		/**
+		 * Format a Date object into an ISO YYYY-MM-DD date string.
+		 *
+		 * @function toISODate
+		 * @memberof FSBI
+		 * @param {Date} dateObj - JavaScript Date object.
+		 * @returns {string} Formatted date string (YYYY-MM-DD).
+		 */
 		toISODate: function(dateObj) {
 			const pad = (v) => String(v).padStart(2, '0');
 			return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}`;
 		},
 
+		/**
+		 * Safely update the textContent of a DOM element by element ID.
+		 *
+		 * @function setText
+		 * @memberof FSBI
+		 * @param {string} id - Target DOM element identifier.
+		 * @param {string|number} value - Text content to set.
+		 * @returns {void}
+		 */
 		setText: function(id, value) {
 			const node = document.getElementById(id);
 			if (node) {
@@ -114,6 +244,15 @@
 			}
 		},
 
+		/**
+		 * Safely update the innerHTML of a DOM element by element ID.
+		 *
+		 * @function setHtml
+		 * @memberof FSBI
+		 * @param {string} id - Target DOM element identifier.
+		 * @param {string} value - HTML markup string to set.
+		 * @returns {void}
+		 */
 		setHtml: function(id, value) {
 			const node = document.getElementById(id);
 			if (node) {
@@ -121,6 +260,15 @@
 			}
 		},
 
+		/**
+		 * Calculate optimal chart aspect ratio based on chart identifier and type.
+		 *
+		 * @function getChartAspectRatio
+		 * @memberof FSBI
+		 * @param {string} key - Chart identifier key.
+		 * @param {string} type - Chart type (e.g. 'line', 'bar', 'doughnut').
+		 * @returns {number} Aspect ratio (width / height).
+		 */
 		getChartAspectRatio: function(key, type) {
 			if (type === 'doughnut') {
 				return key === 'country' ? 1.8 : 1;
@@ -137,6 +285,13 @@
 			return map[key] || 1.8;
 		},
 
+		/**
+		 * Retrieve active filter parameters from toolbar controls.
+		 *
+		 * @function getFilters
+		 * @memberof FSBI
+		 * @returns {DashboardFilters} Object containing plugin_id, currency, start_date, end_date.
+		 */
 		getFilters: function() {
 			const forcedPlugin = Number.parseInt(rlFsbiAdmin.forcedPluginId || 0, 10);
 			const pluginField = document.getElementById('rl-fsbi-plugin-filter');
@@ -157,6 +312,13 @@
 			};
 		},
 
+		/**
+		 * Resolve the current display currency code.
+		 *
+		 * @function getDisplayCurrency
+		 * @memberof FSBI
+		 * @returns {string} 3-letter uppercase ISO currency code.
+		 */
 		getDisplayCurrency: function() {
 			if (this.currentReportCurrency) {
 				return this.currentReportCurrency;
@@ -165,6 +327,15 @@
 			return selectedCurrency === 'all' ? (rlFsbiAdmin.defaultCurrency || 'USD') : selectedCurrency;
 		},
 
+		/**
+		 * Format a numeric amount into a localized currency string using Intl.NumberFormat.
+		 *
+		 * @function formatCurrency
+		 * @memberof FSBI
+		 * @param {number|string} value - Monetary amount to format.
+		 * @param {string} [currency] - Optional target currency code. Defaults to active display currency.
+		 * @returns {string} Formatted localized currency string.
+		 */
 		formatCurrency: function(value, currency) {
 			const safe = Number.isFinite(Number(value)) ? Number(value) : 0;
 			return new Intl.NumberFormat(rlFsbiAdmin.localeFormat || 'en-US', {
@@ -174,11 +345,27 @@
 			}).format(safe);
 		},
 
+		/**
+		 * Format a numeric value into a localized percentage string.
+		 *
+		 * @function formatPercent
+		 * @memberof FSBI
+		 * @param {number|string} value - Percentage value (e.g. 14.5).
+		 * @param {number} [decimals=1] - Number of decimal digits.
+		 * @returns {string} Formatted percentage string (e.g. '14.5%').
+		 */
 		formatPercent: function(value, decimals = 1) {
 			const safe = Number.isFinite(Number(value)) ? Number(value) : 0;
 			return `${safe.toFixed(decimals)}%`;
 		},
 
+		/**
+		 * Trigger background sync check to fetch recent transactions if cache is stale.
+		 *
+		 * @function refreshLatestData
+		 * @memberof FSBI
+		 * @returns {Promise.<void>} Promise resolving when the check completes.
+		 */
 		refreshLatestData: function() {
 			if (this.latestRefreshDone) {
 				return Promise.resolve();
@@ -199,6 +386,13 @@
 			});
 		},
 
+		/**
+		 * Fetch complete aggregated analytics dataset from backend via AJAX.
+		 *
+		 * @function loadData
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
 		loadData: function() {
 			const self = this;
 			const filters = this.getFilters();
@@ -229,6 +423,14 @@
 			});
 		},
 
+		/**
+		 * Orchestrate rendering of all dashboard UI sections from data payload.
+		 *
+		 * @function renderDashboard
+		 * @memberof FSBI
+		 * @param {Object} data - Full backend analytics data payload.
+		 * @returns {void}
+		 */
 		renderDashboard: function(data) {
 			this.currentReportCurrency = data.report_currency || data?.summary?.report_currency || null;
 			this.updatePageHeader(data);
@@ -240,6 +442,14 @@
 			this.updateMonthlyTable(data);
 		},
 
+		/**
+		 * Update active plugin title and version badge in the dashboard header.
+		 *
+		 * @function updatePageHeader
+		 * @memberof FSBI
+		 * @param {Object} data - Analytics payload containing plugin_title and plugin_version.
+		 * @returns {void}
+		 */
 		updatePageHeader: function(data) {
 			if (data.plugin_title) {
 				this.setText('rl-fsbi-active-plugin-title', data.plugin_title);
@@ -259,6 +469,14 @@
 			}
 		},
 
+		/**
+		 * Update top KPI summary cards (Net Revenue, Expected Payout, Refunds Breakdown).
+		 *
+		 * @function updateTopCards
+		 * @memberof FSBI
+		 * @param {Object} data - Analytics payload containing summary object.
+		 * @returns {void}
+		 */
 		updateTopCards: function(data) {
 			const currency = this.getDisplayCurrency();
 			const summary = data.summary || {};
@@ -281,6 +499,14 @@
 			}
 		},
 
+		/**
+		 * Update mini-KPI cards and Portfolio Performance metrics.
+		 *
+		 * @function updateMiniKpis
+		 * @memberof FSBI
+		 * @param {Object} data - Analytics payload containing kpis and summary objects.
+		 * @returns {void}
+		 */
 		updateMiniKpis: function(data) {
 			const currency = this.getDisplayCurrency();
 			const kpis = data.kpis || {};
@@ -302,6 +528,14 @@
 			this.setText('rl-fsbi-portfolio-health', `${Math.round(Number(kpis.health_score || 0))}/100`);
 		},
 
+		/**
+		 * Update mini-stat grid counts (Purchases, Trials/Conversions, Refunds, Renewals).
+		 *
+		 * @function updateMiniStats
+		 * @memberof FSBI
+		 * @param {Object} data - Analytics payload containing stats object.
+		 * @returns {void}
+		 */
 		updateMiniStats: function(data) {
 			const stats = data.stats || {};
 			this.setText('rl-fsbi-stat-purchases', Number(stats.purchases || 0).toLocaleString());
@@ -310,6 +544,14 @@
 			this.setText('rl-fsbi-stat-renewals', Number(stats.renewals || 0).toLocaleString());
 		},
 
+		/**
+		 * Update trial conversion panel figures and percentage.
+		 *
+		 * @function updateTrialPanel
+		 * @memberof FSBI
+		 * @param {Object} data - Analytics payload containing trial_conversion object.
+		 * @returns {void}
+		 */
 		updateTrialPanel: function(data) {
 			const trial = data.trial_conversion || {};
 			this.setText('rl-fsbi-trials-total', Number(trial.total_trials || 0).toLocaleString());
@@ -317,11 +559,17 @@
 			this.setText('rl-fsbi-trials-rate', this.formatPercent(Number(trial.rate || 0), 1));
 		},
 
+		/**
+		 * Render or update all Chart.js visualizations on the dashboard.
+		 *
+		 * @function updateCharts
+		 * @memberof FSBI
+		 * @param {Object} data - Analytics payload containing charts object.
+		 * @returns {void}
+		 */
 		updateCharts: function(data) {
 			const charts = data.charts || {};
 			const currency = this.getDisplayCurrency();
-
-			console.log(charts.sales_activity)
 
 			this.drawLineChart('salesActivity', 'rl-fsbi-sales-activity-chart', charts.sales_activity?.labels || [], [
 				{ label: 'Purchases', data: charts.sales_activity?.purchases || [], borderColor: '#5f6bff', backgroundColor: 'rgba(95,107,255,0.15)' },
@@ -339,6 +587,7 @@
 				{ label: 'Refunds', data: charts.revenue_overview?.refunds || [], backgroundColor: 'rgba(255,90,114,0.75)' },
 				{ label: 'Fees', data: charts.revenue_overview?.fees || [], backgroundColor: 'rgba(244,185,66,0.75)' },
 			], currency);
+
 			this.drawLineChart('portfolio', 'rl-fsbi-portfolio-chart', charts.revenue_overview?.labels || [], [
 				{ label: 'Net Revenue', data: charts.revenue_overview?.net || [], borderColor: '#7d8cff', backgroundColor: 'rgba(125,140,255,0.18)' },
 			], true);
@@ -356,6 +605,18 @@
 			], true);
 		},
 
+		/**
+		 * Render a responsive line chart using Chart.js.
+		 *
+		 * @function drawLineChart
+		 * @memberof FSBI
+		 * @param {string} key - Unique chart instance identifier.
+		 * @param {string} canvasId - Target canvas DOM element ID.
+		 * @param {Array.<string>} labels - Array of category or date labels.
+		 * @param {Array.<LineChartDataset>} datasets - Array of dataset configurations.
+		 * @param {boolean} fill - Whether to fill area under curves.
+		 * @returns {void}
+		 */
 		drawLineChart: function(key, canvasId, labels, datasets, fill) {
 			const canvas = document.getElementById(canvasId);
 			if (!canvas || !window.Chart) {
@@ -410,6 +671,18 @@
 			});
 		},
 
+		/**
+		 * Render a responsive bar chart using Chart.js.
+		 *
+		 * @function drawBarChart
+		 * @memberof FSBI
+		 * @param {string} key - Unique chart instance identifier.
+		 * @param {string} canvasId - Target canvas DOM element ID.
+		 * @param {Array.<string>} labels - Array of category labels.
+		 * @param {Array.<Object>} datasets - Array of dataset configurations.
+		 * @param {string} currency - Active currency code for tooltip formatting.
+		 * @returns {void}
+		 */
 		drawBarChart: function(key, canvasId, labels, datasets, currency) {
 			const canvas = document.getElementById(canvasId);
 			if (!canvas || !window.Chart) {
@@ -442,6 +715,18 @@
 			});
 		},
 
+		/**
+		 * Render a dual-axis combination chart (bars + trend line) using Chart.js.
+		 *
+		 * @function drawComboChart
+		 * @memberof FSBI
+		 * @param {string} key - Unique chart instance identifier.
+		 * @param {string} canvasId - Target canvas DOM element ID.
+		 * @param {Array.<string>} labels - Array of date/period labels.
+		 * @param {Array.<number>} bars - Array of bar values (e.g. canceled counts).
+		 * @param {Array.<number>} line - Array of line values (e.g. churn percentage).
+		 * @returns {void}
+		 */
 		drawComboChart: function(key, canvasId, labels, bars, line) {
 			const canvas = document.getElementById(canvasId);
 			if (!canvas || !window.Chart) {
@@ -488,6 +773,15 @@
 			});
 		},
 
+		/**
+		 * Render Expected Renewals stacked bar and subscription count line chart.
+		 *
+		 * @function drawExpectedRenewalsChart
+		 * @memberof FSBI
+		 * @param {Object} expectedRenewals - Expected renewals data payload from backend.
+		 * @param {string} currency - Target display currency code.
+		 * @returns {void}
+		 */
 		drawExpectedRenewalsChart: function(expectedRenewals, currency) {
 			const canvas = document.getElementById('rl-fsbi-expected-renewals-chart');
 			if (!canvas || !window.Chart || !expectedRenewals) {
@@ -626,6 +920,19 @@
 			});
 		},
 
+		/**
+		 * Render a responsive doughnut chart (e.g. currency, country, plan distribution).
+		 *
+		 * @function drawDoughnutChart
+		 * @memberof FSBI
+		 * @param {string} key - Unique chart instance identifier.
+		 * @param {string} canvasId - Target canvas DOM element ID.
+		 * @param {Array.<string>} labels - Array of segment labels.
+		 * @param {Array.<number>} values - Array of segment values.
+		 * @param {string} [currency] - Optional currency code for value formatting.
+		 * @param {boolean} [asMoney=true] - Whether to format tooltip values as currency.
+		 * @returns {void}
+		 */
 		drawDoughnutChart: function(key, canvasId, labels, values, currency, asMoney = true) {
 			const canvas = document.getElementById(canvasId);
 			if (!canvas || !window.Chart) {
@@ -679,6 +986,14 @@
 			});
 		},
 
+		/**
+		 * Populate the 12-month financial breakdown table and re-initialize DataTables.
+		 *
+		 * @function updateMonthlyTable
+		 * @memberof FSBI
+		 * @param {Object} data - Analytics payload containing table object.
+		 * @returns {void}
+		 */
 		updateMonthlyTable: function(data) {
 			const table = document.getElementById('rl-fsbi-monthly-table');
 			if (!table) {
@@ -805,6 +1120,13 @@
 			}
 		},
 
+		/**
+		 * Export the current 12-month rolling breakdown table data to a downloadable CSV file.
+		 *
+		 * @function exportMonthlyCsv
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
 		exportMonthlyCsv: function() {
 			const tableData = this.monthlyTableData || {};
 			const rows = tableData.rows || [];
@@ -903,6 +1225,13 @@
 			URL.revokeObjectURL(url);
 		},
 
+		/**
+		 * Fetch and trigger download of the 3-Year historical financial breakdown CSV.
+		 *
+		 * @function export3YearCsv
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
 		export3YearCsv: function() {
 			const btn = document.getElementById('rl-fsbi-export-3yr-csv');
 			const originalHtml = btn ? btn.innerHTML : '';
@@ -971,6 +1300,13 @@
 				});
 		},
 
+		/**
+		 * Initiate full multi-batch data synchronization from the Freemius REST API.
+		 *
+		 * @function syncData
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
 		syncData: function() {
 			const btn = document.getElementById('rl-fsbi-sync-btn');
 			const cancelBtn = document.getElementById('rl-fsbi-sync-cancel-btn');
@@ -1040,6 +1376,16 @@
 			});
 		},
 
+		/**
+		 * Execute one sync batch step and schedule the next step if incomplete.
+		 *
+		 * @function syncDataBatch
+		 * @memberof FSBI
+		 * @param {Object} state - Serialized sync state tracking progress.
+		 * @param {HTMLElement} btn - The sync trigger button DOM element.
+		 * @param {string} originalText - Original label of the trigger button.
+		 * @returns {void}
+		 */
 		syncDataBatch: function(state, btn, originalText) {
 			if (!state || !btn) {
 				return;
@@ -1096,6 +1442,13 @@
 			});
 		},
 
+		/**
+		 * Cancel an ongoing background synchronization process.
+		 *
+		 * @function cancelSync
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
 		cancelSync: function() {
 			const btn = document.getElementById('rl-fsbi-sync-btn');
 			const cancelBtn = document.getElementById('rl-fsbi-sync-cancel-btn');
