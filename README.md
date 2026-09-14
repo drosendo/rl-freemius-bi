@@ -49,10 +49,74 @@ The plugin integrates directly with the Freemius REST API using HMAC-SHA256 auth
 
 1. Visit [developer.freemius.com](https://developer.freemius.com)
 2. Log in to your developer account
-3. Navigate to **Account** → **REST API** (or similar section depending on Freemius UI)
+3. Navigate to **Account** → **REST API**
 4. Create or retrieve your public and secret API keys
 5. Copy your Developer ID
-6. Paste the credentials into the RL FSBI settings page
+6. Paste the credentials into the RL FSBI settings page (**Step 1: API Configuration**)
+
+---
+
+### Setting Up Multi-Currency Exchange Rate Providers
+
+RL Freemius BI supports automated multi-currency conversion to consolidate your payments and payouts into your chosen dashboard currency (USD, EUR, GBP, CAD, AUD, CHF, PLN, ILS, RSD). You can configure your preferred provider in **Freemius BI → Settings → Step 3 (Multi-Currency & Conversion)**:
+
+#### Option A: Wise (TransferWise) Integration (Recommended)
+
+Wise provides real-time mid-market exchange rates and historical daily rates aligned with Freemius's monthly payout schedule (the 10th of every month at 14:00 UTC).
+
+1. Log in to your **Wise Account** at [wise.com](https://wise.com).
+2. Go to **Settings** (or **Manage**) → **API tokens**.
+3. Click **Add new token** (or **Create token**).
+4. Enter a name (e.g. `Freemius BI Dashboard`).
+5. Set permissions to **Read-only** (only exchange rates access is required; no transfer or account permissions are needed).
+6. Copy the generated API token.
+7. In your WordPress admin:
+   - Navigate to **Freemius BI → Settings → Step 3 (Multi-Currency & Conversion)**.
+   - Set **Conversion Provider** to **Wise (TransferWise)**.
+   - Paste your token into the **Wise Read-Only API Token** field.
+   - Click **Save Changes**.
+
+> **Note on Performance:** Exchange rates from Wise are cached in WordPress transients (`rl_fsbi_wise_*`) for 1 hour to prevent redundant API calls.
+
+#### Option B: FreeCurrencyAPI Integration
+
+FreeCurrencyAPI provides real-time foreign exchange rates for global currency pairs with a free tier of up to 5,000 requests per month.
+
+1. Go to [freecurrencyapi.com](https://freecurrencyapi.com) and sign up for a free account.
+2. In your FreeCurrencyAPI dashboard, copy your **API Key**.
+3. In your WordPress admin:
+   - Navigate to **Freemius BI → Settings → Step 3 (Multi-Currency & Conversion)**.
+   - Set **Conversion Provider** to **FreeCurrencyAPI**.
+   - Paste your key into the **FreeCurrencyAPI Key** field.
+   - Click **Save Changes**.
+
+> **Note on Performance:** Rates from FreeCurrencyAPI are cached in WordPress transients (`rl_fsbi_fx_fca_*`) for 1 hour.
+
+#### Option C: None (Nominal 1:1)
+If you prefer not to convert non-base currency payments, select **None**. Non-base currency amounts will be summed at nominal 1:1 values.
+
+---
+
+### How the Health Score (0–100) is Measured
+
+The **Health Score** is an automated composite index measuring overall SaaS stability and momentum across 4 performance pillars:
+
+1. **Refund Control (30 points max):**
+   - Full **30 pts** if refund rate is under 5%.
+   - Penalized by 2 pts for every 1% in refund rate above 5% (`max(0, 30 - refund_rate * 2)`).
+   - Reaches 0 pts if refund rate reaches 15%.
+2. **Subscriber Churn (25 points max):**
+   - Full **25 pts** if monthly subscriber churn is under 3%.
+   - Penalized by 4 pts for every 1% in churn above 3% (`max(0, 25 - churn_rate * 4)`).
+   - Reaches 0 pts if churn reaches 6.25%.
+3. **Trial Conversion (25 points max):**
+   - Full **25 pts** if trial-to-paid conversion rate exceeds 25%.
+   - Scaled proportionally if under 25% (e.g. 18% conversion rate awards 18 pts).
+4. **Revenue Momentum (20 points max):**
+   - **20 pts** if net revenue grew compared to the previous period.
+   - **10 pts** baseline if revenue was flat or lower.
+
+Hovering over the info icon next to **Health Score** on the dashboard displays this breakdown directly in an interactive tooltip.
 
 ## Database Schema
 
