@@ -741,4 +741,72 @@ class RL_FSBI_API
 
 		return $result;
 	}
+
+	/**
+	 * Retrieve users
+	 *
+	 * GET /v1/developers/{developer_id}/plugins/{plugin_id}/users.json
+	 *
+	 * @param int   $plugin_id Plugin ID.
+	 * @param array $query Query parameters (count, offset).
+	 * @return array Users array or empty array.
+	 */
+	public function retrieve_users($plugin_id, $query = array())
+	{
+		$this->log('retrieve_users() called', array(
+			'plugin_id'    => $plugin_id,
+			'custom_query' => ! empty($query),
+		));
+
+		$endpoint = "/v1/developers/{$this->developer_id}/plugins/{$plugin_id}/users.json";
+		$defaults = array(
+			'count'  => 50,
+			'offset' => 0,
+		);
+		$query = wp_parse_args($query, $defaults);
+		$this->log('Query parameters prepared', $query);
+
+		$response = $this->request($endpoint, 'GET', array(), $query);
+
+		$users = $this->extract_collection($response, 'users');
+		$this->log('retrieve_users() completed', array('count' => count($users)));
+
+		return $users;
+	}
+
+	/**
+	 * Retrieve installs (sites) for a user or plugin.
+	 *
+	 * @param int   $plugin_id Plugin ID.
+	 * @param int   $user_id   Optional User ID.
+	 * @param array $query     Query parameters (count, offset).
+	 * @return array Installs collection.
+	 */
+	public function retrieve_installs($plugin_id, $user_id = 0, $query = array())
+	{
+		$this->log('retrieve_installs() called', array(
+			'plugin_id' => $plugin_id,
+			'user_id'   => $user_id,
+		));
+
+		if ($user_id > 0) {
+			$endpoint = "/v1/developers/{$this->developer_id}/plugins/{$plugin_id}/users/{$user_id}/installs.json";
+		} else {
+			$endpoint = "/v1/developers/{$this->developer_id}/plugins/{$plugin_id}/installs.json";
+		}
+
+		$defaults = array(
+			'count'  => 50,
+			'offset' => 0,
+		);
+		$query = wp_parse_args($query, $defaults);
+
+		$response = $this->request($endpoint, 'GET', array(), $query);
+		$installs = $this->extract_collection($response, 'installs');
+
+		$this->log('retrieve_installs() completed', array('count' => count($installs)));
+
+		return $installs;
+	}
 }
+

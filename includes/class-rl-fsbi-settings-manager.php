@@ -138,6 +138,13 @@ class RL_FSBI_Settings_Manager {
 					'label' => esc_html__( 'Synchronization', 'rl-freemius-bi' ),
 				)
 			);
+
+			$this->framework->add_tab(
+				'newsletter_settings',
+				array(
+					'label' => esc_html__( 'Newsletter', 'rl-freemius-bi' ),
+				)
+			);
 		}
 	}
 
@@ -197,6 +204,111 @@ class RL_FSBI_Settings_Manager {
 				array(
 					'title'       => esc_html__( 'Synchronization Settings', 'rl-freemius-bi' ),
 					'description' => esc_html__( 'Configure automatic background data synchronization with Freemius API.', 'rl-freemius-bi' ),
+				)
+			);
+
+			$this->framework->add_section(
+				'newsletter_settings',
+				'newsletter_provider_section',
+				array(
+					'title'       => esc_html__( 'Email Marketing Service', 'rl-freemius-bi' ),
+					'description' => esc_html__( 'Choose which email marketing provider to synchronize your Freemius marketing opt-ins with.', 'rl-freemius-bi' ),
+				)
+			);
+
+			$this->framework->add_section(
+				'newsletter_settings',
+				'mailchimp_config',
+				array(
+					'title'       => esc_html__( 'Mailchimp Integration', 'rl-freemius-bi' ),
+					'description' => esc_html__( 'Configure your Mailchimp API key and default audience to synchronize newsletter opt-in contacts.', 'rl-freemius-bi' ),
+					'conditions'  => array(
+						array(
+							'field'    => 'rl_fsbi_newsletter_provider',
+							'operator' => 'equals',
+							'value'    => 'mailchimp',
+						),
+					),
+				)
+			);
+
+			$this->framework->add_section(
+				'newsletter_settings',
+				'mailchimp_plan_tags',
+				array(
+					'title'       => esc_html__( 'Freemius Plans & Mailchimp Tags Mapping', 'rl-freemius-bi' ),
+					'description' => esc_html__( 'Link Mailchimp audience tags to each Freemius pricing plan. When syncing users: paying customers receive their designated plan tag (e.g. "PRO USER"), while free-tier WordPress.org users who agreed to the Freemius onboarding opt-in receive the Default Tag below.', 'rl-freemius-bi' ),
+					'conditions'  => array(
+						array(
+							'field'    => 'rl_fsbi_newsletter_provider',
+							'operator' => 'equals',
+							'value'    => 'mailchimp',
+						),
+					),
+				)
+			);
+
+			$this->framework->add_section(
+				'newsletter_settings',
+				'mailchimp_testing',
+				array(
+					'title'       => esc_html__( 'Mailchimp Test & Sample Run', 'rl-freemius-bi' ),
+					'description' => esc_html__( 'Execute a test sample run with a small batch of users to verify Freemius user retrieval, opt-in evaluation, plan detection, tag assignment, and Mailchimp synchronization.', 'rl-freemius-bi' ),
+					'conditions'  => array(
+						array(
+							'field'    => 'rl_fsbi_newsletter_provider',
+							'operator' => 'equals',
+							'value'    => 'mailchimp',
+						),
+					),
+				)
+			);
+
+			$this->framework->add_section(
+				'newsletter_settings',
+				'kit_config',
+				array(
+					'title'       => esc_html__( 'Kit.com (ConvertKit) Integration', 'rl-freemius-bi' ),
+					'description' => esc_html__( 'Configure your Kit API Key and API Secret to synchronize newsletter opt-in contacts with your Kit account.', 'rl-freemius-bi' ),
+					'conditions'  => array(
+						array(
+							'field'    => 'rl_fsbi_newsletter_provider',
+							'operator' => 'equals',
+							'value'    => 'kit',
+						),
+					),
+				)
+			);
+
+			$this->framework->add_section(
+				'newsletter_settings',
+				'kit_plan_tags',
+				array(
+					'title'       => esc_html__( 'Freemius Plans & Kit Tags Mapping', 'rl-freemius-bi' ),
+					'description' => esc_html__( 'Link Kit subscriber tags to each Freemius pricing plan. When syncing users: paying customers receive their designated plan tag, while free-tier WordPress.org users receive the Default Tag below.', 'rl-freemius-bi' ),
+					'conditions'  => array(
+						array(
+							'field'    => 'rl_fsbi_newsletter_provider',
+							'operator' => 'equals',
+							'value'    => 'kit',
+						),
+					),
+				)
+			);
+
+			$this->framework->add_section(
+				'newsletter_settings',
+				'kit_testing',
+				array(
+					'title'       => esc_html__( 'Kit.com Test & Sample Run', 'rl-freemius-bi' ),
+					'description' => esc_html__( 'Execute a test sample run with a small batch of users to verify Freemius user retrieval, opt-in evaluation, plan detection, tag assignment, site URL sync, and Kit.com subscriber creation.', 'rl-freemius-bi' ),
+					'conditions'  => array(
+						array(
+							'field'    => 'rl_fsbi_newsletter_provider',
+							'operator' => 'equals',
+							'value'    => 'kit',
+						),
+					),
 				)
 			);
 		}
@@ -430,6 +542,403 @@ class RL_FSBI_Settings_Manager {
 				'max'     => 3650,
 			)
 		);
+
+		// --- Tab: Newsletter ---
+		$this->framework->add_field(
+			'newsletter_settings',
+			'newsletter_provider_section',
+			array(
+				'id'      => 'rl_fsbi_newsletter_provider',
+				'type'    => 'select',
+				'label'   => esc_html__( 'Email Marketing Service', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'Select which email marketing platform to connect and synchronize your Freemius marketing opt-ins with.', 'rl-freemius-bi' ),
+				'options' => array(
+					'mailchimp' => esc_html__( 'Mailchimp', 'rl-freemius-bi' ),
+					'kit'       => esc_html__( 'Kit.com (ConvertKit)', 'rl-freemius-bi' ),
+				),
+				'default' => 'mailchimp',
+			)
+		);
+
+		// --- Mailchimp Fields ---
+		$this->framework->add_field(
+			'newsletter_settings',
+			'mailchimp_config',
+			array(
+				'id'                => 'rl_fsbi_mailchimp_api_key',
+				'type'              => 'text',
+				'label'             => esc_html__( 'Mailchimp API Key', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Your Mailchimp API key (e.g., xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-usX). Once saved, available audiences will populate in the dropdown below.', 'rl-freemius-bi' ),
+				'placeholder'       => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-usX',
+				'sanitize_callback' => 'sanitize_text_field',
+				'conditions'        => array(
+					array(
+						'field'    => 'rl_fsbi_newsletter_provider',
+						'operator' => 'equals',
+						'value'    => 'mailchimp',
+					),
+				),
+			)
+		);
+
+		$mailchimp_lists = $this->get_mailchimp_lists();
+		if ( ! empty( $mailchimp_lists ) ) {
+			$this->framework->add_field(
+				'newsletter_settings',
+				'mailchimp_config',
+				array(
+					'id'         => 'rl_fsbi_mailchimp_list_id',
+					'type'       => 'select',
+					'label'      => esc_html__( 'Default Audience (List)', 'rl-freemius-bi' ),
+					'desc'       => esc_html__( 'Select the default Mailchimp audience (list) to which opted-in users will be assigned.', 'rl-freemius-bi' ),
+					'options'    => array( '' => esc_html__( '-- Select Default Audience --', 'rl-freemius-bi' ) ) + $mailchimp_lists,
+					'conditions' => array(
+						array(
+							'field'    => 'rl_fsbi_newsletter_provider',
+							'operator' => 'equals',
+							'value'    => 'mailchimp',
+						),
+					),
+				)
+			);
+		} else {
+			$this->framework->add_field(
+				'newsletter_settings',
+				'mailchimp_config',
+				array(
+					'id'                => 'rl_fsbi_mailchimp_list_id',
+					'type'              => 'text',
+					'label'             => esc_html__( 'Default Audience (List) ID', 'rl-freemius-bi' ),
+					'desc'              => esc_html__( 'Enter your Mailchimp Audience (List) ID (e.g. abc1234def). If a valid API key is saved, your audiences will automatically load into a dropdown selector here.', 'rl-freemius-bi' ),
+					'placeholder'       => 'abc1234def',
+					'sanitize_callback' => 'sanitize_text_field',
+					'conditions'        => array(
+						array(
+							'field'    => 'rl_fsbi_newsletter_provider',
+							'operator' => 'equals',
+							'value'    => 'mailchimp',
+						),
+					),
+				)
+			);
+		}
+
+		$this->framework->add_field(
+			'newsletter_settings',
+			'mailchimp_plan_tags',
+			array(
+				'id'                => 'rl_fsbi_mc_default_tag',
+				'type'              => 'text',
+				'label'             => esc_html__( 'Default Tag (Free / WordPress.org Opt-in)', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Tag assigned to free users who installed your plugin from WordPress.org and clicked "Allow & Continue" on the Freemius onboarding connect screen, granting email permission for security and feature updates. Default: "Freemius Opt-in".', 'rl-freemius-bi' ),
+				'placeholder'       => 'Freemius Opt-in',
+				'default'           => 'Freemius Opt-in',
+				'sanitize_callback' => 'sanitize_text_field',
+				'conditions'        => array(
+					array(
+						'field'    => 'rl_fsbi_newsletter_provider',
+						'operator' => 'equals',
+						'value'    => 'mailchimp',
+					),
+				),
+			)
+		);
+
+		$active_list_id = trim( (string) $this->get_option( 'rl_fsbi_mailchimp_list_id', '' ) );
+		$available_tags = array();
+		if ( ! empty( $active_list_id ) ) {
+			$mc_service     = new RL_FSBI_Mailchimp( (string) $this->get_option( 'rl_fsbi_mailchimp_api_key', '' ) );
+			$available_tags = $mc_service->get_tags( $active_list_id );
+		}
+
+		$plans = $this->get_available_plans();
+		if ( ! empty( $plans ) ) {
+			foreach ( $plans as $plan ) {
+				$field_id = 'rl_fsbi_mc_plan_tag_' . $plan['plan_id'];
+				if ( ! empty( $available_tags ) ) {
+					$tag_select_opts = array( '' => esc_html__( '-- Use Default Tag --', 'rl-freemius-bi' ) ) + $available_tags;
+					$this->framework->add_field(
+						'newsletter_settings',
+						'mailchimp_plan_tags',
+						array(
+							'id'         => $field_id,
+							'type'       => 'select',
+							'label'      => sprintf( esc_html__( 'Tag for %s', 'rl-freemius-bi' ), $plan['title'] ),
+							'desc'       => sprintf( esc_html__( 'Choose the Mailchimp tag to assign to subscribers on plan "%s" (Plan ID: %d).', 'rl-freemius-bi' ), $plan['title'], $plan['plan_id'] ),
+							'options'    => $tag_select_opts,
+							'conditions' => array(
+								array(
+									'field'    => 'rl_fsbi_newsletter_provider',
+									'operator' => 'equals',
+									'value'    => 'mailchimp',
+								),
+							),
+						)
+					);
+				} else {
+					$this->framework->add_field(
+						'newsletter_settings',
+						'mailchimp_plan_tags',
+						array(
+							'id'                => $field_id,
+							'type'              => 'text',
+							'label'             => sprintf( esc_html__( 'Tag for %s', 'rl-freemius-bi' ), $plan['title'] ),
+							'desc'              => sprintf( esc_html__( 'Type the Mailchimp tag name to assign to subscribers on plan "%s" (Plan ID: %d).', 'rl-freemius-bi' ), $plan['title'], $plan['plan_id'] ),
+							'placeholder'       => $plan['title'],
+							'sanitize_callback' => 'sanitize_text_field',
+							'conditions'        => array(
+								array(
+									'field'    => 'rl_fsbi_newsletter_provider',
+									'operator' => 'equals',
+									'value'    => 'mailchimp',
+								),
+							),
+						)
+					);
+				}
+			}
+		}
+
+		$this->framework->add_field(
+			'newsletter_settings',
+			'mailchimp_testing',
+			array(
+				'id'         => 'rl_fsbi_mc_sample_run',
+				'type'       => 'html',
+				'html'       => $this->get_mailchimp_sample_run_html(),
+				'conditions' => array(
+					array(
+						'field'    => 'rl_fsbi_newsletter_provider',
+						'operator' => 'equals',
+						'value'    => 'mailchimp',
+					),
+				),
+			)
+		);
+
+		// --- Kit.com Fields ---
+		$this->framework->add_field(
+			'newsletter_settings',
+			'kit_config',
+			array(
+				'id'                => 'rl_fsbi_kit_api_key',
+				'type'              => 'text',
+				'label'             => esc_html__( 'Kit V4 API Key', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Your Kit API V4 Key. Located in Kit under Settings > Developer > V4 API Keys. (Passed via X-Kit-Api-Key header).', 'rl-freemius-bi' ),
+				'placeholder'       => 'kit_xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+				'sanitize_callback' => 'sanitize_text_field',
+				'conditions'        => array(
+					array(
+						'field'    => 'rl_fsbi_newsletter_provider',
+						'operator' => 'equals',
+						'value'    => 'kit',
+					),
+				),
+			)
+		);
+
+		$this->framework->add_field(
+			'newsletter_settings',
+			'kit_config',
+			array(
+				'id'                => 'rl_fsbi_kit_api_secret',
+				'type'              => 'text',
+				'label'             => esc_html__( 'Kit API Secret (Legacy / Optional)', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Optional. In Kit API v4, your V4 API Key authenticates all operations (subscribers, tags, custom fields) directly.', 'rl-freemius-bi' ),
+				'placeholder'       => '',
+				'sanitize_callback' => 'sanitize_text_field',
+				'conditions'        => array(
+					array(
+						'field'    => 'rl_fsbi_newsletter_provider',
+						'operator' => 'equals',
+						'value'    => 'kit',
+					),
+				),
+			)
+		);
+
+		$kit_tags = $this->get_kit_tags();
+		if ( ! empty( $kit_tags ) ) {
+			$tag_options = array( '' => esc_html__( '-- Select Default Tag --', 'rl-freemius-bi' ) ) + $kit_tags;
+			$this->framework->add_field(
+				'newsletter_settings',
+				'kit_plan_tags',
+				array(
+					'id'         => 'rl_fsbi_kit_default_tag',
+					'type'       => 'select',
+					'label'      => esc_html__( 'Default Tag (Free / WordPress.org Opt-in)', 'rl-freemius-bi' ),
+					'desc'       => esc_html__( 'Tag assigned to free users who agreed to Freemius onboarding. Default: "Freemius Opt-in".', 'rl-freemius-bi' ),
+					'options'    => $tag_options,
+					'conditions' => array(
+						array(
+							'field'    => 'rl_fsbi_newsletter_provider',
+							'operator' => 'equals',
+							'value'    => 'kit',
+						),
+					),
+				)
+			);
+		} else {
+			$this->framework->add_field(
+				'newsletter_settings',
+				'kit_plan_tags',
+				array(
+					'id'                => 'rl_fsbi_kit_default_tag',
+					'type'              => 'text',
+					'label'             => esc_html__( 'Default Tag (Free / WordPress.org Opt-in)', 'rl-freemius-bi' ),
+					'desc'              => esc_html__( 'Tag name assigned to free users who agreed to Freemius onboarding. Default: "Freemius Opt-in".', 'rl-freemius-bi' ),
+					'placeholder'       => 'Freemius Opt-in',
+					'default'           => 'Freemius Opt-in',
+					'sanitize_callback' => 'sanitize_text_field',
+					'conditions'        => array(
+						array(
+							'field'    => 'rl_fsbi_newsletter_provider',
+							'operator' => 'equals',
+							'value'    => 'kit',
+						),
+					),
+				)
+			);
+		}
+
+		if ( ! empty( $plans ) ) {
+			foreach ( $plans as $plan ) {
+				$field_id = 'rl_fsbi_kit_plan_tag_' . $plan['plan_id'];
+				if ( ! empty( $kit_tags ) ) {
+					$tag_select_opts = array( '' => esc_html__( '-- Use Default Tag --', 'rl-freemius-bi' ) ) + $kit_tags;
+					$this->framework->add_field(
+						'newsletter_settings',
+						'kit_plan_tags',
+						array(
+							'id'         => $field_id,
+							'type'       => 'select',
+							'label'      => sprintf( esc_html__( 'Tag for %s', 'rl-freemius-bi' ), $plan['title'] ),
+							'desc'       => sprintf( esc_html__( 'Choose the Kit tag to assign to subscribers on plan "%s" (Plan ID: %d).', 'rl-freemius-bi' ), $plan['title'], $plan['plan_id'] ),
+							'options'    => $tag_select_opts,
+							'conditions' => array(
+								array(
+									'field'    => 'rl_fsbi_newsletter_provider',
+									'operator' => 'equals',
+									'value'    => 'kit',
+								),
+							),
+						)
+					);
+				} else {
+					$this->framework->add_field(
+						'newsletter_settings',
+						'kit_plan_tags',
+						array(
+							'id'                => $field_id,
+							'type'              => 'text',
+							'label'             => sprintf( esc_html__( 'Tag for %s', 'rl-freemius-bi' ), $plan['title'] ),
+							'desc'              => sprintf( esc_html__( 'Type the Kit tag name to assign to subscribers on plan "%s" (Plan ID: %d).', 'rl-freemius-bi' ), $plan['title'], $plan['plan_id'] ),
+							'placeholder'       => $plan['title'],
+							'sanitize_callback' => 'sanitize_text_field',
+							'conditions'        => array(
+								array(
+									'field'    => 'rl_fsbi_newsletter_provider',
+									'operator' => 'equals',
+									'value'    => 'kit',
+								),
+							),
+						)
+					);
+				}
+			}
+		}
+
+		$this->framework->add_field(
+			'newsletter_settings',
+			'kit_testing',
+			array(
+				'id'         => 'rl_fsbi_kit_sample_run',
+				'type'       => 'html',
+				'html'       => $this->get_kit_sample_run_html(),
+				'conditions' => array(
+					array(
+						'field'    => 'rl_fsbi_newsletter_provider',
+						'operator' => 'equals',
+						'value'    => 'kit',
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Build HTML for Mailchimp Sample Run testing panel.
+	 *
+	 * @return string
+	 */
+	private function get_mailchimp_sample_run_html(): string {
+		$catalog = $this->get_option( 'rl_fsbi_plugins_catalog', array() );
+		$plugin_options = '<option value="all">' . esc_html__( 'All Tracked Plugins', 'rl-freemius-bi' ) . '</option>';
+		if ( is_array( $catalog ) ) {
+			foreach ( $catalog as $pid => $info ) {
+				$title = ! empty( $info['title'] ) ? $info['title'] : 'Plugin #' . $pid;
+				$plugin_options .= '<option value="' . esc_attr( $pid ) . '">' . esc_html( $title ) . ' (#' . esc_html( $pid ) . ')</option>';
+			}
+		}
+
+		ob_start();
+		?>
+		<div class="rl-fsbi-sample-run-card" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.05); max-width:850px;">
+			<h4 style="margin:0 0 10px; font-size:15px; color:#1e293b; font-weight:600;">
+				<?php echo esc_html__( 'Sample Synchronization Test (Deep Debugging)', 'rl-freemius-bi' ); ?>
+			</h4>
+			<p style="margin:0 0 16px; color:#64748b; font-size:13px; line-height:1.5;">
+				<?php echo esc_html__( 'Fetch a small sample of users directly from Freemius, inspect each contact\'s marketing permission and subscription plan, apply your configured Mailchimp tags, and monitor every step in real-time.', 'rl-freemius-bi' ); ?>
+			</p>
+
+			<div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; margin-bottom:16px; background:#f8fafc; padding:14px; border-radius:6px; border:1px solid #e2e8f0;">
+				<div>
+					<label for="rl-fsbi-sample-user-count" style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">
+						<?php echo esc_html__( 'Sample Size (Users)', 'rl-freemius-bi' ); ?>
+					</label>
+					<input type="number" id="rl-fsbi-sample-user-count" value="5" min="1" max="50" style="width:90px;" class="small-text">
+				</div>
+
+				<div>
+					<label for="rl-fsbi-sample-plugin-select" style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">
+						<?php echo esc_html__( 'Select Plugin Scope', 'rl-freemius-bi' ); ?>
+					</label>
+					<select id="rl-fsbi-sample-plugin-select" style="min-width:200px;">
+						<?php echo $plugin_options; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					</select>
+				</div>
+
+				<div style="padding-bottom:6px;">
+					<label style="font-size:13px; color:#334155; cursor:pointer;">
+						<input type="checkbox" id="rl-fsbi-sample-dry-run" value="1" checked="checked" style="margin-top:0;">
+						<strong><?php echo esc_html__( 'Dry Run Mode', 'rl-freemius-bi' ); ?></strong>
+						<span style="color:#64748b; font-size:12px;">(<?php echo esc_html__( 'tests plan lookup and tags without modifying Mailchimp', 'rl-freemius-bi' ); ?>)</span>
+					</label>
+				</div>
+
+				<div style="margin-left:auto;">
+					<button type="button" class="button button-primary" id="rl-fsbi-run-sample-test-btn" style="display:inline-flex; align-items:center; gap:6px; font-weight:600;">
+						<span class="dashicons dashicons-controls-play" style="font-size:16px; width:16px; height:16px; line-height:16px;"></span>
+						<span><?php echo esc_html__( 'Run Sample Sync Test', 'rl-freemius-bi' ); ?></span>
+					</button>
+					<button type="button" class="button" id="rl-fsbi-clear-sample-log-btn" style="display:none; margin-left:6px;">
+						<?php echo esc_html__( 'Clear Log', 'rl-freemius-bi' ); ?>
+					</button>
+				</div>
+			</div>
+
+			<div id="rl-fsbi-sample-log-wrap" style="display:none;">
+				<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+					<span style="font-size:12px; font-weight:600; color:#475569;">
+						<?php echo esc_html__( 'Diagnostic Execution Log (rlLOG)', 'rl-freemius-bi' ); ?>:
+					</span>
+					<span id="rl-fsbi-sample-summary-badge" style="font-size:11px; padding:2px 8px; border-radius:10px; background:#e2e8f0; color:#334155; font-weight:600;"></span>
+				</div>
+				<div id="rl-fsbi-sample-log-console" style="background:#0f172a; color:#f8fafc; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12px; padding:16px; border-radius:8px; max-height:360px; overflow-y:auto; line-height:1.6; border:1px solid #334155; box-shadow:inset 0 2px 4px rgba(0,0,0,0.4);"></div>
+			</div>
+		</div>
+		<?php
+		return (string) ob_get_clean();
 	}
 
 	/**
@@ -452,6 +961,38 @@ class RL_FSBI_Settings_Manager {
 	public function handle_settings_saved( $saved ) {
 		if ( ! is_array( $saved ) ) {
 			return;
+		}
+
+		if ( isset( $saved['rl_fsbi_mailchimp_api_key'] ) ) {
+			$mc_key = trim( (string) $saved['rl_fsbi_mailchimp_api_key'] );
+			if ( ! empty( $mc_key ) ) {
+				delete_transient( 'rl_fsbi_mc_lists_' . md5( $mc_key ) );
+				$mc = new RL_FSBI_Mailchimp( $mc_key );
+				if ( $mc->is_configured() ) {
+					$lists = $mc->get_lists( true );
+					$current_list_id = trim( (string) ( $saved['rl_fsbi_mailchimp_list_id'] ?? $this->get_option( 'rl_fsbi_mailchimp_list_id', '' ) ) );
+					if ( empty( $current_list_id ) && count( $lists ) === 1 ) {
+						$current_list_id = (string) array_key_first( $lists );
+						$this->persist_settings_updates( array( 'rl_fsbi_mailchimp_list_id' => $current_list_id ) );
+					}
+					if ( ! empty( $current_list_id ) ) {
+						$mc->get_tags( $current_list_id, true );
+					}
+				}
+			}
+		}
+
+		if ( isset( $saved['rl_fsbi_kit_api_key'] ) ) {
+			$kit_key    = trim( (string) $saved['rl_fsbi_kit_api_key'] );
+			$kit_secret = trim( (string) ( $saved['rl_fsbi_kit_api_secret'] ?? '' ) );
+			if ( ! empty( $kit_key ) ) {
+				delete_transient( 'rl_fsbi_kit_tags_' . md5( $kit_key ) );
+				$kit = new RL_FSBI_Kit( $kit_key, $kit_secret );
+				if ( $kit->is_configured() ) {
+					$kit->get_tags( true );
+					$kit->ensure_custom_field( 'Website' );
+				}
+			}
 		}
 
 		$developer_id = isset( $saved['rl_fsbi_developer_id'] ) ? trim( (string) $saved['rl_fsbi_developer_id'] ) : '';
@@ -571,6 +1112,180 @@ class RL_FSBI_Settings_Manager {
 	 */
 	public function sanitize_developer_id( $value ): string {
 		return preg_replace( '/[^0-9]/', '', (string) $value );
+	}
+
+	/**
+	 * Fetch Mailchimp audiences (lists) using the configured Mailchimp API key.
+	 *
+	 * @return array<string, string> List options as [id => name].
+	 */
+	public function get_mailchimp_lists(): array {
+		$api_key = trim( (string) $this->get_option( 'rl_fsbi_mailchimp_api_key', '' ) );
+		if ( empty( $api_key ) ) {
+			return array();
+		}
+
+		$mc_service = new RL_FSBI_Mailchimp( $api_key );
+		$raw_lists  = $mc_service->get_lists();
+
+		$lists = array();
+		foreach ( $raw_lists as $id => $name ) {
+			$lists[ $id ] = $name . ' (' . $id . ')';
+		}
+
+		return $lists;
+	}
+
+	/**
+	 * Fetch Kit tags using the configured Kit API credentials.
+	 *
+	 * @return array<int, string> Tag options as [id => name].
+	 */
+	public function get_kit_tags(): array {
+		$api_key    = trim( (string) $this->get_option( 'rl_fsbi_kit_api_key', '' ) );
+		$api_secret = trim( (string) $this->get_option( 'rl_fsbi_kit_api_secret', '' ) );
+		if ( empty( $api_key ) ) {
+			return array();
+		}
+
+		$kit_service = new RL_FSBI_Kit( $api_key, $api_secret );
+		return $kit_service->get_tags();
+	}
+
+	/**
+	 * Build HTML for Kit.com Sample Run testing panel.
+	 *
+	 * @return string
+	 */
+	private function get_kit_sample_run_html(): string {
+		$catalog = $this->get_option( 'rl_fsbi_plugins_catalog', array() );
+		$plugin_options = '<option value="all">' . esc_html__( 'All Tracked Plugins', 'rl-freemius-bi' ) . '</option>';
+		if ( is_array( $catalog ) ) {
+			foreach ( $catalog as $pid => $info ) {
+				$title = ! empty( $info['title'] ) ? $info['title'] : 'Plugin #' . $pid;
+				$plugin_options .= '<option value="' . esc_attr( $pid ) . '">' . esc_html( $title ) . ' (#' . esc_html( $pid ) . ')</option>';
+			}
+		}
+
+		ob_start();
+		?>
+		<div class="rl-fsbi-sample-run-card" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.05); max-width:850px;">
+			<h4 style="margin:0 0 10px; font-size:15px; color:#1e293b; font-weight:600;">
+				<?php echo esc_html__( 'Kit.com Sample Synchronization Test (Deep Debugging)', 'rl-freemius-bi' ); ?>
+			</h4>
+			<p style="margin:0 0 16px; color:#64748b; font-size:13px; line-height:1.5;">
+				<?php echo esc_html__( 'Fetch a small sample of users directly from Freemius, inspect marketing permission and plan detection, resolve assigned Kit tags, synchronize website origin to the "website" custom field, and monitor every step in real-time.', 'rl-freemius-bi' ); ?>
+			</p>
+
+			<div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; margin-bottom:16px; background:#f8fafc; padding:14px; border-radius:6px; border:1px solid #e2e8f0;">
+				<div>
+					<label for="rl-fsbi-kit-sample-user-count" style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">
+						<?php echo esc_html__( 'Sample Size (Users)', 'rl-freemius-bi' ); ?>
+					</label>
+					<input type="number" id="rl-fsbi-kit-sample-user-count" value="5" min="1" max="50" style="width:90px;" class="small-text">
+				</div>
+
+				<div>
+					<label for="rl-fsbi-kit-sample-plugin-select" style="display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px;">
+						<?php echo esc_html__( 'Select Plugin Scope', 'rl-freemius-bi' ); ?>
+					</label>
+					<select id="rl-fsbi-kit-sample-plugin-select" style="min-width:200px;">
+						<?php echo $plugin_options; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					</select>
+				</div>
+
+				<div style="padding-bottom:6px;">
+					<label style="font-size:13px; color:#334155; cursor:pointer;">
+						<input type="checkbox" id="rl-fsbi-kit-sample-dry-run" value="1" checked="checked" style="margin-top:0;">
+						<strong><?php echo esc_html__( 'Dry Run Mode', 'rl-freemius-bi' ); ?></strong>
+						<span style="color:#64748b; font-size:12px;">(<?php echo esc_html__( 'tests plan lookup and tags without modifying Kit', 'rl-freemius-bi' ); ?>)</span>
+					</label>
+				</div>
+
+				<div style="margin-left:auto;">
+					<button type="button" class="button button-primary" id="rl-fsbi-run-kit-sample-test-btn" style="display:inline-flex; align-items:center; gap:6px; font-weight:600;">
+						<span class="dashicons dashicons-controls-play" style="font-size:16px; width:16px; height:16px; line-height:16px;"></span>
+						<span><?php echo esc_html__( 'Run Kit.com Sample Test', 'rl-freemius-bi' ); ?></span>
+					</button>
+					<button type="button" class="button" id="rl-fsbi-clear-kit-sample-log-btn" style="display:none; margin-left:6px;">
+						<?php echo esc_html__( 'Clear Log', 'rl-freemius-bi' ); ?>
+					</button>
+				</div>
+			</div>
+
+			<div id="rl-fsbi-kit-sample-log-wrap" style="display:none;">
+				<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+					<span style="font-size:12px; font-weight:600; color:#475569;">
+						<?php echo esc_html__( 'Kit.com Diagnostic Execution Log (rlLOG)', 'rl-freemius-bi' ); ?>:
+					</span>
+					<span id="rl-fsbi-kit-sample-summary-badge" style="font-size:11px; padding:2px 8px; border-radius:10px; background:#e2e8f0; color:#334155; font-weight:600;"></span>
+				</div>
+				<div id="rl-fsbi-kit-sample-log-console" style="background:#0f172a; color:#f8fafc; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12px; padding:16px; border-radius:8px; max-height:360px; overflow-y:auto; line-height:1.6; border:1px solid #334155; box-shadow:inset 0 2px 4px rgba(0,0,0,0.4);"></div>
+			</div>
+		</div>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Get all available Freemius plans.
+	 *
+	 * Checks the local database first; if empty, fetches from Freemius API.
+	 *
+	 * @return array<int, array{plan_id: int, plugin_id: int, title: string}>
+	 */
+	public function get_available_plans(): array {
+		global $wpdb;
+		$table = $wpdb->prefix . 'rl_fsbi_plans';
+		$plans = array();
+
+		$catalog = $this->get_option( 'rl_fsbi_plugins_catalog', array() );
+
+		// Check local database table
+		$results = $wpdb->get_results( "SELECT plan_id, plugin_id, plan_name FROM {$table} ORDER BY plugin_id ASC, plan_name ASC" );
+		if ( ! empty( $results ) && is_array( $results ) ) {
+			foreach ( $results as $row ) {
+				$plugin_prefix = '';
+				if ( is_array( $catalog ) && isset( $catalog[ (string) $row->plugin_id ]['title'] ) ) {
+					$plugin_prefix = $catalog[ (string) $row->plugin_id ]['title'] . ': ';
+				}
+				$plans[ (int) $row->plan_id ] = array(
+					'plan_id'   => (int) $row->plan_id,
+					'plugin_id' => (int) $row->plugin_id,
+					'title'     => $plugin_prefix . ( ! empty( $row->plan_name ) ? $row->plan_name : 'Plan #' . $row->plan_id ),
+				);
+			}
+		}
+
+		// If DB table has no plans yet but API credentials are valid, query Freemius API
+		if ( empty( $plans ) && $this->is_api_connected() && is_array( $catalog ) ) {
+			$dev_id  = $this->get_option( 'rl_fsbi_developer_id' );
+			$pub_key = $this->get_option( 'rl_fsbi_public_key' );
+			$sec_key = $this->get_option( 'rl_fsbi_secret_key' );
+
+			if ( $dev_id && $pub_key && $sec_key ) {
+				$api = new RL_FSBI_API( $dev_id, $pub_key, $sec_key );
+				foreach ( array_keys( $catalog ) as $pid ) {
+					$p_plans = $api->retrieve_plans( (int) $pid );
+					if ( ! empty( $p_plans ) && is_array( $p_plans ) ) {
+						$p_title = $catalog[ (string) $pid ]['title'] ?? ( 'Plugin #' . $pid );
+						foreach ( $p_plans as $pl ) {
+							$pl_id    = (int) ( is_array( $pl ) ? ( $pl['id'] ?? 0 ) : ( $pl->id ?? 0 ) );
+							$pl_title = is_array( $pl ) ? ( $pl['title'] ?? '' ) : ( $pl->title ?? '' );
+							if ( $pl_id > 0 ) {
+								$plans[ $pl_id ] = array(
+									'plan_id'   => $pl_id,
+									'plugin_id' => (int) $pid,
+									'title'     => $p_title . ': ' . ( ! empty( $pl_title ) ? $pl_title : 'Plan #' . $pl_id ),
+								);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		return $plans;
 	}
 
 	/**

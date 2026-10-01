@@ -904,4 +904,57 @@ p.rl-fsbi-field-desc,
 	color: #1d4ed8 !important;
 }
 
+@keyframes rl-fsbi-spin {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(359deg); }
+}
+
+.rl-fsbi-spinning {
+	display: inline-block !important;
+	animation: rl-fsbi-spin 1s infinite linear !important;
+}
+
+.rl-fsbi-mini-stat button.button-link:hover {
+	opacity: 0.8;
+}
+
+/* Mailchimp Sync Live Progress Modal */
+.rl-fsbi-modal-backdrop {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(15, 23, 42, 0.65);
+	backdrop-filter: blur(4px);
+	z-index: 100000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.rl-fsbi-modal-box {
+	background: #ffffff;
+	border-radius: 12px;
+	width: 100%;
+	max-width: 480px;
+	padding: 24px;
+	box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+	border: 1px solid #e2e8f0;
+	animation: rlFsbiModalIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes rlFsbiModalIn {
+	from {
+		opacity: 0;
+		transform: scale(0.95) translateY(-8px);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1) translateY(0);
+	}
+}
+
+
+
 

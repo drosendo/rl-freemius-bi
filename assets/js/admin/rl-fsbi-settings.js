@@ -216,6 +216,434 @@
 				}
 			}
 		});
+
+		/**
+		 * Handles live discovery of Mailchimp audiences and tags upon API key input or change.
+		 */
+		let mcFetchDebounce = null;
+		function fetchMailchimpData(apiKey, listId) {
+			const ajaxUrl = window.rlFsbiSettingsData && window.rlFsbiSettingsData.ajaxUrl;
+			const nonce = window.rlFsbiSettingsData && window.rlFsbiSettingsData.nonce;
+			if (!ajaxUrl || !nonce || !apiKey || apiKey.indexOf('-') === -1) {
+				return;
+			}
+
+			const $keyField = $('.rl-field[data-field-id="rl_fsbi_mailchimp_api_key"]');
+			let $statusMsg = $keyField.find('.rl-fsbi-mc-status');
+			if (!$statusMsg.length) {
+				$keyField.find('.rl-field-control').append('<span class="rl-fsbi-mc-status" style="margin-left:8px; font-size:12px; color:#64748b; display:inline-block; vertical-align:middle;"></span>');
+				$statusMsg = $keyField.find('.rl-fsbi-mc-status');
+			}
+			$statusMsg.html('<span class="spinner is-active" style="float:none; margin:0 4px 0 0; vertical-align:middle; width:16px; height:16px; display:inline-block;"></span> Fetching audiences & tags...');
+
+			$.post(ajaxUrl, {
+				action: 'rl_fsbi_fetch_mailchimp_data',
+				nonce: nonce,
+				api_key: apiKey,
+				list_id: listId || ''
+			}, function(res) {
+				if (res && res.success && res.data) {
+					$statusMsg.html('<span style="color:#16a34a; font-weight:600;">✓ Connected to Mailchimp</span>');
+
+					// Populate or transform list select
+					const $listField = $('.rl-field[data-field-id="rl_fsbi_mailchimp_list_id"]');
+					const lists = res.data.lists || {};
+					if ($listField.length && Object.keys(lists).length > 0) {
+						const $listControl = $listField.find('select');
+						const currentVal = $listControl.length ? $listControl.val() : ($listField.find('input').val() || '');
+						const inputName = $listField.find('input, select').attr('name') || 'rl_fsbi_settings[rl_fsbi_mailchimp_list_id]';
+						const inputId = $listField.find('input, select').attr('id') || 'rl_fsbi_mailchimp_list_id';
+
+						let selectHtml = '<select id="' + inputId + '" name="' + inputName + '">';
+						selectHtml += '<option value="">-- Select Default Audience --</option>';
+						for (const [lId, lName] of Object.entries(lists)) {
+							const selected = (currentVal === lId || Object.keys(lists).length === 1) ? ' selected="selected"' : '';
+							selectHtml += '<option value="' + lId + '"' + selected + '>' + lName + ' (' + lId + ')</option>';
+						}
+						selectHtml += '</select>';
+
+						if ($listControl.length) {
+							$listControl.replaceWith(selectHtml);
+						} else {
+							$listField.find('input[type="text"]').replaceWith(selectHtml);
+						}
+					}
+
+					// Populate plan tags if tags were returned
+					const tags = res.data.tags || {};
+					if (Object.keys(tags).length > 0) {
+						$('.rl-field[data-field-id^="rl_fsbi_mc_plan_tag_"]').each(function() {
+							const $tagField = $(this);
+							const $select = $tagField.find('select');
+							const currentVal = $select.length ? $select.val() : ($tagField.find('input').val() || '');
+							const fieldName = $tagField.find('input, select').attr('name');
+							const fieldId = $tagField.find('input, select').attr('id');
+
+							let tagSelectHtml = '<select id="' + fieldId + '" name="' + fieldName + '">';
+							tagSelectHtml += '<option value="">-- Use Default Tag --</option>';
+							for (const [tId, tName] of Object.entries(tags)) {
+								const selected = (currentVal === tName || currentVal === tId) ? ' selected="selected"' : '';
+								tagSelectHtml += '<option value="' + tName + '"' + selected + '>' + tName + '</option>';
+							}
+							tagSelectHtml += '</select>';
+
+							if ($select.length) {
+								$select.replaceWith(tagSelectHtml);
+							} else {
+								$tagField.find('input[type="text"]').replaceWith(tagSelectHtml);
+							}
+						});
+					}
+				} else {
+					const errorMsg = (res && res.data) ? res.data : 'Failed to connect to Mailchimp.';
+					$statusMsg.html('<span style="color:#dc2626;">⚠ ' + errorMsg + '</span>');
+				}
+			}).fail(function() {
+				$statusMsg.html('<span style="color:#dc2626;">⚠ Network error connecting to Mailchimp.</span>');
+			});
+		}
+
+		$(document).on('input change blur', '.rl-field[data-field-id="rl_fsbi_mailchimp_api_key"] input', function() {
+			const key = $(this).val().trim();
+			clearTimeout(mcFetchDebounce);
+			if (key.length >= 20 && key.indexOf('-') !== -1) {
+				mcFetchDebounce = setTimeout(function() {
+					fetchMailchimpData(key);
+				}, 500);
+			}
+		});
+
+		$(document).on('change', '.rl-field[data-field-id="rl_fsbi_mailchimp_list_id"] select', function() {
+			const listId = $(this).val();
+			const key = $('.rl-field[data-field-id="rl_fsbi_mailchimp_api_key"] input').val().trim();
+			if (key && listId) {
+				fetchMailchimpData(key, listId);
+			}
+		});
+
+		/**
+		 * Handles execution of the Mailchimp Sample Synchronization Test.
+		 */
+		$(document).on('click', '#rl-fsbi-run-sample-test-btn', function(e) {
+			e.preventDefault();
+			const $btn = $(this);
+			const $icon = $btn.find('.dashicons');
+			const $logWrap = $('#rl-fsbi-sample-log-wrap');
+			const $console = $('#rl-fsbi-sample-log-console');
+			const $badge = $('#rl-fsbi-sample-summary-badge');
+			const $clearBtn = $('#rl-fsbi-clear-sample-log-btn');
+
+			const ajaxUrl = window.rlFsbiSettingsData && window.rlFsbiSettingsData.ajaxUrl;
+			const nonce = window.rlFsbiSettingsData && window.rlFsbiSettingsData.nonce;
+
+			if (!ajaxUrl || !nonce) {
+				alert('AJAX parameters missing.');
+				return;
+			}
+
+			const sampleCount = parseInt($('#rl-fsbi-sample-user-count').val(), 10) || 5;
+			const pluginId = $('#rl-fsbi-sample-plugin-select').val() || 'all';
+			const dryRun = $('#rl-fsbi-sample-dry-run').is(':checked') ? 1 : 0;
+
+			$btn.prop('disabled', true);
+			$icon.removeClass('dashicons-controls-play').addClass('dashicons-update rl-fsbi-spinning');
+
+			$logWrap.slideDown(200);
+			$console.html('<div style="color:#94a3b8;">[' + (new Date()).toLocaleTimeString() + '] Initializing test synchronization job...</div>');
+			$badge.text('Running...').css({ background: '#fef3c7', color: '#b45309' });
+
+			// Call rlLOG at start
+			if (window.rlFramework && typeof window.rlFramework.log === 'function') {
+				window.rlFramework.log('Starting Mailchimp sample test run', { sampleCount: sampleCount, pluginId: pluginId, dryRun: dryRun });
+			} else {
+				console.log('[RL Framework DEBUG] Starting Mailchimp sample test run', { sampleCount: sampleCount, pluginId: pluginId, dryRun: dryRun });
+			}
+
+			$.post(ajaxUrl, {
+				action: 'rl_fsbi_sample_mailchimp_test',
+				nonce: nonce,
+				sample_count: sampleCount,
+				plugin_id: pluginId,
+				dry_run: dryRun,
+			}, function(res) {
+				$btn.prop('disabled', false);
+				$icon.removeClass('dashicons-update rl-fsbi-spinning').addClass('dashicons-controls-play');
+				$clearBtn.show();
+
+				if (res && res.data && Array.isArray(res.data.logs)) {
+					let html = '';
+					res.data.logs.forEach(function(item) {
+						let color = '#94a3b8'; // debug
+						if (item.level === 'error') {
+							color = '#ef4444';
+						} else if (item.level === 'warn') {
+							color = '#f59e0b';
+						} else if (item.level === 'info') {
+							color = '#38bdf8';
+						}
+
+						// Call rlLOG for each step as requested
+						if (window.rlFramework && typeof window.rlFramework.log === 'function') {
+							if (item.level === 'error') {
+								window.rlFramework.error(item.message, item.context || {});
+							} else if (item.level === 'warn') {
+								window.rlFramework.warn(item.message, item.context || {});
+							} else if (item.level === 'info') {
+								window.rlFramework.info(item.message, item.context || {});
+							} else {
+								window.rlFramework.log(item.message, item.context || {});
+							}
+						} else {
+							console.log('[RL Framework ' + (item.level || 'DEBUG').toUpperCase() + '] ' + item.message);
+						}
+
+						html += '<div style="color:' + color + '; margin-bottom:2px;">';
+						html += '<span style="color:#64748b; margin-right:6px;">[' + (item.time || '') + ']</span>';
+						html += $('<div>').text(item.message).html();
+						html += '</div>';
+					});
+
+					$console.html(html);
+					$console.scrollTop($console[0].scrollHeight);
+
+					if (res.success && res.data.summary) {
+						const s = res.data.summary;
+						$badge.text('Scanned: ' + s.scanned + ' | Opt-ins: ' + s.optins + ' | Synced: ' + s.synced + ' | Errors: ' + s.errors)
+							  .css({ background: s.errors > 0 ? '#fee2e2' : '#dcfce7', color: s.errors > 0 ? '#991b1b' : '#166534' });
+					} else {
+						$badge.text('Failed').css({ background: '#fee2e2', color: '#991b1b' });
+					}
+				} else {
+					const msg = (res && res.data && res.data.message) ? res.data.message : 'Unexpected test response.';
+					$console.append('<div style="color:#ef4444;">[ERROR] ' + $('<div>').text(msg).html() + '</div>');
+					$badge.text('Error').css({ background: '#fee2e2', color: '#991b1b' });
+				}
+			}).fail(function(xhr, status, error) {
+				$btn.prop('disabled', false);
+				$icon.removeClass('dashicons-update rl-fsbi-spinning').addClass('dashicons-controls-play');
+				$clearBtn.show();
+				$console.append('<div style="color:#ef4444;">[NETWORK ERROR] ' + $('<div>').text(error || status).html() + '</div>');
+				$badge.text('Network Error').css({ background: '#fee2e2', color: '#991b1b' });
+			});
+		});
+
+		$(document).on('click', '#rl-fsbi-clear-sample-log-btn', function(e) {
+			e.preventDefault();
+			$('#rl-fsbi-sample-log-console').empty();
+			$('#rl-fsbi-sample-log-wrap').slideUp(150);
+			$(this).hide();
+		});
+
+		/**
+		 * Kit.com Dynamic Auto-Discovery of Tags.
+		 */
+		let kitFetchDebounce = null;
+		function fetchKitData(key, secret) {
+			const ajaxUrl = window.rlFsbiSettingsData && window.rlFsbiSettingsData.ajaxUrl;
+			const nonce = window.rlFsbiSettingsData && window.rlFsbiSettingsData.nonce;
+			if (!ajaxUrl || !nonce || !key) {
+				return;
+			}
+
+			const $keyField = $('.rl-field[data-field-id="rl_fsbi_kit_api_key"]');
+			let $statusMsg = $keyField.find('.rl-fsbi-kit-status-msg');
+			if (!$statusMsg.length) {
+				$keyField.find('.rl-field-control').append('<div class="rl-fsbi-kit-status-msg" style="margin-top:6px; font-size:12px;"></div>');
+				$statusMsg = $keyField.find('.rl-fsbi-kit-status-msg');
+			}
+			$statusMsg.html('<span style="color:#0284c7;">⟳ Checking Kit.com tags...</span>');
+
+			$.post(ajaxUrl, {
+				action: 'rl_fsbi_fetch_kit_data',
+				nonce: nonce,
+				api_key: key,
+				api_secret: secret || ''
+			}, function(res) {
+				if (res && res.success && res.data) {
+					const tags = res.data.tags || {};
+					const tagCount = Object.keys(tags).length;
+					$statusMsg.html('<span style="color:#16a34a;">✓ Connected to Kit.com (' + tagCount + ' tags discovered)</span>');
+
+					if (tagCount > 0) {
+						// Populate default tag selector
+						const $defaultTagField = $('.rl-field[data-field-id="rl_fsbi_kit_default_tag"]');
+						if ($defaultTagField.length) {
+							const currentDefVal = $defaultTagField.find('select').length ? $defaultTagField.find('select').val() : ($defaultTagField.find('input').val() || '');
+							const inputName = $defaultTagField.find('input, select').attr('name') || 'rl_fsbi_settings[rl_fsbi_kit_default_tag]';
+							const inputId = $defaultTagField.find('input, select').attr('id') || 'rl_fsbi_kit_default_tag';
+
+							let defHtml = '<select id="' + inputId + '" name="' + inputName + '">';
+							defHtml += '<option value="">-- Select Default Tag --</option>';
+							for (const [tId, tName] of Object.entries(tags)) {
+								const selected = (currentDefVal === tId || currentDefVal === tName) ? ' selected="selected"' : '';
+								defHtml += '<option value="' + tId + '"' + selected + '>' + tName + ' (#' + tId + ')</option>';
+							}
+							defHtml += '</select>';
+
+							if ($defaultTagField.find('select').length) {
+								$defaultTagField.find('select').replaceWith(defHtml);
+							} else {
+								$defaultTagField.find('input[type="text"]').replaceWith(defHtml);
+							}
+						}
+
+						// Populate plan tags
+						$('.rl-field[data-field-id^="rl_fsbi_kit_plan_tag_"]').each(function() {
+							const $tagField = $(this);
+							const $select = $tagField.find('select');
+							const currentVal = $select.length ? $select.val() : ($tagField.find('input').val() || '');
+							const fieldName = $tagField.find('input, select').attr('name');
+							const fieldId = $tagField.find('input, select').attr('id');
+
+							let tagSelectHtml = '<select id="' + fieldId + '" name="' + fieldName + '">';
+							tagSelectHtml += '<option value="">-- Use Default Tag --</option>';
+							for (const [tId, tName] of Object.entries(tags)) {
+								const selected = (currentVal === tId || currentVal === tName) ? ' selected="selected"' : '';
+								tagSelectHtml += '<option value="' + tId + '"' + selected + '>' + tName + ' (#' + tId + ')</option>';
+							}
+							tagSelectHtml += '</select>';
+
+							if ($select.length) {
+								$select.replaceWith(tagSelectHtml);
+							} else {
+								$tagField.find('input[type="text"]').replaceWith(tagSelectHtml);
+							}
+						});
+					}
+				} else {
+					const errorMsg = (res && res.data) ? res.data : 'Failed to connect to Kit.com.';
+					$statusMsg.html('<span style="color:#dc2626;">⚠ ' + errorMsg + '</span>');
+				}
+			}).fail(function() {
+				$statusMsg.html('<span style="color:#dc2626;">⚠ Network error connecting to Kit.com.</span>');
+			});
+		}
+
+		$(document).on('input change blur', '.rl-field[data-field-id="rl_fsbi_kit_api_key"] input, .rl-field[data-field-id="rl_fsbi_kit_api_secret"] input', function() {
+			const $keyInput = $('.rl-field[data-field-id="rl_fsbi_kit_api_key"] input');
+			if (!$keyInput.length) return;
+			const key = $keyInput.val().trim();
+			const $secretInput = $('.rl-field[data-field-id="rl_fsbi_kit_api_secret"] input');
+			const secret = $secretInput.length ? $secretInput.val().trim() : '';
+			clearTimeout(kitFetchDebounce);
+			if (key.length >= 8) {
+				kitFetchDebounce = setTimeout(function() {
+					fetchKitData(key, secret);
+				}, 400);
+			}
+		});
+
+		/**
+		 * Handles execution of the Kit.com Sample Synchronization Test.
+		 */
+		$(document).on('click', '#rl-fsbi-run-kit-sample-test-btn', function(e) {
+			e.preventDefault();
+			const $btn = $(this);
+			const $icon = $btn.find('.dashicons');
+			const $logWrap = $('#rl-fsbi-kit-sample-log-wrap');
+			const $console = $('#rl-fsbi-kit-sample-log-console');
+			const $badge = $('#rl-fsbi-kit-sample-summary-badge');
+			const $clearBtn = $('#rl-fsbi-clear-kit-sample-log-btn');
+
+			const ajaxUrl = window.rlFsbiSettingsData && window.rlFsbiSettingsData.ajaxUrl;
+			const nonce = window.rlFsbiSettingsData && window.rlFsbiSettingsData.nonce;
+
+			if (!ajaxUrl || !nonce) {
+				alert('AJAX parameters missing.');
+				return;
+			}
+
+			const sampleCount = parseInt($('#rl-fsbi-kit-sample-user-count').val(), 10) || 5;
+			const pluginId = $('#rl-fsbi-kit-sample-plugin-select').val() || 'all';
+			const dryRun = $('#rl-fsbi-kit-sample-dry-run').is(':checked') ? 1 : 0;
+
+			$btn.prop('disabled', true);
+			$icon.removeClass('dashicons-controls-play').addClass('dashicons-update rl-fsbi-spinning');
+
+			$logWrap.slideDown(200);
+			$console.html('<div style="color:#94a3b8;">[' + (new Date()).toLocaleTimeString() + '] Initializing Kit.com test synchronization job...</div>');
+			$badge.text('Running...').css({ background: '#fef3c7', color: '#b45309' });
+
+			if (window.rlFramework && typeof window.rlFramework.log === 'function') {
+				window.rlFramework.log('Starting Kit.com sample test run', { sampleCount: sampleCount, pluginId: pluginId, dryRun: dryRun });
+			} else {
+				console.log('[RL Framework DEBUG] Starting Kit.com sample test run', { sampleCount: sampleCount, pluginId: pluginId, dryRun: dryRun });
+			}
+
+			$.post(ajaxUrl, {
+				action: 'rl_fsbi_sample_kit_test',
+				nonce: nonce,
+				sample_count: sampleCount,
+				plugin_id: pluginId,
+				dry_run: dryRun,
+			}, function(res) {
+				$btn.prop('disabled', false);
+				$icon.removeClass('dashicons-update rl-fsbi-spinning').addClass('dashicons-controls-play');
+				$clearBtn.show();
+
+				if (res && res.data && Array.isArray(res.data.logs)) {
+					let html = '';
+					res.data.logs.forEach(function(item) {
+						let color = '#94a3b8';
+						if (item.level === 'error') {
+							color = '#ef4444';
+						} else if (item.level === 'warn') {
+							color = '#f59e0b';
+						} else if (item.level === 'info') {
+							color = '#38bdf8';
+						}
+
+						if (window.rlFramework && typeof window.rlFramework.log === 'function') {
+							if (item.level === 'error') {
+								window.rlFramework.error(item.message, item.context || {});
+							} else if (item.level === 'warn') {
+								window.rlFramework.warn(item.message, item.context || {});
+							} else if (item.level === 'info') {
+								window.rlFramework.info(item.message, item.context || {});
+							} else {
+								window.rlFramework.log(item.message, item.context || {});
+							}
+						} else {
+							console.log('[RL Framework ' + (item.level || 'DEBUG').toUpperCase() + '] ' + item.message);
+						}
+
+						html += '<div style="color:' + color + '; margin-bottom:2px;">';
+						html += '<span style="color:#64748b; margin-right:6px;">[' + (item.time || '') + ']</span>';
+						html += $('<div>').text(item.message).html();
+						html += '</div>';
+					});
+
+					$console.html(html);
+					$console.scrollTop($console[0].scrollHeight);
+
+					if (res.success && res.data.summary) {
+						const s = res.data.summary;
+						$badge.text('Scanned: ' + s.scanned + ' | Opt-ins: ' + s.optins + ' | Synced: ' + s.synced + ' | Errors: ' + s.errors)
+							  .css({ background: s.errors > 0 ? '#fee2e2' : '#dcfce7', color: s.errors > 0 ? '#991b1b' : '#166534' });
+					} else {
+						$badge.text('Failed').css({ background: '#fee2e2', color: '#991b1b' });
+					}
+				} else {
+					const msg = (res && res.data && res.data.message) ? res.data.message : 'Unexpected test response.';
+					$console.append('<div style="color:#ef4444;">[ERROR] ' + $('<div>').text(msg).html() + '</div>');
+					$badge.text('Error').css({ background: '#fee2e2', color: '#991b1b' });
+				}
+			}).fail(function(xhr, status, error) {
+				$btn.prop('disabled', false);
+				$icon.removeClass('dashicons-update rl-fsbi-spinning').addClass('dashicons-controls-play');
+				$clearBtn.show();
+				$console.append('<div style="color:#ef4444;">[NETWORK ERROR] ' + $('<div>').text(error || status).html() + '</div>');
+				$badge.text('Network Error').css({ background: '#fee2e2', color: '#991b1b' });
+			});
+		});
+
+		$(document).on('click', '#rl-fsbi-clear-kit-sample-log-btn', function(e) {
+			e.preventDefault();
+			$('#rl-fsbi-kit-sample-log-console').empty();
+			$('#rl-fsbi-kit-sample-log-wrap').slideUp(150);
+			$(this).hide();
+		});
 	});
 })(jQuery);
+
 

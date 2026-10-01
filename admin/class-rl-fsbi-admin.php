@@ -143,6 +143,8 @@ class RL_FSBI_Admin
 				$this->plugin_name . '-settings',
 				'rlFsbiSettingsData',
 				array(
+					'ajaxUrl'      => admin_url('admin-ajax.php'),
+					'nonce'        => wp_create_nonce('rl_fsbi_nonce'),
 					'descriptions' => $this->settings ? $this->settings->get_field_descriptions() : array(),
 				)
 			);
@@ -176,8 +178,12 @@ class RL_FSBI_Admin
 			'localeFormat'    => $this->locale_format,
 			'defaultCurrency' => strtoupper((string) $this->settings->get_option('rl_fsbi_conversion_currency', $this->settings->get_option('rl_fsbi_default_currency', 'USD'))),
 			'tableRows'       => 12,
-			'forcedPluginId'  => $this->get_forced_plugin_id_from_request(),
-			'pluginsCatalog'  => $this->get_plugins_catalog(),
+			'forcedPluginId'     => $this->get_forced_plugin_id_from_request(),
+			'pluginsCatalog'     => $this->get_plugins_catalog(),
+			'newsletterProvider' => (string) $this->settings->get_option('rl_fsbi_newsletter_provider', 'mailchimp'),
+			'lastNewsletterSync' => (string) get_option('rl_fsbi_newsletter_last_sync_utc', ''),
+			'latestExport'       => get_option('rl_fsbi_latest_optins_csv_export', array()),
+			'adminEmail'         => (string) get_option('admin_email', ''),
 		));
 	}
 
@@ -710,6 +716,177 @@ class RL_FSBI_Admin
 	public function scheduled_sync()
 	{
 		$this->refresh_latest_freemius_data();
+		$this->sync_daily_newsletter_optins_delta();
+	}
+
+	/**
+	 * Run automated delta synchronization for newsletter opt-ins in background cron.
+	 *
+	 * Syncs new contacts created since the last sync or CSV export checkpoint.
+	 */
+	public function sync_daily_newsletter_optins_delta(): array
+	{
+		$last_sync_utc = (string) get_option('rl_fsbi_newsletter_last_sync_utc', '');
+		if (empty($last_sync_utc)) {
+			// Don't auto-run bulk historical backlog in cron without an initial export/sync checkpoint
+			return array('skipped' => true, 'reason' => 'No initial sync checkpoint found.');
+		}
+
+		$provider = (string) $this->settings->get_option('rl_fsbi_newsletter_provider', '');
+		if (empty($provider)) {
+			$has_kit = ! empty(trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', '')));
+			$has_mc  = ! empty(trim((string) $this->settings->get_option('rl_fsbi_mailchimp_api_key', '')));
+			$provider = $has_kit ? 'kit' : ($has_mc ? 'mailchimp' : '');
+		}
+
+		if (empty($provider)) {
+			return array('skipped' => true, 'reason' => 'No newsletter provider configured.');
+		}
+
+		$kit = null;
+		$mc  = null;
+		$list_id = '';
+		$kit_tags = array();
+
+		if ('kit' === $provider) {
+			$kit_key = trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', ''));
+			if (empty($kit_key)) {
+				return array('skipped' => true, 'reason' => 'Kit API key missing.');
+			}
+			$kit = new RL_FSBI_Kit($kit_key);
+			if (! $kit->is_configured()) {
+				return array('skipped' => true, 'reason' => 'Kit API key invalid.');
+			}
+			$kit_tags = $kit->get_tags();
+		} else {
+			$mc_key  = trim((string) $this->settings->get_option('rl_fsbi_mailchimp_api_key', ''));
+			$list_id = trim((string) $this->settings->get_option('rl_fsbi_mailchimp_list_id', ''));
+			if (empty($mc_key) || empty($list_id)) {
+				return array('skipped' => true, 'reason' => 'Mailchimp credentials missing.');
+			}
+			$mc = new RL_FSBI_Mailchimp($mc_key);
+			if (! $mc->is_configured()) {
+				return array('skipped' => true, 'reason' => 'Mailchimp API key invalid.');
+			}
+		}
+
+		$api = $this->get_api_client();
+		if (! $api) {
+			return array('skipped' => true, 'reason' => 'Freemius API client not configured.');
+		}
+
+		$catalog = $this->settings->get_option('rl_fsbi_plugins_catalog', array());
+		$plugin_ids = is_array($catalog) ? array_values(array_filter(array_map('intval', array_keys($catalog)))) : array();
+		if (empty($plugin_ids)) {
+			return array('skipped' => true, 'reason' => 'No plugins found in catalog.');
+		}
+
+		global $wpdb;
+		$sub_table = $wpdb->prefix . 'rl_fsbi_subscriptions';
+		$lic_table = $wpdb->prefix . 'rl_fsbi_licenses';
+
+		$default_tag_mc = trim((string) $this->settings->get_option('rl_fsbi_mc_default_tag', 'Freemius Opt-in')) ?: 'Freemius Opt-in';
+		$default_tag_kit_raw = trim((string) $this->settings->get_option('rl_fsbi_kit_default_tag', 'Freemius Opt-in'));
+		$default_kit_tag_id = 0;
+		if (is_numeric($default_tag_kit_raw) && isset($kit_tags[(int) $default_tag_kit_raw])) {
+			$default_kit_tag_id = (int) $default_tag_kit_raw;
+		} else {
+			foreach ($kit_tags as $t_id => $t_name) {
+				if (strcasecmp($t_name, $default_tag_kit_raw) === 0) {
+					$default_kit_tag_id = (int) $t_id;
+					break;
+				}
+			}
+			if ($default_kit_tag_id <= 0 && ! empty($kit_tags)) {
+				$default_kit_tag_id = (int) array_key_first($kit_tags);
+			}
+		}
+
+		$total_synced = 0;
+		$total_scanned = 0;
+		$last_sync_time = strtotime($last_sync_utc);
+
+		foreach ($plugin_ids as $pid) {
+			$users = $api->retrieve_users($pid, array('count' => 50, 'offset' => 0));
+			if (empty($users) || ! is_array($users)) {
+				continue;
+			}
+
+			foreach ($users as $user) {
+				$u_arr = is_array($user) ? $user : (array) $user;
+				$created = $u_arr['created'] ?? '';
+				if (! empty($created) && strtotime($created) <= $last_sync_time) {
+					// Reached checkpoint of users synced or exported previously!
+					break;
+				}
+
+				$total_scanned++;
+				$is_optin = ! empty($u_arr['is_marketing_allowed']);
+				$email = sanitize_email($u_arr['email'] ?? '');
+				if (! $is_optin || empty($email)) {
+					continue;
+				}
+
+				$fname   = sanitize_text_field($u_arr['first'] ?? ($u_arr['first_name'] ?? ''));
+				$lname   = sanitize_text_field($u_arr['last'] ?? ($u_arr['last_name'] ?? ''));
+				$user_id = (int) ($u_arr['id'] ?? 0);
+
+				$plan_id = null;
+				if ($user_id > 0) {
+					$plan_id = $wpdb->get_var($wpdb->prepare(
+						"SELECT plan_id FROM {$sub_table} WHERE user_id = %d AND plan_id > 0 ORDER BY id DESC LIMIT 1",
+						$user_id
+					));
+					if (! $plan_id) {
+						$plan_id = $wpdb->get_var($wpdb->prepare(
+							"SELECT plan_id FROM {$lic_table} WHERE user_id = %d AND plan_id > 0 ORDER BY id DESC LIMIT 1",
+							$user_id
+						));
+					}
+				}
+
+				$site_url = '';
+				if ($user_id > 0) {
+					$cached_site = get_transient('rl_fsbi_user_site_' . (int) $pid . '_' . (int) $user_id);
+					if (false !== $cached_site && is_array($cached_site)) {
+						$site_url = $cached_site['url'] ?? '';
+					}
+				}
+
+				if ('kit' === $provider && $kit) {
+					$assigned_tag_id = $default_kit_tag_id;
+					if (! empty($plan_id)) {
+						$mapped_raw = trim((string) $this->settings->get_option('rl_fsbi_kit_plan_tag_' . (int) $plan_id, ''));
+						if (! empty($mapped_raw) && is_numeric($mapped_raw) && isset($kit_tags[(int) $mapped_raw])) {
+							$assigned_tag_id = (int) $mapped_raw;
+						}
+					}
+					if ($assigned_tag_id > 0) {
+						$res = $kit->upsert_subscriber($assigned_tag_id, $email, $fname, array(), $site_url);
+						if (! is_wp_error($res)) {
+							$total_synced++;
+						}
+					}
+				} elseif ($mc) {
+					$tags = array($default_tag_mc);
+					$res = $mc->upsert_subscriber($list_id, $email, $fname, $lname, $tags, $site_url);
+					if (! is_wp_error($res)) {
+						$total_synced++;
+					}
+				}
+			}
+		}
+
+		$now_utc = gmdate('Y-m-d H:i:s');
+		update_option('rl_fsbi_newsletter_last_sync_utc', $now_utc);
+		update_option('rl_fsbi_newsletter_cron_status', sprintf('Daily sync completed at %s UTC: %d new opt-in(s) synced.', $now_utc, $total_synced));
+
+		return array(
+			'success'      => true,
+			'total_synced' => $total_synced,
+			'scanned'      => $total_scanned,
+			'checkpoint'   => $now_utc,
+		);
 	}
 
 	private function refresh_latest_freemius_data()
@@ -1816,6 +1993,134 @@ class RL_FSBI_Admin
 	}
 
 	/**
+	 * Get configured Freemius API client instance.
+	 *
+	 * @return RL_FSBI_API|null
+	 */
+	private function get_api_client()
+	{
+		$developer_id = $this->settings->get_option('rl_fsbi_developer_id');
+		$public_key   = $this->settings->get_option('rl_fsbi_public_key');
+		$secret_key   = $this->settings->get_option('rl_fsbi_secret_key');
+
+		if (! $developer_id || ! $public_key || ! $secret_key) {
+			return null;
+		}
+
+		return new RL_FSBI_API($developer_id, $public_key, $secret_key);
+	}
+
+	/**
+	 * Handle AJAX request for marketing opt-ins.
+	 */
+	public function handle_get_marketing_optins_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		$api = $this->get_api_client();
+		if (! $api) {
+			wp_send_json_error(esc_html__('API client not configured.', 'rl-freemius-bi'));
+		}
+
+		$plugin_id_raw = isset($_POST['plugin_id']) ? sanitize_text_field(wp_unslash($_POST['plugin_id'])) : 'all';
+		$plugin_id     = 'all' === $plugin_id_raw ? 0 : max(0, (int) $plugin_id_raw);
+
+		$offset       = isset($_POST['offset']) ? max(0, (int) $_POST['offset']) : 0;
+		$count        = isset($_POST['count']) ? max(0, (int) $_POST['count']) : 0;
+		$plugin_index = isset($_POST['plugin_index']) ? max(0, (int) $_POST['plugin_index']) : 0;
+
+		$plugins_to_check = array();
+		if ($plugin_id > 0) {
+			$plugins_to_check[] = $plugin_id;
+		} else {
+			$catalog = $this->settings->get_option('rl_fsbi_plugins_catalog', array());
+			if (is_array($catalog) && ! empty($catalog)) {
+				$plugins_to_check = array_values(array_filter(array_map('intval', array_keys($catalog))));
+			}
+		}
+
+		if (empty($plugins_to_check) || ! isset($plugins_to_check[$plugin_index])) {
+			wp_send_json_success(array(
+				'count'        => $count,
+				'offset'       => 0,
+				'plugin_index' => 0,
+				'done'         => true,
+			));
+		}
+
+		$current_plugin_id = $plugins_to_check[$plugin_index];
+		$batch_size        = 50;
+
+		$users = $api->retrieve_users($current_plugin_id, array(
+			'count'  => $batch_size,
+			'offset' => $offset,
+		));
+
+		if (empty($users) || ! is_array($users)) {
+			// Move to next plugin
+			$next_index = $plugin_index + 1;
+			$done       = ! isset($plugins_to_check[$next_index]);
+
+			if ($done) {
+				$cache_key = 'rl_fsbi_optins_count_' . ($plugin_id > 0 ? (int) $plugin_id : 'all');
+				update_option($cache_key, $count);
+				update_option($cache_key . '_updated', current_time('mysql'));
+			}
+
+			wp_send_json_success(array(
+				'count'        => $count,
+				'offset'       => 0,
+				'plugin_index' => $next_index,
+				'done'         => $done,
+			));
+		}
+
+		$fetched_count = count($users);
+
+		foreach ($users as $user) {
+			$is_optin = false;
+			if (is_array($user)) {
+				$is_optin = ! empty($user['is_marketing_allowed']);
+			} elseif (is_object($user)) {
+				$is_optin = ! empty($user->is_marketing_allowed);
+			}
+
+			if ($is_optin) {
+				$count++;
+			}
+		}
+
+		if ($fetched_count < $batch_size) {
+			$next_index = $plugin_index + 1;
+			$done       = ! isset($plugins_to_check[$next_index]);
+
+			if ($done) {
+				$cache_key = 'rl_fsbi_optins_count_' . ($plugin_id > 0 ? (int) $plugin_id : 'all');
+				update_option($cache_key, $count);
+				update_option($cache_key . '_updated', current_time('mysql'));
+			}
+
+			wp_send_json_success(array(
+				'count'        => $count,
+				'offset'       => 0,
+				'plugin_index' => $next_index,
+				'done'         => $done,
+			));
+		}
+
+		wp_send_json_success(array(
+			'count'        => $count,
+			'offset'       => $offset + $fetched_count,
+			'plugin_index' => $plugin_index,
+			'done'         => false,
+		));
+	}
+
+	/**
 	 * Handle AJAX request for dashboard data.
 	 */
 	public function handle_get_dashboard_data_ajax()
@@ -1899,7 +2204,1185 @@ class RL_FSBI_Admin
 		$data['plugin_title']   = $plugin_title;
 		$data['plugin_version'] = $plugin_version;
 
+		// Include cached marketing opt-in count for instant widget display
+		$cache_key    = 'rl_fsbi_optins_count_' . ($plugin_id > 0 ? (int) $plugin_id : 'all');
+		$optins_count = (int) get_option($cache_key, 0);
+
+		$provider = (string) $this->settings->get_option('rl_fsbi_newsletter_provider', 'mailchimp');
+		if ($optins_count <= 0) {
+			if ('kit' === $provider) {
+				$kit_key = trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', ''));
+				if (! empty($kit_key)) {
+					$kit = new RL_FSBI_Kit($kit_key);
+					if ($kit->is_configured()) {
+						$count = $kit->get_total_subscribers();
+						if ($count > 0) {
+							$optins_count = $count;
+							update_option($cache_key, $count);
+							update_option($cache_key . '_updated', current_time('mysql'));
+						}
+					}
+				}
+			} elseif ('mailchimp' === $provider) {
+				$mc_key  = trim((string) $this->settings->get_option('rl_fsbi_mailchimp_api_key', ''));
+				$list_id = trim((string) $this->settings->get_option('rl_fsbi_mailchimp_list_id', ''));
+				if (! empty($mc_key) && ! empty($list_id)) {
+					$mc = new RL_FSBI_Mailchimp($mc_key);
+					if ($mc->is_configured()) {
+						$count = $mc->get_member_count($list_id);
+						if ($count > 0) {
+							$optins_count = $count;
+							update_option($cache_key, $count);
+							update_option($cache_key . '_updated', current_time('mysql'));
+						}
+					}
+				}
+			}
+		}
+
+		$data['marketing_optins']         = $optins_count;
+		$data['marketing_optins_updated'] = (string) get_option($cache_key . '_updated', '');
+		$data['newsletter_provider']      = $provider;
+
 		wp_send_json_success($data);
+	}
+
+	/**
+	 * Handle AJAX request to fetch Mailchimp lists and audience tags.
+	 */
+	public function handle_fetch_mailchimp_data_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		$api_key = isset($_POST['api_key']) ? sanitize_text_field(wp_unslash($_POST['api_key'])) : '';
+		if (empty($api_key)) {
+			$api_key = (string) $this->settings->get_option('rl_fsbi_mailchimp_api_key', '');
+		}
+
+		if (empty($api_key)) {
+			wp_send_json_error(esc_html__('Missing Mailchimp API key.', 'rl-freemius-bi'));
+		}
+
+		$mc = new RL_FSBI_Mailchimp($api_key);
+		if (! $mc->is_configured()) {
+			wp_send_json_error(esc_html__('Invalid Mailchimp API key format. Ensure key includes data center suffix (e.g. -us1).', 'rl-freemius-bi'));
+		}
+
+		$lists = $mc->get_lists(true);
+
+		$list_id = isset($_POST['list_id']) ? sanitize_text_field(wp_unslash($_POST['list_id'])) : '';
+		if (empty($list_id)) {
+			$list_id = (string) $this->settings->get_option('rl_fsbi_mailchimp_list_id', '');
+		}
+
+		$tags = array();
+		if (! empty($list_id)) {
+			$tags = $mc->get_tags($list_id, true);
+		}
+
+		wp_send_json_success(array(
+			'lists' => $lists,
+			'tags'  => $tags,
+		));
+	}
+
+	/**
+	 * Handle AJAX request to fetch current member count from Mailchimp audience.
+	 */
+	public function handle_fetch_mailchimp_list_stats_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		$mc_key  = trim((string) $this->settings->get_option('rl_fsbi_mailchimp_api_key', ''));
+		$list_id = isset($_POST['list_id']) ? sanitize_text_field(wp_unslash($_POST['list_id'])) : '';
+		if (empty($list_id)) {
+			$list_id = trim((string) $this->settings->get_option('rl_fsbi_mailchimp_list_id', ''));
+		}
+
+		if (empty($mc_key) || empty($list_id)) {
+			wp_send_json_error(esc_html__('Mailchimp API Key or Default Audience is not configured in Settings.', 'rl-freemius-bi'));
+		}
+
+		$mc = new RL_FSBI_Mailchimp($mc_key);
+		if (! $mc->is_configured()) {
+			wp_send_json_error(esc_html__('Mailchimp API key is invalid.', 'rl-freemius-bi'));
+		}
+
+		$stats = $mc->get_list_stats($list_id);
+		if (empty($stats)) {
+			wp_send_json_error(esc_html__('Failed to fetch Mailchimp audience stats.', 'rl-freemius-bi'));
+		}
+
+		$member_count  = (int) ($stats['member_count'] ?? 0);
+		$plugin_id_raw = isset($_POST['plugin_id']) ? sanitize_text_field(wp_unslash($_POST['plugin_id'])) : 'all';
+		$cache_key     = 'rl_fsbi_optins_count_' . ('all' === $plugin_id_raw ? 'all' : (int) $plugin_id_raw);
+
+		update_option($cache_key, $member_count);
+		update_option($cache_key . '_updated', current_time('mysql'));
+
+		wp_send_json_success(array(
+			'stats'        => $stats,
+			'member_count' => $member_count,
+			'message'      => sprintf(esc_html__('Audience stats updated: %d members.', 'rl-freemius-bi'), $member_count),
+		));
+	}
+
+	/**
+	 * Handle AJAX request to run a sample synchronization test.
+	 */
+	public function handle_sample_mailchimp_test_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		$logs = array();
+		$add_log = function(string $level, string $message, array $context = array()) use (&$logs) {
+			$entry = array(
+				'time'    => current_time('H:i:s'),
+				'level'   => $level,
+				'message' => $message,
+				'context' => $context,
+			);
+			$logs[] = $entry;
+
+			if (class_exists('RL_Logger')) {
+				if ('error' === $level) {
+					RL_Logger::error($message, $context);
+				} elseif ('warn' === $level) {
+					RL_Logger::warn($message, $context);
+				} elseif ('info' === $level) {
+					RL_Logger::info($message, $context);
+				} else {
+					RL_Logger::debug($message, $context);
+				}
+			}
+		};
+
+		$sample_count  = isset($_POST['sample_count']) ? max(1, min(50, (int) $_POST['sample_count'])) : 5;
+		$plugin_id_raw = isset($_POST['plugin_id']) ? sanitize_text_field(wp_unslash($_POST['plugin_id'])) : 'all';
+		$plugin_id     = 'all' === $plugin_id_raw ? 0 : max(0, (int) $plugin_id_raw);
+		$dry_run       = ! empty($_POST['dry_run']);
+
+		$add_log('info', sprintf('Starting sample test run: sample_size=%d, plugin_id=%s, dry_run=%s', $sample_count, $plugin_id_raw, $dry_run ? 'true' : 'false'));
+
+		// Check Freemius API Client
+		$api = $this->get_api_client();
+		if (! $api) {
+			$add_log('error', 'Freemius API client is not configured. Check Developer ID, Public Key, and Secret Key.');
+			wp_send_json_error(array('logs' => $logs, 'message' => esc_html__('Freemius API client not configured.', 'rl-freemius-bi')));
+		}
+		$add_log('info', 'Freemius API client authenticated successfully.');
+
+		// Check Mailchimp API
+		$mc_key  = trim((string) $this->settings->get_option('rl_fsbi_mailchimp_api_key', ''));
+		$list_id = trim((string) $this->settings->get_option('rl_fsbi_mailchimp_list_id', ''));
+		if (empty($mc_key) || empty($list_id)) {
+			$add_log('error', 'Mailchimp API Key or Default Audience is missing in Settings.');
+			wp_send_json_error(array('logs' => $logs, 'message' => esc_html__('Mailchimp configuration incomplete in Settings.', 'rl-freemius-bi')));
+		}
+
+		$mc = new RL_FSBI_Mailchimp($mc_key);
+		if (! $mc->is_configured()) {
+			$add_log('error', 'Mailchimp API key is invalid format (missing datacenter suffix like -us1).');
+			wp_send_json_error(array('logs' => $logs, 'message' => esc_html__('Invalid Mailchimp API key.', 'rl-freemius-bi')));
+		}
+		$add_log('info', sprintf('Mailchimp API configured with target audience list ID: %s', $list_id));
+
+		// Resolve plugin(s) to fetch from
+		$plugins_to_check = array();
+		$catalog = $this->settings->get_option('rl_fsbi_plugins_catalog', array());
+		if ($plugin_id > 0) {
+			$plugins_to_check[] = $plugin_id;
+		} elseif (is_array($catalog) && ! empty($catalog)) {
+			$plugins_to_check = array_values(array_filter(array_map('intval', array_keys($catalog))));
+		}
+
+		if (empty($plugins_to_check)) {
+			$add_log('error', 'No tracked plugins found in catalog.');
+			wp_send_json_error(array('logs' => $logs, 'message' => esc_html__('No tracked plugins available.', 'rl-freemius-bi')));
+		}
+
+		$sampled_users   = array();
+		$remaining_count = $sample_count;
+
+		foreach ($plugins_to_check as $pid) {
+			if ($remaining_count <= 0) {
+				break;
+			}
+			$title = $catalog[(string) $pid]['title'] ?? ('Plugin #' . $pid);
+			$add_log('info', sprintf('Querying Freemius API for %s (ID: %d), requesting up to %d users...', $title, $pid, $remaining_count));
+
+			$fetched = $api->retrieve_users($pid, array(
+				'count'  => $remaining_count,
+				'offset' => 0,
+			));
+
+			if (! empty($fetched) && is_array($fetched)) {
+				$add_log('info', sprintf(' -> Received %d users from %s.', count($fetched), $title));
+				foreach ($fetched as $u) {
+					$sampled_users[] = array(
+						'user'      => $u,
+						'plugin_id' => $pid,
+					);
+				}
+				$remaining_count -= count($fetched);
+			} else {
+				$add_log('info', sprintf(' -> 0 users returned for %s.', $title));
+			}
+
+			if ($plugin_id > 0) {
+				break;
+			}
+		}
+
+		if (empty($sampled_users)) {
+			$add_log('warn', 'Freemius API returned 0 users across the queried plugin(s).');
+			wp_send_json_success(array('logs' => $logs, 'summary' => array('scanned' => 0, 'optins' => 0, 'synced' => 0)));
+		}
+
+		$add_log('info', sprintf('Successfully received %d total users from Freemius. Beginning per-user inspection...', count($sampled_users)));
+
+		global $wpdb;
+		$default_tag = trim((string) $this->settings->get_option('rl_fsbi_mc_default_tag', 'Freemius Opt-in'));
+		if (empty($default_tag)) {
+			$default_tag = 'Freemius Opt-in';
+		}
+		$sub_table = $wpdb->prefix . 'rl_fsbi_subscriptions';
+		$lic_table = $wpdb->prefix . 'rl_fsbi_licenses';
+
+		$scanned = 0;
+		$optins  = 0;
+		$synced  = 0;
+		$skipped = 0;
+		$errors  = 0;
+
+		foreach ($sampled_users as $sample_item) {
+			$user       = $sample_item['user'];
+			$target_pid = $sample_item['plugin_id'];
+			$scanned++;
+			$u_arr = is_array($user) ? $user : (array) $user;
+			$u_id  = (int) ($u_arr['id'] ?? 0);
+			$email = sanitize_email($u_arr['email'] ?? '');
+			$fname = sanitize_text_field($u_arr['first'] ?? ($u_arr['first_name'] ?? ''));
+			$lname = sanitize_text_field($u_arr['last'] ?? ($u_arr['last_name'] ?? ''));
+			$is_optin = ! empty($u_arr['is_marketing_allowed']);
+
+			// Mask email for display in logs
+			$masked_email = $email;
+			if (strpos($email, '@') !== false) {
+				$parts = explode('@', $email, 2);
+				$masked_email = substr($parts[0], 0, 2) . '***@' . $parts[1];
+			}
+
+			$add_log('debug', sprintf('[User #%d] ID: %d | Email: %s | is_marketing_allowed: %s', $scanned, $u_id, $masked_email, $is_optin ? 'TRUE' : 'FALSE'));
+
+			if (! $is_optin) {
+				$skipped++;
+				$add_log('debug', ' -> Skipped: user opted out of marketing communications.');
+				continue;
+			}
+
+			if (empty($email)) {
+				$skipped++;
+				$add_log('warn', ' -> Skipped: user does not have a valid email address.');
+				continue;
+			}
+
+			$optins++;
+			$add_log('info', sprintf(' -> Marketing Opt-in confirmed for user #%d (%s). Checking plan ownership...', $u_id, $masked_email));
+
+			// Plan resolution
+			$plan_id = null;
+			if ($u_id > 0) {
+				$plan_id = $wpdb->get_var($wpdb->prepare(
+					"SELECT plan_id FROM {$sub_table} WHERE user_id = %d AND plan_id > 0 ORDER BY id DESC LIMIT 1",
+					$u_id
+				));
+				if (! $plan_id) {
+					$plan_id = $wpdb->get_var($wpdb->prepare(
+						"SELECT plan_id FROM {$lic_table} WHERE user_id = %d AND plan_id > 0 ORDER BY id DESC LIMIT 1",
+						$u_id
+					));
+				}
+			}
+
+			$assigned_tag = $default_tag;
+			if (! empty($plan_id)) {
+				$mapped_tag = trim((string) $this->settings->get_option('rl_fsbi_mc_plan_tag_' . (int) $plan_id, ''));
+				if (! empty($mapped_tag)) {
+					$assigned_tag = $mapped_tag;
+					$add_log('debug', sprintf('    Found active plan ID #%d -> Mapped tag: "%s"', $plan_id, $assigned_tag));
+				} else {
+					$plan_name = $wpdb->get_var($wpdb->prepare(
+						"SELECT plan_name FROM {$wpdb->prefix}rl_fsbi_plans WHERE plan_id = %d LIMIT 1",
+						(int) $plan_id
+					));
+					$assigned_tag = ! empty($plan_name) ? sanitize_text_field($plan_name) : $default_tag;
+					$add_log('debug', sprintf('    Found active plan ID #%d (%s) -> Plan name tag: "%s"', $plan_id, $plan_name ?: 'Unnamed', $assigned_tag));
+				}
+			} else {
+				$add_log('debug', sprintf('    No active paid plan found in database -> Assigned fallback tag: "%s"', $assigned_tag));
+			}
+
+			// Site origin lookup
+			$site_url   = '';
+			$site_title = '';
+			if ($u_id > 0) {
+				$site_cache_key = 'rl_fsbi_user_site_' . (int) $target_pid . '_' . (int) $u_id;
+				$cached_site    = get_transient($site_cache_key);
+				if (false !== $cached_site && is_array($cached_site)) {
+					$site_url   = $cached_site['url'] ?? '';
+					$site_title = $cached_site['title'] ?? '';
+				} else {
+					$installs = $api->retrieve_installs($target_pid, $u_id, array('count' => 1));
+					if (! empty($installs) && is_array($installs)) {
+						$first_install = is_array($installs[0]) ? $installs[0] : (array) $installs[0];
+						$site_url   = sanitize_text_field($first_install['url'] ?? '');
+						$site_title = sanitize_text_field($first_install['title'] ?? '');
+						set_transient($site_cache_key, array('url' => $site_url, 'title' => $site_title), WEEK_IN_SECONDS);
+					} else {
+						set_transient($site_cache_key, array('url' => '', 'title' => ''), WEEK_IN_SECONDS);
+					}
+				}
+			}
+
+			if (! empty($site_url)) {
+				$site_display = ! empty($site_title) ? sprintf('%s ("%s")', $site_url, $site_title) : $site_url;
+				$add_log('info', sprintf('    Opt-in Site Origin: %s', $site_display));
+			} else {
+				$add_log('debug', '    Opt-in Site Origin: None found or install record not available.');
+			}
+
+			if ($dry_run) {
+				$add_log('info', sprintf(' -> [DRY RUN] Would upsert to Mailchimp audience "%s" with tag ["%s"]%s.', 
+					$list_id, 
+					$assigned_tag,
+					! empty($site_url) ? (' and website "' . $site_url . '"') : ''
+				));
+				$synced++;
+			} else {
+				$res = $mc->upsert_subscriber($list_id, $email, $fname, $lname, array($assigned_tag), $site_url);
+				if (is_wp_error($res)) {
+					$errors++;
+					$add_log('error', sprintf(' -> Mailchimp API Error: %s', $res->get_error_message()));
+				} else {
+					$synced++;
+					$add_log('info', sprintf(' -> [SUCCESS] Upserted to Mailchimp list %s with tag "%s"%s.', 
+						$list_id, 
+						$assigned_tag,
+						! empty($site_url) ? (' and website ' . $site_url) : ''
+					));
+				}
+			}
+		}
+
+		// Audience stats verification
+		$audience_stats = $mc->get_list_stats($list_id);
+		if (! empty($audience_stats)) {
+			$add_log('info', sprintf('Current Mailchimp Audience "%s": %d active members, %d unsubscribed, %d cleaned/bounced.', 
+				$audience_stats['name'] ?? $list_id,
+				$audience_stats['member_count'],
+				$audience_stats['unsubscribe_count'],
+				$audience_stats['cleaned_count']
+			));
+		}
+
+		$add_log('info', sprintf('Sample run completed: Scanned %d users, Found %d opt-ins, Synced %d, Skipped %d, Errors %d.', $scanned, $optins, $synced, $skipped, $errors));
+
+		wp_send_json_success(array(
+			'logs'    => $logs,
+			'summary' => array(
+				'scanned'        => $scanned,
+				'optins'         => $optins,
+				'synced'         => $synced,
+				'skipped'        => $skipped,
+				'errors'         => $errors,
+				'audience_stats' => $audience_stats,
+			),
+		));
+	}
+
+	/**
+	 * Handle AJAX request to fetch Kit tags.
+	 */
+	public function handle_fetch_kit_data_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		$api_key = isset($_POST['api_key']) ? sanitize_text_field(wp_unslash($_POST['api_key'])) : '';
+		if (empty($api_key)) {
+			$api_key = (string) $this->settings->get_option('rl_fsbi_kit_api_key', '');
+		}
+
+		$api_secret = isset($_POST['api_secret']) ? sanitize_text_field(wp_unslash($_POST['api_secret'])) : '';
+		if (empty($api_secret)) {
+			$api_secret = (string) $this->settings->get_option('rl_fsbi_kit_api_secret', '');
+		}
+
+		if (empty($api_key)) {
+			wp_send_json_error(esc_html__('Missing Kit V4 API key.', 'rl-freemius-bi'));
+		}
+
+		$kit = new RL_FSBI_Kit($api_key, $api_secret);
+		if (! $kit->is_configured()) {
+			wp_send_json_error(esc_html__('Invalid Kit API key.', 'rl-freemius-bi'));
+		}
+
+		$tags = $kit->get_tags(true);
+		$kit->ensure_custom_field('Website');
+
+		wp_send_json_success(array(
+			'tags' => $tags,
+		));
+	}
+
+	/**
+	 * Handle AJAX request to fetch current member count from Kit.
+	 */
+	public function handle_fetch_kit_stats_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		$kit_key    = trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', ''));
+		$kit_secret = trim((string) $this->settings->get_option('rl_fsbi_kit_api_secret', ''));
+
+		if (empty($kit_key)) {
+			wp_send_json_error(esc_html__('Kit API Key is not configured in Settings.', 'rl-freemius-bi'));
+		}
+
+		$kit = new RL_FSBI_Kit($kit_key, $kit_secret);
+		if (! $kit->is_configured()) {
+			wp_send_json_error(esc_html__('Kit API key is invalid.', 'rl-freemius-bi'));
+		}
+
+		$count = $kit->get_total_subscribers();
+		$plugin_id_raw = isset($_POST['plugin_id']) ? sanitize_text_field(wp_unslash($_POST['plugin_id'])) : 'all';
+		$cache_key     = 'rl_fsbi_optins_count_' . ('all' === $plugin_id_raw ? 'all' : (int) $plugin_id_raw);
+
+		update_option($cache_key, $count);
+		update_option($cache_key . '_updated', current_time('mysql'));
+
+		wp_send_json_success(array(
+			'count'        => $count,
+			'member_count' => $count,
+			'updated'      => get_option($cache_key . '_updated', current_time('mysql')),
+			'plugin_id'    => $plugin_id_raw,
+			'message'      => sprintf(esc_html__('Kit subscriber count updated: %d subscribers.', 'rl-freemius-bi'), $count),
+		));
+	}
+
+	/**
+	 * Handle AJAX request to run a sample synchronization test for Kit.com.
+	 */
+	public function handle_sample_kit_test_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		$logs = array();
+		$add_log = function(string $level, string $message, array $context = array()) use (&$logs) {
+			$entry = array(
+				'time'    => current_time('H:i:s'),
+				'level'   => $level,
+				'message' => $message,
+				'context' => $context,
+			);
+			$logs[] = $entry;
+
+			if (class_exists('RL_Logger')) {
+				if ('error' === $level) {
+					RL_Logger::error($message, $context);
+				} elseif ('warn' === $level) {
+					RL_Logger::warn($message, $context);
+				} elseif ('info' === $level) {
+					RL_Logger::info($message, $context);
+				} else {
+					RL_Logger::debug($message, $context);
+				}
+			}
+		};
+
+		$sample_count  = isset($_POST['sample_count']) ? max(1, min(50, (int) $_POST['sample_count'])) : 5;
+		$plugin_id_raw = isset($_POST['plugin_id']) ? sanitize_text_field(wp_unslash($_POST['plugin_id'])) : 'all';
+		$plugin_id     = 'all' === $plugin_id_raw ? 0 : max(0, (int) $plugin_id_raw);
+		$dry_run       = ! empty($_POST['dry_run']);
+
+		$add_log('info', sprintf('Starting Kit.com sample test run: sample_size=%d, plugin_id=%s, dry_run=%s', $sample_count, $plugin_id_raw, $dry_run ? 'true' : 'false'));
+
+		// Check Freemius API Client
+		$api = $this->get_api_client();
+		if (! $api) {
+			$add_log('error', 'Freemius API client is not configured. Check Developer ID, Public Key, and Secret Key.');
+			wp_send_json_error(array('logs' => $logs, 'message' => esc_html__('Freemius API client not configured.', 'rl-freemius-bi')));
+		}
+		$add_log('info', 'Freemius API client authenticated successfully.');
+
+		// Check Kit API
+		$kit_key    = trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', ''));
+		$kit_secret = trim((string) $this->settings->get_option('rl_fsbi_kit_api_secret', ''));
+		if (empty($kit_key)) {
+			$add_log('error', 'Kit V4 API Key is missing in Settings.');
+			wp_send_json_error(array('logs' => $logs, 'message' => esc_html__('Kit configuration incomplete in Settings.', 'rl-freemius-bi')));
+		}
+
+		$kit = new RL_FSBI_Kit($kit_key, $kit_secret);
+		if (! $kit->is_configured()) {
+			$add_log('error', 'Kit API key is invalid.');
+			wp_send_json_error(array('logs' => $logs, 'message' => esc_html__('Invalid Kit API key.', 'rl-freemius-bi')));
+		}
+		$add_log('info', 'Kit.com API v4 client initialized.');
+
+		$account = $kit->get_account();
+		if (! is_wp_error($account) && is_array($account)) {
+			$acct_name = $account['primary_email_address'] ?? ($account['name'] ?? '');
+			if (! empty($acct_name)) {
+				$add_log('info', sprintf('Authenticated with Kit API v4 account: %s', $acct_name));
+			}
+		}
+
+		$kit_tags = $kit->get_tags();
+		$add_log('info', sprintf('Discovered %d tags in Kit.com account.', count($kit_tags)));
+
+		$cf_ok = $kit->ensure_custom_field('Website');
+		$add_log('debug', sprintf('Kit "Website" custom field verified: %s', $cf_ok ? 'TRUE' : 'FALSE'));
+
+		// Resolve plugin(s) to fetch from
+		$plugins_to_check = array();
+		$catalog = $this->settings->get_option('rl_fsbi_plugins_catalog', array());
+		if ($plugin_id > 0) {
+			$plugins_to_check[] = $plugin_id;
+		} elseif (is_array($catalog) && ! empty($catalog)) {
+			$plugins_to_check = array_values(array_filter(array_map('intval', array_keys($catalog))));
+		}
+
+		if (empty($plugins_to_check)) {
+			$add_log('error', 'No tracked plugins found in catalog.');
+			wp_send_json_error(array('logs' => $logs, 'message' => esc_html__('No tracked plugins available.', 'rl-freemius-bi')));
+		}
+
+		$sampled_users   = array();
+		$remaining_count = $sample_count;
+
+		foreach ($plugins_to_check as $pid) {
+			if ($remaining_count <= 0) {
+				break;
+			}
+			$title = $catalog[(string) $pid]['title'] ?? ('Plugin #' . $pid);
+			$add_log('info', sprintf('Querying Freemius API for %s (ID: %d), requesting up to %d users...', $title, $pid, $remaining_count));
+
+			$fetched = $api->retrieve_users($pid, array(
+				'count'  => $remaining_count,
+				'offset' => 0,
+			));
+
+			if (! empty($fetched) && is_array($fetched)) {
+				$add_log('info', sprintf(' -> Received %d users from %s.', count($fetched), $title));
+				foreach ($fetched as $u) {
+					$sampled_users[] = array(
+						'user'      => $u,
+						'plugin_id' => $pid,
+					);
+				}
+				$remaining_count -= count($fetched);
+			} else {
+				$add_log('info', sprintf(' -> 0 users returned for %s.', $title));
+			}
+
+			if ($plugin_id > 0) {
+				break;
+			}
+		}
+
+		if (empty($sampled_users)) {
+			$add_log('warn', 'Freemius API returned 0 users across the queried plugin(s).');
+			wp_send_json_success(array('logs' => $logs, 'summary' => array('scanned' => 0, 'optins' => 0, 'synced' => 0)));
+		}
+
+		$add_log('info', sprintf('Successfully received %d total users from Freemius. Beginning per-user inspection...', count($sampled_users)));
+
+		global $wpdb;
+		$default_tag_raw = trim((string) $this->settings->get_option('rl_fsbi_kit_default_tag', 'Freemius Opt-in'));
+		if (empty($default_tag_raw)) {
+			$default_tag_raw = 'Freemius Opt-in';
+		}
+
+		// Resolve default tag ID
+		$default_tag_id = 0;
+		if (is_numeric($default_tag_raw) && isset($kit_tags[(int) $default_tag_raw])) {
+			$default_tag_id = (int) $default_tag_raw;
+		} else {
+			foreach ($kit_tags as $t_id => $t_name) {
+				if (strcasecmp($t_name, $default_tag_raw) === 0) {
+					$default_tag_id = (int) $t_id;
+					break;
+				}
+			}
+			if ($default_tag_id <= 0 && ! empty($kit_tags)) {
+				$default_tag_id = (int) array_key_first($kit_tags);
+			}
+		}
+
+		$default_tag_label = $kit_tags[$default_tag_id] ?? ('Tag #' . $default_tag_id);
+
+		$sub_table = $wpdb->prefix . 'rl_fsbi_subscriptions';
+		$lic_table = $wpdb->prefix . 'rl_fsbi_licenses';
+
+		$scanned = 0;
+		$optins  = 0;
+		$synced  = 0;
+		$skipped = 0;
+		$errors  = 0;
+
+		foreach ($sampled_users as $sample_item) {
+			$user       = $sample_item['user'];
+			$target_pid = $sample_item['plugin_id'];
+			$scanned++;
+			$u_arr = is_array($user) ? $user : (array) $user;
+			$u_id  = (int) ($u_arr['id'] ?? 0);
+			$email = sanitize_email($u_arr['email'] ?? '');
+			$fname = sanitize_text_field($u_arr['first'] ?? ($u_arr['first_name'] ?? ''));
+			$lname = sanitize_text_field($u_arr['last'] ?? ($u_arr['last_name'] ?? ''));
+			$is_optin = ! empty($u_arr['is_marketing_allowed']);
+
+			$masked_email = $email;
+			if (strpos($email, '@') !== false) {
+				$parts = explode('@', $email, 2);
+				$masked_email = substr($parts[0], 0, 2) . '***@' . $parts[1];
+			}
+
+			$add_log('debug', sprintf('[User #%d] ID: %d | Email: %s | is_marketing_allowed: %s', $scanned, $u_id, $masked_email, $is_optin ? 'TRUE' : 'FALSE'));
+
+			if (! $is_optin) {
+				$skipped++;
+				$add_log('debug', ' -> Skipped: user opted out of marketing communications.');
+				continue;
+			}
+
+			if (empty($email)) {
+				$skipped++;
+				$add_log('warn', ' -> Skipped: user does not have a valid email address.');
+				continue;
+			}
+
+			$optins++;
+			$add_log('info', sprintf(' -> Marketing Opt-in confirmed for user #%d (%s). Checking plan ownership...', $u_id, $masked_email));
+
+			// Plan resolution
+			$plan_id = null;
+			if ($u_id > 0) {
+				$plan_id = $wpdb->get_var($wpdb->prepare(
+					"SELECT plan_id FROM {$sub_table} WHERE user_id = %d AND plan_id > 0 ORDER BY id DESC LIMIT 1",
+					$u_id
+				));
+				if (! $plan_id) {
+					$plan_id = $wpdb->get_var($wpdb->prepare(
+						"SELECT plan_id FROM {$lic_table} WHERE user_id = %d AND plan_id > 0 ORDER BY id DESC LIMIT 1",
+						$u_id
+					));
+				}
+			}
+
+			$assigned_tag_id = $default_tag_id;
+			$assigned_tag_label = $default_tag_label;
+
+			if (! empty($plan_id)) {
+				$mapped_tag_raw = trim((string) $this->settings->get_option('rl_fsbi_kit_plan_tag_' . (int) $plan_id, ''));
+				if (! empty($mapped_tag_raw)) {
+					if (is_numeric($mapped_tag_raw) && isset($kit_tags[(int) $mapped_tag_raw])) {
+						$assigned_tag_id = (int) $mapped_tag_raw;
+						$assigned_tag_label = $kit_tags[$assigned_tag_id];
+					} else {
+						foreach ($kit_tags as $t_id => $t_name) {
+							if (strcasecmp($t_name, $mapped_tag_raw) === 0) {
+								$assigned_tag_id = (int) $t_id;
+								$assigned_tag_label = $t_name;
+								break;
+							}
+						}
+					}
+					$add_log('debug', sprintf('    Found active plan ID #%d -> Mapped Kit tag: "%s" (ID: %d)', $plan_id, $assigned_tag_label, $assigned_tag_id));
+				} else {
+					$add_log('debug', sprintf('    Found active plan ID #%d -> Assigned default Kit tag: "%s" (ID: %d)', $plan_id, $assigned_tag_label, $assigned_tag_id));
+				}
+			} else {
+				$add_log('debug', sprintf('    No active paid plan in database -> Assigned fallback Kit tag: "%s" (ID: %d)', $assigned_tag_label, $assigned_tag_id));
+			}
+
+			// Site origin lookup
+			$site_url   = '';
+			$site_title = '';
+			if ($u_id > 0) {
+				$site_cache_key = 'rl_fsbi_user_site_' . (int) $target_pid . '_' . (int) $u_id;
+				$cached_site    = get_transient($site_cache_key);
+				if (false !== $cached_site && is_array($cached_site)) {
+					$site_url   = $cached_site['url'] ?? '';
+					$site_title = $cached_site['title'] ?? '';
+				} else {
+					$installs = $api->retrieve_installs($target_pid, $u_id, array('count' => 1));
+					if (! empty($installs) && is_array($installs)) {
+						$first_install = is_array($installs[0]) ? $installs[0] : (array) $installs[0];
+						$site_url   = sanitize_text_field($first_install['url'] ?? '');
+						$site_title = sanitize_text_field($first_install['title'] ?? '');
+						set_transient($site_cache_key, array('url' => $site_url, 'title' => $site_title), WEEK_IN_SECONDS);
+					} else {
+						set_transient($site_cache_key, array('url' => '', 'title' => ''), WEEK_IN_SECONDS);
+					}
+				}
+			}
+
+			if (! empty($site_url)) {
+				$site_display = ! empty($site_title) ? sprintf('%s ("%s")', $site_url, $site_title) : $site_url;
+				$add_log('info', sprintf('    Opt-in Site Origin: %s', $site_display));
+			} else {
+				$add_log('debug', '    Opt-in Site Origin: None found or install record not available.');
+			}
+
+			if ($dry_run) {
+				$add_log('info', sprintf(' -> [DRY RUN] Would upsert to Kit.com with tag "%s" (ID: %d)%s.', 
+					$assigned_tag_label, 
+					$assigned_tag_id,
+					! empty($site_url) ? (' and website "' . $site_url . '"') : ''
+				));
+				$synced++;
+			} else {
+				if ($assigned_tag_id <= 0) {
+					$errors++;
+					$add_log('error', ' -> Cannot sync: no valid Kit tag ID available. Create at least one tag in Kit.com first.');
+				} else {
+					$res = $kit->upsert_subscriber($assigned_tag_id, $email, $fname, array(), $site_url);
+					if (is_wp_error($res)) {
+						$errors++;
+						$add_log('error', sprintf(' -> Kit API Error: %s', $res->get_error_message()));
+					} else {
+						$synced++;
+						$add_log('info', sprintf(' -> [SUCCESS] Upserted to Kit.com with tag "%s" (ID: %d)%s.', 
+							$assigned_tag_label, 
+							$assigned_tag_id,
+							! empty($site_url) ? (' and website ' . $site_url) : ''
+						));
+					}
+				}
+			}
+		}
+
+		$subscriber_total = $kit->get_total_subscribers();
+		if ($subscriber_total > 0) {
+			$add_log('info', sprintf('Current Kit.com Account Total: %d active subscribers.', $subscriber_total));
+		}
+
+		$add_log('info', sprintf('Kit.com sample run completed: Scanned %d users, Found %d opt-ins, Synced %d, Skipped %d, Errors %d.', $scanned, $optins, $synced, $skipped, $errors));
+
+		wp_send_json_success(array(
+			'logs'    => $logs,
+			'summary' => array(
+				'scanned'          => $scanned,
+				'optins'           => $optins,
+				'synced'           => $synced,
+				'skipped'          => $skipped,
+				'errors'           => $errors,
+				'subscriber_total' => $subscriber_total,
+			),
+		));
+	}
+
+	/**
+	 * Handle AJAX request to batch-sync Freemius marketing opt-ins to active newsletter provider (Mailchimp or Kit.com).
+	 */
+	public function handle_sync_mailchimp_optins_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		@set_time_limit(120);
+
+		$provider = (string) $this->settings->get_option('rl_fsbi_newsletter_provider', '');
+		if (empty($provider)) {
+			$has_kit = ! empty(trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', '')));
+			$has_mc  = ! empty(trim((string) $this->settings->get_option('rl_fsbi_mailchimp_api_key', '')));
+			$provider = $has_kit ? 'kit' : ($has_mc ? 'mailchimp' : 'kit');
+		}
+
+		$mc  = null;
+		$kit = null;
+		$list_id = '';
+		$kit_tags = array();
+
+		if ('kit' === $provider) {
+			$kit_key    = trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', ''));
+			$kit_secret = trim((string) $this->settings->get_option('rl_fsbi_kit_api_secret', ''));
+
+			if (empty($kit_key)) {
+				wp_send_json_error(esc_html__('Kit API Key is not configured in Settings.', 'rl-freemius-bi'));
+			}
+
+			$kit = new RL_FSBI_Kit($kit_key, $kit_secret);
+			if (! $kit->is_configured()) {
+				wp_send_json_error(esc_html__('Kit API key is invalid.', 'rl-freemius-bi'));
+			}
+			$kit_tags = $kit->get_tags();
+		} else {
+			$mc_key  = trim((string) $this->settings->get_option('rl_fsbi_mailchimp_api_key', ''));
+			$list_id = trim((string) $this->settings->get_option('rl_fsbi_mailchimp_list_id', ''));
+
+			if (empty($mc_key) || empty($list_id)) {
+				wp_send_json_error(esc_html__('Mailchimp API Key or Default Audience is not configured in Settings.', 'rl-freemius-bi'));
+			}
+
+			$mc = new RL_FSBI_Mailchimp($mc_key);
+			if (! $mc->is_configured()) {
+				wp_send_json_error(esc_html__('Mailchimp API key is invalid.', 'rl-freemius-bi'));
+			}
+		}
+
+		$api = $this->get_api_client();
+		if (! $api) {
+			wp_send_json_error(esc_html__('Freemius API client is not configured.', 'rl-freemius-bi'));
+		}
+
+		$plugin_id_raw = isset($_POST['plugin_id']) ? sanitize_text_field(wp_unslash($_POST['plugin_id'])) : 'all';
+		$plugin_id     = 'all' === $plugin_id_raw ? 0 : max(0, (int) $plugin_id_raw);
+
+		$offset        = isset($_POST['offset']) ? max(0, (int) $_POST['offset']) : 0;
+		$synced_count  = isset($_POST['synced_count']) ? max(0, (int) $_POST['synced_count']) : 0;
+		$scanned_count = isset($_POST['scanned_count']) ? max(0, (int) $_POST['scanned_count']) : 0;
+		$optins_count  = isset($_POST['optins_count']) ? max(0, (int) $_POST['optins_count']) : 0;
+		$errors_count  = isset($_POST['errors_count']) ? max(0, (int) $_POST['errors_count']) : 0;
+		$plugin_index  = isset($_POST['plugin_index']) ? max(0, (int) $_POST['plugin_index']) : 0;
+		$delta_only    = ! empty($_POST['delta_only']);
+		$last_sync_utc = (string) get_option('rl_fsbi_newsletter_last_sync_utc', '');
+		$last_sync_ts  = ! empty($last_sync_utc) ? strtotime($last_sync_utc) : 0;
+
+		$plugins_to_check = array();
+		$catalog = $this->settings->get_option('rl_fsbi_plugins_catalog', array());
+		if ($plugin_id > 0) {
+			$plugins_to_check[] = $plugin_id;
+		} elseif (is_array($catalog) && ! empty($catalog)) {
+			$plugins_to_check = array_values(array_filter(array_map('intval', array_keys($catalog))));
+		}
+
+		$total_plugins = count($plugins_to_check);
+
+		if (empty($plugins_to_check) || ! isset($plugins_to_check[$plugin_index])) {
+			$member_count = $synced_count;
+			if ('kit' === $provider && $kit) {
+				$kit_total = $kit->get_total_subscribers();
+				if ($kit_total > 0) {
+					$member_count = $kit_total;
+				}
+			} elseif ($mc && ! empty($list_id)) {
+				$mc_stats = $mc->get_list_stats($list_id);
+				if (! empty($mc_stats['member_count'])) {
+					$member_count = (int) $mc_stats['member_count'];
+				}
+			}
+
+			$cache_key = 'rl_fsbi_optins_count_' . ($plugin_id > 0 ? (int) $plugin_id : 'all');
+			update_option($cache_key, $member_count);
+			update_option($cache_key . '_updated', current_time('mysql'));
+			update_option('rl_fsbi_newsletter_last_sync_utc', gmdate('Y-m-d H:i:s'));
+
+			$provider_name = 'kit' === $provider ? 'Kit.com' : 'Mailchimp';
+			wp_send_json_success(array(
+				'scanned_count'         => $scanned_count,
+				'optins_count'          => $optins_count,
+				'synced_count'          => $synced_count,
+				'errors_count'          => $errors_count,
+				'offset'                => 0,
+				'plugin_index'          => 0,
+				'total_plugins'         => $total_plugins,
+				'current_plugin_title'  => '',
+				'audience_member_count' => $member_count,
+				'done'                  => true,
+				'logs'                  => array(
+					sprintf('[%s] ✓ Sync complete: %d contacts synced to %s (Total subscribers: %d).', current_time('H:i:s'), $synced_count, $provider_name, $member_count),
+				),
+				'message'               => sprintf(esc_html__('Sync complete: %d contacts synced to %s (Total: %d).', 'rl-freemius-bi'), $synced_count, $provider_name, $member_count),
+			));
+		}
+
+		$current_plugin_id    = $plugins_to_check[$plugin_index];
+		$current_plugin_title = $catalog[(string) $current_plugin_id]['title'] ?? ('Plugin #' . $current_plugin_id);
+		$batch_size           = 15;
+		$provider_name        = 'kit' === $provider ? 'Kit.com' : 'Mailchimp';
+		$batch_logs           = array();
+
+		$users = $api->retrieve_users($current_plugin_id, array(
+			'count'  => $batch_size,
+			'offset' => $offset,
+		));
+
+		global $wpdb;
+		$sub_table = $wpdb->prefix . 'rl_fsbi_subscriptions';
+		$lic_table = $wpdb->prefix . 'rl_fsbi_licenses';
+
+		$default_tag_mc = trim((string) $this->settings->get_option('rl_fsbi_mc_default_tag', 'Freemius Opt-in'));
+		if (empty($default_tag_mc)) {
+			$default_tag_mc = 'Freemius Opt-in';
+		}
+
+		$default_tag_kit_raw = trim((string) $this->settings->get_option('rl_fsbi_kit_default_tag', 'Freemius Opt-in'));
+		$default_kit_tag_id = 0;
+		if (is_numeric($default_tag_kit_raw) && isset($kit_tags[(int) $default_tag_kit_raw])) {
+			$default_kit_tag_id = (int) $default_tag_kit_raw;
+		} else {
+			foreach ($kit_tags as $t_id => $t_name) {
+				if (strcasecmp($t_name, $default_tag_kit_raw) === 0) {
+					$default_kit_tag_id = (int) $t_id;
+					break;
+				}
+			}
+			if ($default_kit_tag_id <= 0 && ! empty($kit_tags)) {
+				$default_kit_tag_id = (int) array_key_first($kit_tags);
+			}
+		}
+
+		$hit_delta_cutoff = false;
+
+		if (! empty($users) && is_array($users)) {
+			foreach ($users as $user) {
+				$scanned_count++;
+				$is_optin = false;
+				$email    = '';
+				$fname    = '';
+				$lname    = '';
+				$user_id  = 0;
+				$created  = '';
+
+				if (is_array($user)) {
+					$is_optin = ! empty($user['is_marketing_allowed']);
+					$email    = sanitize_email($user['email'] ?? '');
+					$fname    = sanitize_text_field($user['first'] ?? ($user['first_name'] ?? ''));
+					$lname    = sanitize_text_field($user['last'] ?? ($user['last_name'] ?? ''));
+					$user_id  = (int) ($user['id'] ?? 0);
+					$created  = sanitize_text_field($user['created'] ?? '');
+				} elseif (is_object($user)) {
+					$is_optin = ! empty($user->is_marketing_allowed);
+					$email    = sanitize_email($user->email ?? '');
+					$fname    = sanitize_text_field($user->first ?? ($user->first_name ?? ''));
+					$lname    = sanitize_text_field($user->last ?? ($user->last_name ?? ''));
+					$user_id  = (int) ($user->id ?? 0);
+					$created  = sanitize_text_field($user->created ?? '');
+				}
+
+				if ($delta_only && $last_sync_ts > 0 && ! empty($created) && strtotime($created) <= $last_sync_ts) {
+					// Reached checkpoint of previously synced or exported users
+					$hit_delta_cutoff = true;
+					$batch_logs[] = sprintf('[%s] %s: Reached sync checkpoint (%s). Advancing...', current_time('H:i:s'), $current_plugin_title, $last_sync_utc);
+					break;
+				}
+
+				if (! $is_optin || empty($email)) {
+					continue;
+				}
+
+				$optins_count++;
+
+				// Find user's plan from subscriptions or licenses
+				$plan_id = null;
+				if ($user_id > 0) {
+					$plan_id = $wpdb->get_var($wpdb->prepare(
+						"SELECT plan_id FROM {$sub_table} WHERE user_id = %d AND plan_id > 0 ORDER BY id DESC LIMIT 1",
+						$user_id
+					));
+					if (! $plan_id) {
+						$plan_id = $wpdb->get_var($wpdb->prepare(
+							"SELECT plan_id FROM {$lic_table} WHERE user_id = %d AND plan_id > 0 ORDER BY id DESC LIMIT 1",
+							$user_id
+						));
+					}
+				}
+
+				// Site origin lookup
+				$site_url = '';
+				if ($user_id > 0) {
+					$site_cache_key = 'rl_fsbi_user_site_' . (int) $current_plugin_id . '_' . (int) $user_id;
+					$cached_site    = get_transient($site_cache_key);
+					if (false !== $cached_site && is_array($cached_site)) {
+						$site_url = $cached_site['url'] ?? '';
+					} else {
+						$installs = $api->retrieve_installs($current_plugin_id, $user_id, array('count' => 1));
+						if (! empty($installs) && is_array($installs)) {
+							$first_install = is_array($installs[0]) ? $installs[0] : (array) $installs[0];
+							$site_url = sanitize_text_field($first_install['url'] ?? '');
+							$site_title = sanitize_text_field($first_install['title'] ?? '');
+							set_transient($site_cache_key, array('url' => $site_url, 'title' => $site_title), WEEK_IN_SECONDS);
+						} else {
+							set_transient($site_cache_key, array('url' => '', 'title' => ''), WEEK_IN_SECONDS);
+						}
+					}
+				}
+
+				if ('kit' === $provider && $kit) {
+					$assigned_tag_id = $default_kit_tag_id;
+					if (! empty($plan_id)) {
+						$mapped_tag_raw = trim((string) $this->settings->get_option('rl_fsbi_kit_plan_tag_' . (int) $plan_id, ''));
+						if (! empty($mapped_tag_raw)) {
+							if (is_numeric($mapped_tag_raw) && isset($kit_tags[(int) $mapped_tag_raw])) {
+								$assigned_tag_id = (int) $mapped_tag_raw;
+							} else {
+								foreach ($kit_tags as $t_id => $t_name) {
+									if (strcasecmp($t_name, $mapped_tag_raw) === 0) {
+										$assigned_tag_id = (int) $t_id;
+										break;
+									}
+								}
+							}
+						}
+					}
+
+					if ($assigned_tag_id > 0) {
+						$res = $kit->upsert_subscriber($assigned_tag_id, $email, $fname, array(), $site_url);
+						if (is_wp_error($res)) {
+							$errors_count++;
+							$batch_logs[] = sprintf('[%s] ⚠ %s: Error syncing %s to Kit: %s', current_time('H:i:s'), $current_plugin_title, $email, $res->get_error_message());
+						} else {
+							$synced_count++;
+							$tag_label = $kit_tags[$assigned_tag_id] ?? ('Tag #' . $assigned_tag_id);
+							$batch_logs[] = sprintf('[%s] ✓ %s: Synced %s (%s) to Kit [Tag: %s]', current_time('H:i:s'), $current_plugin_title, $email, $fname ?: 'Contact', $tag_label);
+						}
+					} else {
+						$errors_count++;
+						$batch_logs[] = sprintf('[%s] ⚠ %s: No Kit tag configured for %s', current_time('H:i:s'), $current_plugin_title, $email);
+					}
+				} elseif ($mc) {
+					// Resolve tag for user's plan in Mailchimp
+					$tags_to_apply = array();
+					if (! empty($plan_id)) {
+						$mapped_tag = trim((string) $this->settings->get_option('rl_fsbi_mc_plan_tag_' . (int) $plan_id, ''));
+						if (! empty($mapped_tag)) {
+							$tags_to_apply[] = $mapped_tag;
+						} else {
+							$plan_name = $wpdb->get_var($wpdb->prepare(
+								"SELECT plan_name FROM {$wpdb->prefix}rl_fsbi_plans WHERE plan_id = %d LIMIT 1",
+								(int) $plan_id
+							));
+							if (! empty($plan_name)) {
+								$tags_to_apply[] = sanitize_text_field($plan_name);
+							} else {
+								$tags_to_apply[] = $default_tag_mc;
+							}
+						}
+					} else {
+						$tags_to_apply[] = $default_tag_mc;
+					}
+
+					$res = $mc->upsert_subscriber($list_id, $email, $fname, $lname, $tags_to_apply, $site_url);
+					if (is_wp_error($res)) {
+						$errors_count++;
+						$batch_logs[] = sprintf('[%s] ⚠ %s: Error syncing %s to Mailchimp: %s', current_time('H:i:s'), $current_plugin_title, $email, $res->get_error_message());
+					} else {
+						$synced_count++;
+						$batch_logs[] = sprintf('[%s] ✓ %s: Synced %s to Mailchimp [Tags: %s]', current_time('H:i:s'), $current_plugin_title, $email, implode(', ', $tags_to_apply));
+					}
+				}
+			}
+		}
+
+		if (empty($batch_logs)) {
+			$batch_logs[] = sprintf(
+				'[%s] %s: Scanned %d user(s) (Scanned: %d | Opt-ins: %d | Synced: %d).',
+				current_time('H:i:s'),
+				$current_plugin_title,
+				! empty($users) ? count($users) : 0,
+				$scanned_count,
+				$optins_count,
+				$synced_count
+			);
+		}
+
+		if ($hit_delta_cutoff || empty($users) || count($users) < $batch_size) {
+			$next_index = $plugin_index + 1;
+			$done       = ! isset($plugins_to_check[$next_index]);
+
+			$member_count = $synced_count;
+			if ($done) {
+				if ('kit' === $provider && $kit) {
+					$kit_total = $kit->get_total_subscribers();
+					if ($kit_total > 0) {
+						$member_count = $kit_total;
+					}
+				} elseif ($mc && ! empty($list_id)) {
+					$mc_stats = $mc->get_list_stats($list_id);
+					if (! empty($mc_stats['member_count'])) {
+						$member_count = (int) $mc_stats['member_count'];
+					}
+				}
+				$cache_key   = 'rl_fsbi_optins_count_' . ($plugin_id > 0 ? (int) $plugin_id : 'all');
+				update_option($cache_key, $member_count);
+				update_option($cache_key . '_updated', current_time('mysql'));
+				update_option('rl_fsbi_newsletter_last_sync_utc', gmdate('Y-m-d H:i:s'));
+
+				$batch_logs[] = sprintf(
+					'[%s] ✓ Sync complete: %d contacts synced to %s (Total subscribers: %d).',
+					current_time('H:i:s'),
+					$synced_count,
+					$provider_name,
+					$member_count
+				);
+			} else {
+				$batch_logs[] = sprintf(
+					'[%s] Finished scanning %s. Advancing to next plugin...',
+					current_time('H:i:s'),
+					$current_plugin_title
+				);
+			}
+
+			wp_send_json_success(array(
+				'scanned_count'         => $scanned_count,
+				'optins_count'          => $optins_count,
+				'synced_count'          => $synced_count,
+				'errors_count'          => $errors_count,
+				'offset'                => 0,
+				'plugin_index'          => $next_index,
+				'total_plugins'         => $total_plugins,
+				'current_plugin_title'  => $current_plugin_title,
+				'audience_member_count' => $member_count,
+				'done'                  => $done,
+				'logs'                  => $batch_logs,
+				'message'               => $done
+					? sprintf(esc_html__('Sync complete: %d contacts synced to %s (Total: %d).', 'rl-freemius-bi'), $synced_count, $provider_name, $member_count)
+					: sprintf(esc_html__('Finished %s. Moving to next plugin...', 'rl-freemius-bi'), $current_plugin_title),
+			));
+		}
+
+		wp_send_json_success(array(
+			'scanned_count'        => $scanned_count,
+			'optins_count'         => $optins_count,
+			'synced_count'         => $synced_count,
+			'errors_count'         => $errors_count,
+			'offset'               => $offset + $batch_size,
+			'plugin_index'         => $plugin_index,
+			'total_plugins'        => $total_plugins,
+			'current_plugin_title' => $current_plugin_title,
+			'done'                 => false,
+			'logs'                 => $batch_logs,
+			'message'              => sprintf(esc_html__('Scanning %s... %d users scanned (%d opt-ins, %d synced).', 'rl-freemius-bi'), $current_plugin_title, $scanned_count, $optins_count, $synced_count),
+		));
 	}
 
 	/**
@@ -2021,6 +3504,526 @@ class RL_FSBI_Admin
 		));
 
 		fclose($output);
+		exit;
+	}
+
+	/**
+	 * Handle AJAX request to export Freemius marketing opt-ins to a Kit.com-compatible CSV file.
+	 */
+	public function handle_export_optins_csv_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_die(esc_html__('Unauthorized', 'rl-freemius-bi'), 403);
+		}
+
+		@ini_set('memory_limit', '512M');
+		@set_time_limit(0);
+		if (function_exists('apache_setenv')) {
+			@apache_setenv('no-gzip', 1);
+		}
+		@ini_set('zlib.output_compression', 0);
+		@ini_set('implicit_flush', 1);
+
+		$api = $this->get_api_client();
+		if (! $api) {
+			wp_die(esc_html__('Freemius API client is not configured.', 'rl-freemius-bi'), 400);
+		}
+
+		$plugin_id_raw = isset($_REQUEST['plugin_id']) ? sanitize_text_field(wp_unslash($_REQUEST['plugin_id'])) : 'all';
+		$plugin_id     = 'all' === $plugin_id_raw ? 0 : max(0, (int) $plugin_id_raw);
+
+		$catalog = $this->settings->get_option('rl_fsbi_plugins_catalog', array());
+		$plugins_to_export = array();
+		if ($plugin_id > 0) {
+			$plugins_to_export[] = $plugin_id;
+		} elseif (is_array($catalog) && ! empty($catalog)) {
+			$plugins_to_export = array_values(array_filter(array_map('intval', array_keys($catalog))));
+		}
+
+		if (empty($plugins_to_export)) {
+			wp_die(esc_html__('No plugins found to export.', 'rl-freemius-bi'), 400);
+		}
+
+		global $wpdb;
+		$sub_table  = $wpdb->prefix . 'rl_fsbi_subscriptions';
+		$lic_table  = $wpdb->prefix . 'rl_fsbi_licenses';
+		$plan_table = $wpdb->prefix . 'rl_fsbi_plans';
+
+		// Preload plan names for fast tag assignment
+		$plans_cache = array();
+		$plans_results = $wpdb->get_results("SELECT plan_id, plan_name FROM {$plan_table}");
+		if (! empty($plans_results)) {
+			foreach ($plans_results as $p_row) {
+				$plans_cache[(int) $p_row->plan_id] = sanitize_text_field($p_row->plan_name);
+			}
+		}
+
+		// Preload all user plans in memory to avoid tens of thousands of database queries during bulk export
+		$user_plans = array();
+		$sub_rows = $wpdb->get_results("SELECT user_id, plan_id FROM {$sub_table} WHERE user_id > 0 AND plan_id > 0 ORDER BY id ASC");
+		if (! empty($sub_rows)) {
+			foreach ($sub_rows as $row) {
+				$user_plans[(int) $row->user_id] = (int) $row->plan_id;
+			}
+		}
+		$lic_rows = $wpdb->get_results("SELECT user_id, plan_id FROM {$lic_table} WHERE user_id > 0 AND plan_id > 0 ORDER BY id ASC");
+		if (! empty($lic_rows)) {
+			foreach ($lic_rows as $row) {
+				if (! isset($user_plans[(int) $row->user_id])) {
+					$user_plans[(int) $row->user_id] = (int) $row->plan_id;
+				}
+			}
+		}
+
+		// Preload cached install URLs if available
+		$cached_sites = array();
+		$site_transients = $wpdb->get_results("SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE '_transient_rl_fsbi_user_site_%'");
+		if (! empty($site_transients)) {
+			foreach ($site_transients as $st) {
+				$val = maybe_unserialize($st->option_value);
+				if (is_array($val) && ! empty($val['url'])) {
+					$key = str_replace('_transient_rl_fsbi_user_site_', '', $st->option_name);
+					$cached_sites[$key] = sanitize_text_field($val['url']);
+				}
+			}
+		}
+
+		// Fetch Kit tags map to resolve numeric tag IDs to human-readable names for CSV import
+		$kit_tags = array();
+		$kit_key  = trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', ''));
+		$kit_secret = trim((string) $this->settings->get_option('rl_fsbi_kit_api_secret', ''));
+		if (! empty($kit_key)) {
+			$kit = new RL_FSBI_Kit($kit_key, $kit_secret);
+			if ($kit->is_configured()) {
+				$kit_tags = $kit->get_tags();
+			}
+		}
+
+		$default_tag = trim((string) $this->settings->get_option('rl_fsbi_kit_default_tag', 'Freemius Opt-in'));
+		if (empty($default_tag)) {
+			$default_tag = 'Freemius Opt-in';
+		} elseif (is_numeric($default_tag)) {
+			$default_tag = $kit_tags[(int) $default_tag] ?? 'Freemius Opt-in';
+		}
+
+		$plugin_slug = $plugin_id > 0 ? 'plugin-' . $plugin_id : 'all-plugins';
+		$filename = sprintf('freemius-optins-kit-%s-%s.csv', $plugin_slug, gmdate('Y-m-d'));
+
+		// Clean any existing output buffer immediately before sending attachment headers
+		while (ob_get_level() > 0) {
+			@ob_end_clean();
+		}
+
+		// Send CSV download headers
+		nocache_headers();
+		header('Content-Type: text/csv; charset=UTF-8');
+		header('Content-Disposition: attachment; filename="' . esc_attr($filename) . '"');
+		header('Access-Control-Expose-Headers: Content-Disposition');
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		$output = fopen('php://output', 'w');
+		// UTF-8 BOM for Kit & Excel compatibility
+		fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+		// Kit.com Recommended CSV Header structure
+		fputcsv($output, array(
+			'Email Address',
+			'First Name',
+			'Last Name',
+			'Tags',
+			'Website',
+			'Freemius User ID',
+			'Plugin',
+			'Opted In Date',
+		));
+
+		$seen_emails  = array();
+		$total_optins = 0;
+		$batch_size   = 50; // Freemius API returns maximum 50 users per page
+
+		foreach ($plugins_to_export as $pid) {
+			$plugin_title = $catalog[(string) $pid]['title'] ?? ('Plugin #' . $pid);
+			$offset = 0;
+
+			while (true) {
+				$users = $api->retrieve_users($pid, array(
+					'count'  => $batch_size,
+					'offset' => $offset,
+				));
+
+				if (empty($users) || ! is_array($users)) {
+					break;
+				}
+
+				$fetched_count = count($users);
+				if ($fetched_count === 0) {
+					break;
+				}
+
+				foreach ($users as $user) {
+					$u_arr = is_array($user) ? $user : (array) $user;
+					$is_optin = ! empty($u_arr['is_marketing_allowed']);
+					$email    = sanitize_email($u_arr['email'] ?? '');
+
+					if (! $is_optin || empty($email)) {
+						continue;
+					}
+
+					// Deduplicate across plugins if exporting all
+					$email_lower = strtolower($email);
+					if (isset($seen_emails[$email_lower])) {
+						continue;
+					}
+					$seen_emails[$email_lower] = true;
+
+					$fname   = sanitize_text_field($u_arr['first'] ?? ($u_arr['first_name'] ?? ''));
+					$lname   = sanitize_text_field($u_arr['last'] ?? ($u_arr['last_name'] ?? ''));
+					$user_id = (int) ($u_arr['id'] ?? 0);
+					$created = sanitize_text_field($u_arr['created'] ?? '');
+
+					// Instant in-memory plan tag lookup with Kit tag name resolution
+					$tag = $default_tag;
+					if ($user_id > 0 && isset($user_plans[$user_id])) {
+						$p_id = (int) $user_plans[$user_id];
+						$mapped_plan_tag = trim((string) $this->settings->get_option('rl_fsbi_kit_plan_tag_' . $p_id, ''));
+						if (! empty($mapped_plan_tag)) {
+							$tag = is_numeric($mapped_plan_tag) ? ($kit_tags[(int) $mapped_plan_tag] ?? $mapped_plan_tag) : $mapped_plan_tag;
+						} elseif (isset($plans_cache[$p_id])) {
+							$tag = $plans_cache[$p_id];
+						}
+					}
+
+					// Instant in-memory site lookup
+					$site_url = $user_id > 0 ? ($cached_sites[$pid . '_' . $user_id] ?? '') : '';
+
+					fputcsv($output, array(
+						$email,
+						$fname,
+						$lname,
+						$tag,
+						$site_url,
+						$user_id > 0 ? (string) $user_id : '',
+						$plugin_title,
+						$created,
+					));
+
+					$total_optins++;
+				}
+
+				$offset += $fetched_count;
+
+				// If Freemius returned fewer users than requested (50), we reached the end of records
+				if ($fetched_count < $batch_size) {
+					break;
+				}
+
+				if (function_exists('ob_flush') && ob_get_level() > 0) {
+					@ob_flush();
+				}
+				flush();
+			}
+		}
+
+		fclose($output);
+
+		// Record last sync checkpoint and cache count
+		$now_utc = gmdate('Y-m-d H:i:s');
+		update_option('rl_fsbi_newsletter_last_sync_utc', $now_utc);
+		if ($total_optins > 0) {
+			$cache_key = 'rl_fsbi_optins_count_' . ($plugin_id > 0 ? (int) $plugin_id : 'all');
+			update_option($cache_key, $total_optins);
+			update_option($cache_key . '_updated', current_time('mysql'));
+		}
+
+		exit;
+	}
+
+	/**
+	 * Handle chunked AJAX generation of the complete opt-ins CSV directly on the server.
+	 *
+	 * Writes batches incrementally to disk, emails the administrator upon completion,
+	 * and returns real-time progress for the dashboard UI.
+	 */
+	public function handle_generate_optins_csv_batch_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		@set_time_limit(120);
+
+		$api = $this->get_api_client();
+		if (! $api) {
+			wp_send_json_error(esc_html__('Freemius API client is not configured.', 'rl-freemius-bi'));
+		}
+
+		$plugin_id_raw = isset($_POST['plugin_id']) ? sanitize_text_field(wp_unslash($_POST['plugin_id'])) : 'all';
+		$plugin_id     = 'all' === $plugin_id_raw ? 0 : max(0, (int) $plugin_id_raw);
+
+		$offset        = isset($_POST['offset']) ? max(0, (int) $_POST['offset']) : 0;
+		$scanned_count = isset($_POST['scanned_count']) ? max(0, (int) $_POST['scanned_count']) : 0;
+		$optins_count  = isset($_POST['optins_count']) ? max(0, (int) $_POST['optins_count']) : 0;
+		$plugin_index  = isset($_POST['plugin_index']) ? max(0, (int) $_POST['plugin_index']) : 0;
+		$file_token    = isset($_POST['file_token']) ? sanitize_file_name(wp_unslash($_POST['file_token'])) : '';
+		$email_admin   = ! empty($_POST['email_admin']);
+
+		if (empty($file_token)) {
+			$file_token = 'fsbi_optins_' . gmdate('Ymd_His');
+		}
+
+		$catalog = $this->settings->get_option('rl_fsbi_plugins_catalog', array());
+		$plugins_to_export = array();
+		if ($plugin_id > 0) {
+			$plugins_to_export[] = $plugin_id;
+		} elseif (is_array($catalog) && ! empty($catalog)) {
+			$plugins_to_export = array_values(array_filter(array_map('intval', array_keys($catalog))));
+		}
+
+		$total_plugins = count($plugins_to_export);
+
+		$upload_dir = wp_upload_dir();
+		$export_dir = $upload_dir['basedir'] . '/fsbi-exports';
+		if (! file_exists($export_dir)) {
+			wp_mkdir_p($export_dir);
+		}
+
+		$file_path = $export_dir . '/' . $file_token . '.csv';
+
+		// On first batch, initialize file with UTF-8 BOM and headers
+		if (0 === $offset && 0 === $plugin_index) {
+			$fp_init = fopen($file_path, 'w');
+			if ($fp_init) {
+				fprintf($fp_init, chr(0xEF) . chr(0xBB) . chr(0xBF));
+				fputcsv($fp_init, array(
+					'Email Address',
+					'First Name',
+					'Last Name',
+					'Tags',
+					'Website',
+					'Freemius User ID',
+					'Plugin',
+					'Opted In Date',
+				));
+				fclose($fp_init);
+			}
+		}
+
+		// When all plugins are completed
+		if (empty($plugins_to_export) || ! isset($plugins_to_export[$plugin_index])) {
+			$now_utc = gmdate('Y-m-d H:i:s');
+			update_option('rl_fsbi_newsletter_last_sync_utc', $now_utc);
+			update_option('rl_fsbi_optins_count_' . ($plugin_id > 0 ? (int) $plugin_id : 'all'), $optins_count);
+			update_option('rl_fsbi_latest_optins_csv_export', array(
+				'token'        => $file_token,
+				'path'         => $file_path,
+				'filename'     => 'freemius-optins-kit-' . gmdate('Y-m-d') . '.csv',
+				'optins_count' => $optins_count,
+				'created_at'   => $now_utc,
+				'size'         => file_exists($file_path) ? filesize($file_path) : 0,
+			));
+
+			$email_sent = false;
+			$admin_email = get_option('admin_email');
+			if ($email_admin && ! empty($admin_email) && file_exists($file_path)) {
+				$subject = sprintf(esc_html__('[Freemius BI] Your Kit.com Opt-ins CSV Export (%d contacts)', 'rl-freemius-bi'), $optins_count);
+				$body    = sprintf(
+					esc_html__("Hello,\n\nYour Freemius Opt-ins CSV export has finished generating on your server.\n\nTotal Opted-in Contacts: %d\nTotal Users Scanned: %d\nExport File: %s\nGenerated At: %s UTC\n\nThe CSV file is attached to this email and ready for manual import into Kit.com.\n\nBest regards,\nRL Freemius BI", 'rl-freemius-bi'),
+					$optins_count,
+					$scanned_count,
+					basename($file_path),
+					$now_utc
+				);
+				$headers = array('Content-Type: text/plain; charset=UTF-8');
+				$attachments = array($file_path);
+				$email_sent = wp_mail($admin_email, $subject, $body, $headers, $attachments);
+			}
+
+			$download_url = admin_url('admin-ajax.php?action=rl_fsbi_download_generated_csv&token=' . urlencode($file_token) . '&nonce=' . wp_create_nonce('rl_fsbi_nonce'));
+
+			wp_send_json_success(array(
+				'done'          => true,
+				'scanned_count' => $scanned_count,
+				'optins_count'  => $optins_count,
+				'offset'        => 0,
+				'plugin_index'  => 0,
+				'file_token'    => $file_token,
+				'download_url'  => $download_url,
+				'filename'      => 'freemius-optins-kit-' . gmdate('Y-m-d') . '.csv',
+				'email_sent'    => $email_sent,
+				'admin_email'   => $admin_email,
+				'message'       => sprintf(esc_html__('Export completed! %d opt-ins generated.', 'rl-freemius-bi'), $optins_count),
+			));
+		}
+
+		$current_pid   = $plugins_to_export[$plugin_index];
+		$current_title = $catalog[(string) $current_pid]['title'] ?? ('Plugin #' . $current_pid);
+		$batch_size    = 50;
+
+		$users = $api->retrieve_users($current_pid, array(
+			'count'  => $batch_size,
+			'offset' => $offset,
+		));
+
+		global $wpdb;
+		$sub_table  = $wpdb->prefix . 'rl_fsbi_subscriptions';
+		$lic_table  = $wpdb->prefix . 'rl_fsbi_licenses';
+		$plan_table = $wpdb->prefix . 'rl_fsbi_plans';
+
+		$plans_cache = array();
+		$plans_results = $wpdb->get_results("SELECT plan_id, plan_name FROM {$plan_table}");
+		if (! empty($plans_results)) {
+			foreach ($plans_results as $p_row) {
+				$plans_cache[(int) $p_row->plan_id] = sanitize_text_field($p_row->plan_name);
+			}
+		}
+
+		$user_plans = array();
+		$sub_rows = $wpdb->get_results("SELECT user_id, plan_id FROM {$sub_table} WHERE user_id > 0 AND plan_id > 0 ORDER BY id ASC");
+		if (! empty($sub_rows)) {
+			foreach ($sub_rows as $row) {
+				$user_plans[(int) $row->user_id] = (int) $row->plan_id;
+			}
+		}
+		$lic_rows = $wpdb->get_results("SELECT user_id, plan_id FROM {$lic_table} WHERE user_id > 0 AND plan_id > 0 ORDER BY id ASC");
+		if (! empty($lic_rows)) {
+			foreach ($lic_rows as $row) {
+				if (! isset($user_plans[(int) $row->user_id])) {
+					$user_plans[(int) $row->user_id] = (int) $row->plan_id;
+				}
+			}
+		}
+
+		$kit_tags = array();
+		$kit_key  = trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', ''));
+		$kit_secret = trim((string) $this->settings->get_option('rl_fsbi_kit_api_secret', ''));
+		if (! empty($kit_key)) {
+			$kit = new RL_FSBI_Kit($kit_key, $kit_secret);
+			if ($kit->is_configured()) {
+				$kit_tags = $kit->get_tags();
+			}
+		}
+
+		$default_tag = trim((string) $this->settings->get_option('rl_fsbi_kit_default_tag', 'Freemius Opt-in'));
+		if (empty($default_tag)) {
+			$default_tag = 'Freemius Opt-in';
+		} elseif (is_numeric($default_tag)) {
+			$default_tag = $kit_tags[(int) $default_tag] ?? 'Freemius Opt-in';
+		}
+
+		$fetched_count = ! empty($users) && is_array($users) ? count($users) : 0;
+		$new_optins_batch = 0;
+
+		if ($fetched_count > 0) {
+			$fp = fopen($file_path, 'a');
+			if ($fp) {
+				foreach ($users as $user) {
+					$scanned_count++;
+					$u_arr    = (array) $user;
+					$is_optin = ! empty($u_arr['is_marketing_allowed']);
+					$email    = sanitize_email($u_arr['email'] ?? '');
+
+					if (! $is_optin || empty($email)) {
+						continue;
+					}
+
+					$fname   = sanitize_text_field($u_arr['first'] ?? ($u_arr['first_name'] ?? ''));
+					$lname   = sanitize_text_field($u_arr['last'] ?? ($u_arr['last_name'] ?? ''));
+					$user_id = (int) ($u_arr['id'] ?? 0);
+					$created = sanitize_text_field($u_arr['created'] ?? '');
+
+					$tag = $default_tag;
+					if ($user_id > 0 && isset($user_plans[$user_id])) {
+						$p_id = (int) $user_plans[$user_id];
+						$mapped_plan_tag = trim((string) $this->settings->get_option('rl_fsbi_kit_plan_tag_' . $p_id, ''));
+						if (! empty($mapped_plan_tag)) {
+							$tag = is_numeric($mapped_plan_tag) ? ($kit_tags[(int) $mapped_plan_tag] ?? $mapped_plan_tag) : $mapped_plan_tag;
+						} elseif (isset($plans_cache[$p_id])) {
+							$tag = $plans_cache[$p_id];
+						}
+					}
+
+					fputcsv($fp, array(
+						$email,
+						$fname,
+						$lname,
+						$tag,
+						'',
+						$user_id > 0 ? (string) $user_id : '',
+						$current_title,
+						$created,
+					));
+
+					$optins_count++;
+					$new_optins_batch++;
+				}
+				fclose($fp);
+			}
+		}
+
+		if ($fetched_count < $batch_size) {
+			$next_index = $plugin_index + 1;
+			wp_send_json_success(array(
+				'done'          => false,
+				'scanned_count' => $scanned_count,
+				'optins_count'  => $optins_count,
+				'offset'        => 0,
+				'plugin_index'  => $next_index,
+				'total_plugins' => $total_plugins,
+				'file_token'    => $file_token,
+				'message'       => sprintf(esc_html__('Finished %s. Advancing...', 'rl-freemius-bi'), $current_title),
+			));
+		}
+
+		wp_send_json_success(array(
+			'done'          => false,
+			'scanned_count' => $scanned_count,
+			'optins_count'  => $optins_count,
+			'offset'        => $offset + $fetched_count,
+			'plugin_index'  => $plugin_index,
+			'total_plugins' => $total_plugins,
+			'file_token'    => $file_token,
+			'message'       => sprintf(esc_html__('Scanning %s... (%d opt-ins found)', 'rl-freemius-bi'), $current_title, $optins_count),
+		));
+	}
+
+	/**
+	 * Handle secure download of generated CSV export file.
+	 */
+	public function handle_download_generated_csv_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_die(esc_html__('Unauthorized', 'rl-freemius-bi'), 403);
+		}
+
+		$token = isset($_GET['token']) ? sanitize_file_name(wp_unslash($_GET['token'])) : '';
+		if (empty($token)) {
+			wp_die(esc_html__('Invalid download token.', 'rl-freemius-bi'), 400);
+		}
+
+		$upload_dir = wp_upload_dir();
+		$file_path  = $upload_dir['basedir'] . '/fsbi-exports/' . $token . '.csv';
+
+		if (! file_exists($file_path)) {
+			wp_die(esc_html__('Export file not found or expired.', 'rl-freemius-bi'), 404);
+		}
+
+		$filename = sprintf('freemius-optins-kit-%s.csv', gmdate('Y-m-d'));
+
+		nocache_headers();
+		header('Content-Type: text/csv; charset=UTF-8');
+		header('Content-Disposition: attachment; filename="' . esc_attr($filename) . '"');
+		header('Content-Length: ' . filesize($file_path));
+		header('Pragma: no-cache');
+		header('Expires: 0');
+
+		readfile($file_path);
 		exit;
 	}
 
