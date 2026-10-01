@@ -10,7 +10,7 @@
  * Plugin Name:       RL Freemius Business Intelligence
  * Plugin URI:        https://rosendolabs.com
  * Description:       Comprehensive Business Intelligence dashboard for Freemius plugin sales, renewals, MRR, and payouts.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Author:            Rosendo Labs
  * Author URI:        https://rosendolabs.com
  * License:           GPL-2.0+
@@ -27,7 +27,7 @@ if ( ! defined( 'WPINC' ) ) {
  * Currently plugin version.
  * Start at version 1.0.0 and use SemVer - https://semver.org
  */
-define( 'RL_FSBI_VERSION', '1.0.0' );
+define( 'RL_FSBI_VERSION', '1.1.0' );
 define( 'RL_FSBI_DB_VERSION', '1.0.0' );
 define( 'RL_FSBI_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'RL_FSBI_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

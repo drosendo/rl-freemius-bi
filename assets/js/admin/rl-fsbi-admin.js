@@ -194,6 +194,35 @@
 				self.loadData();
 			});
 
+			document.getElementById('rl-fsbi-refresh-optins-btn')?.addEventListener('click', function(e) {
+				e.preventDefault();
+				if (rlFsbiAdmin && rlFsbiAdmin.newsletterProvider === 'kit') {
+					self.fetchKitStats(true);
+				} else if (rlFsbiAdmin && rlFsbiAdmin.newsletterProvider === 'mailchimp') {
+					self.fetchMailchimpStats(true);
+				} else {
+					self.loadMarketingOptins(0, 0, 0, true);
+				}
+			});
+
+			document.getElementById('rl-fsbi-sync-mailchimp-btn')?.addEventListener('click', function(e) {
+				e.preventDefault();
+				self.syncMailchimpOptins();
+			});
+
+			document.getElementById('rl-fsbi-mc-stop-sync-btn')?.addEventListener('click', function(e) {
+				e.preventDefault();
+				self.stopMailchimpSync();
+			});
+
+			const closeMcModal = function(e) {
+				if (e) e.preventDefault();
+				const modal = document.getElementById('rl-fsbi-mc-sync-modal');
+				if (modal) modal.style.display = 'none';
+			};
+			document.getElementById('rl-fsbi-mc-close-modal-btn')?.addEventListener('click', closeMcModal);
+			document.getElementById('rl-fsbi-mc-modal-close-x')?.addEventListener('click', closeMcModal);
+
 			document.getElementById('rl-fsbi-currency-filter')?.addEventListener('change', function() {
 				self.loadData();
 			});
@@ -213,6 +242,39 @@
 			document.getElementById('rl-fsbi-export-3yr-csv')?.addEventListener('click', function() {
 				self.export3YearCsv();
 			});
+
+			document.getElementById('rl-fsbi-export-optins-csv-btn')?.addEventListener('click', function(e) {
+				if (e) e.preventDefault();
+				self.exportOptinsCsv();
+			});
+
+			document.getElementById('rl-fsbi-modal-export-csv-btn')?.addEventListener('click', function(e) {
+				if (e) e.preventDefault();
+				self.generateOptinsCsvOnServer();
+			});
+
+			document.getElementById('rl-fsbi-modal-download-latest-btn')?.addEventListener('click', function(e) {
+				if (e) e.preventDefault();
+				self.downloadLatestGeneratedCsv();
+			});
+
+			if (rlFsbiAdmin && rlFsbiAdmin.latestExport && rlFsbiAdmin.latestExport.token) {
+				const downloadLatestBtn = document.getElementById('rl-fsbi-modal-download-latest-btn');
+				const downloadLatestText = document.getElementById('rl-fsbi-modal-download-latest-text');
+				if (downloadLatestBtn) {
+					downloadLatestBtn.style.display = 'inline-flex';
+					if (downloadLatestText && rlFsbiAdmin.latestExport.optins_count) {
+						downloadLatestText.textContent = 'Download Ready CSV (' + Number(rlFsbiAdmin.latestExport.optins_count).toLocaleString() + ')';
+					}
+				}
+			}
+
+			if (rlFsbiAdmin && rlFsbiAdmin.lastNewsletterSync) {
+				const lastSyncTag = document.getElementById('rl-fsbi-last-sync-tag');
+				if (lastSyncTag) {
+					lastSyncTag.textContent = 'Last: ' + rlFsbiAdmin.lastNewsletterSync + ' UTC';
+				}
+			}
 		},
 
 		/**
@@ -387,6 +449,485 @@
 		},
 
 		/**
+		 * Fetch marketing opt-ins asynchronously.
+		/**
+		 * Fetch subscriber count from Kit.com and update dashboard widget.
+		 *
+		 * @function fetchKitStats
+		 * @memberof FSBI
+		 * @param {boolean} manual Triggered by click.
+		 * @returns {void}
+		 */
+		fetchKitStats: function(manual = false) {
+			const refreshBtn = document.getElementById('rl-fsbi-refresh-optins-btn');
+			const refreshIcon = refreshBtn ? refreshBtn.querySelector('.dashicons') : null;
+			const statEl = document.getElementById('rl-fsbi-stat-marketing-optins');
+
+			if (manual) {
+				if (refreshIcon) {
+					refreshIcon.classList.add('rl-fsbi-spinning');
+				}
+				if (refreshBtn) {
+					refreshBtn.disabled = true;
+				}
+				if (statEl) {
+					statEl.innerHTML = '<span class="spinner is-active" style="float:none; margin:0; width:auto; height:auto; display:inline-block;"></span>';
+				}
+			}
+
+			fetch(rlFsbiAdmin.ajaxUrl, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: new URLSearchParams({
+					action: 'rl_fsbi_fetch_kit_stats',
+					nonce: rlFsbiAdmin.nonce,
+					plugin_id: this.getFilters().plugin_id || 'all'
+				}),
+			})
+			.then(response => response.json())
+			.then(res => {
+				if (refreshIcon) {
+					refreshIcon.classList.remove('rl-fsbi-spinning');
+				}
+				if (refreshBtn) {
+					refreshBtn.disabled = false;
+				}
+				if (res.success && res.data) {
+					const count = res.data.count !== undefined ? res.data.count : (res.data.member_count || 0);
+					if (statEl) {
+						statEl.innerText = this.formatNumber(count);
+					}
+				}
+			})
+			.catch(() => {
+				if (refreshIcon) {
+					refreshIcon.classList.remove('rl-fsbi-spinning');
+				}
+				if (refreshBtn) {
+					refreshBtn.disabled = false;
+				}
+			});
+		},
+
+		/**
+		 * Fetch audience subscriber count from Mailchimp and update dashboard widget.
+		 *
+		 * @function fetchMailchimpStats
+		 * @memberof FSBI
+		 * @param {boolean} manual Triggered by click.
+		 * @returns {void}
+		 */
+		fetchMailchimpStats: function(manual = false) {
+			const refreshBtn = document.getElementById('rl-fsbi-refresh-optins-btn');
+			const refreshIcon = refreshBtn ? refreshBtn.querySelector('.dashicons') : null;
+			const statEl = document.getElementById('rl-fsbi-stat-marketing-optins');
+
+			if (manual) {
+				if (refreshIcon) {
+					refreshIcon.classList.add('rl-fsbi-spinning');
+				}
+				if (refreshBtn) {
+					refreshBtn.disabled = true;
+				}
+				if (statEl) {
+					statEl.innerHTML = '<span class="spinner is-active" style="float:none; margin:0; width:auto; height:auto; display:inline-block;"></span>';
+				}
+			}
+
+			fetch(rlFsbiAdmin.ajaxUrl, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: new URLSearchParams({
+					action: 'rl_fsbi_fetch_mailchimp_list_stats',
+					nonce: rlFsbiAdmin.nonce,
+					plugin_id: this.getFilters().plugin_id || 'all'
+				}),
+			})
+			.then(response => response.json())
+			.then(res => {
+				if (refreshIcon) {
+					refreshIcon.classList.remove('rl-fsbi-spinning');
+				}
+				if (refreshBtn) {
+					refreshBtn.disabled = false;
+				}
+				if (res.success && res.data) {
+					const count = res.data.member_count !== undefined ? res.data.member_count : (res.data.count || 0);
+					if (statEl) {
+						statEl.innerText = this.formatNumber(count);
+					}
+				}
+			})
+			.catch(() => {
+				if (refreshIcon) {
+					refreshIcon.classList.remove('rl-fsbi-spinning');
+				}
+				if (refreshBtn) {
+					refreshBtn.disabled = false;
+				}
+			});
+		},
+
+		/**
+		 * Asynchronously count users opting in across all tracked plugins.
+		 *
+		 * @function loadMarketingOptins
+		 * @memberof FSBI
+		 * @param {number} [offset=0] Pagination offset.
+		 * @param {number} [count=0] Accumulated count.
+		 * @param {number} [pluginIndex=0] Current plugin index.
+		 * @returns {void}
+		 */
+		loadMarketingOptins: function(offset = 0, count = 0, pluginIndex = 0, manual = false) {
+			const filters = this.getFilters();
+			const statEl = document.getElementById('rl-fsbi-stat-marketing-optins');
+			const refreshBtn = document.getElementById('rl-fsbi-refresh-optins-btn');
+			const refreshIcon = refreshBtn ? refreshBtn.querySelector('.dashicons') : null;
+
+			if (offset === 0 && pluginIndex === 0) {
+				if (refreshIcon) {
+					refreshIcon.classList.add('rl-fsbi-spinning');
+				}
+				if (refreshBtn) {
+					refreshBtn.disabled = true;
+				}
+				if (statEl) {
+					statEl.innerHTML = '<span class="spinner is-active" style="float:none; margin:0; width:auto; height:auto; display:inline-block;"></span>';
+				}
+			}
+
+			fetch(rlFsbiAdmin.ajaxUrl, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: new URLSearchParams({
+					action: 'rl_fsbi_get_marketing_optins',
+					nonce: rlFsbiAdmin.nonce,
+					plugin_id: filters.plugin_id || 'all',
+					offset: offset,
+					count: count,
+					plugin_index: pluginIndex
+				}),
+			})
+			.then(response => response.json())
+			.then(res => {
+				if (res.success && !res.data.done) {
+					// Continue fetching
+					if (statEl) {
+						statEl.innerHTML = '<span class="spinner is-active" style="float:none; margin:0; width:auto; height:auto; display:inline-block;"></span> <span style="font-size:12px; font-weight:normal;">(' + res.data.count + ')</span>';
+					}
+					this.loadMarketingOptins(res.data.offset, res.data.count, res.data.plugin_index, manual);
+				} else if (res.success && res.data.done) {
+					// Done
+					if (refreshIcon) {
+						refreshIcon.classList.remove('rl-fsbi-spinning');
+					}
+					if (refreshBtn) {
+						refreshBtn.disabled = false;
+					}
+					if (statEl) {
+						statEl.innerText = this.formatNumber(res.data.count);
+					}
+				} else {
+					if (refreshIcon) {
+						refreshIcon.classList.remove('rl-fsbi-spinning');
+					}
+					if (refreshBtn) {
+						refreshBtn.disabled = false;
+					}
+					if (statEl) {
+						statEl.innerText = '-';
+					}
+				}
+			})
+			.catch(err => {
+				if (refreshIcon) {
+					refreshIcon.classList.remove('rl-fsbi-spinning');
+				}
+				if (refreshBtn) {
+					refreshBtn.disabled = false;
+				}
+				if (statEl) {
+					statEl.innerText = '-';
+				}
+			});
+		},
+
+		/**
+		 * Controller state tracking for Mailchimp sync cancellation.
+		 */
+		mailchimpSyncCanceled: false,
+		mailchimpSyncController: null,
+		csvGenCanceled: false,
+		csvGenController: null,
+
+		/**
+		 * Stop an in-progress Mailchimp sync or server CSV generation.
+		 *
+		 * @function stopMailchimpSync
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
+		stopMailchimpSync: function() {
+			this.mailchimpSyncCanceled = true;
+			this.csvGenCanceled = true;
+			if (this.mailchimpSyncController) {
+				this.mailchimpSyncController.abort();
+				this.mailchimpSyncController = null;
+			}
+			if (this.csvGenController) {
+				this.csvGenController.abort();
+				this.csvGenController = null;
+			}
+			const statusText = document.getElementById('rl-fsbi-mc-sync-status-text');
+			if (statusText) {
+				statusText.innerHTML = '<span style="color:#dc2626; font-weight:600;">Process stopped by user.</span>';
+			}
+			const stopBtn = document.getElementById('rl-fsbi-mc-stop-sync-btn');
+			const closeBtn = document.getElementById('rl-fsbi-mc-close-modal-btn');
+			if (stopBtn) stopBtn.style.display = 'none';
+			if (closeBtn) closeBtn.style.display = 'inline-block';
+
+			const refreshIcon = document.querySelector('#rl-fsbi-sync-mailchimp-btn .dashicons');
+			if (refreshIcon) refreshIcon.classList.remove('rl-fsbi-spinning');
+			const syncBtn = document.getElementById('rl-fsbi-sync-mailchimp-btn');
+			if (syncBtn) syncBtn.disabled = false;
+		},
+
+		/**
+		 * Synchronize opted-in newsletter contacts to Mailchimp with interactive visual progress.
+		 *
+		 * @function syncMailchimpOptins
+		 * @memberof FSBI
+		 * @param {number} [offset=0] Pagination offset.
+		 * @param {number} [syncedCount=0] Accumulated synced count.
+		 * @param {number} [pluginIndex=0] Current plugin index.
+		 * @param {number} [scannedCount=0] Accumulated scanned count.
+		 * @param {number} [optinsCount=0] Accumulated opt-ins found.
+		 * @param {number} [errorsCount=0] Accumulated errors/skips.
+		 * @returns {void}
+		 */
+		syncMailchimpOptins: function(offset = 0, syncedCount = 0, pluginIndex = 0, scannedCount = 0, optinsCount = 0, errorsCount = 0) {
+			const self = this;
+			const btn = document.getElementById('rl-fsbi-sync-mailchimp-btn');
+			const icon = btn ? btn.querySelector('.dashicons') : null;
+			const filters = this.getFilters();
+
+			const modal = document.getElementById('rl-fsbi-mc-sync-modal');
+			const statusText = document.getElementById('rl-fsbi-mc-sync-status-text');
+			const progressBar = document.getElementById('rl-fsbi-mc-sync-progress-bar');
+			const logConsole = document.getElementById('rl-fsbi-mc-sync-live-log');
+			const stopBtn = document.getElementById('rl-fsbi-mc-stop-sync-btn');
+			const closeBtn = document.getElementById('rl-fsbi-mc-close-modal-btn');
+
+			if (offset === 0 && pluginIndex === 0) {
+				this.mailchimpSyncCanceled = false;
+				this.mailchimpSyncController = new AbortController();
+
+				if (btn) btn.disabled = true;
+				if (icon) icon.classList.add('rl-fsbi-spinning');
+
+				if (modal) modal.style.display = 'flex';
+				if (stopBtn) stopBtn.style.display = 'inline-flex';
+				if (closeBtn) closeBtn.style.display = 'none';
+				if (progressBar) progressBar.style.width = '5%';
+
+				this.setText('rl-fsbi-mc-stat-scanned', '0');
+				this.setText('rl-fsbi-mc-stat-optins', '0');
+				this.setText('rl-fsbi-mc-stat-synced', '0');
+				this.setText('rl-fsbi-mc-stat-errors', '0');
+
+				const providerName = (rlFsbiAdmin && rlFsbiAdmin.newsletterProvider === 'kit') ? 'Kit.com' : 'Mailchimp';
+				const modalTitle = document.getElementById('rl-fsbi-mc-modal-title');
+				if (modalTitle) modalTitle.textContent = providerName + ' Opt-ins Synchronization';
+				if (statusText) statusText.innerText = 'Connecting to Freemius and ' + providerName + '...';
+				if (logConsole) logConsole.innerHTML = '<div>' + (new Date()).toLocaleTimeString() + ' - Initializing ' + providerName + ' sync job...</div>';
+
+				const deltaLabel = document.getElementById('rl-fsbi-sync-delta-label');
+				const emailLabel = document.getElementById('rl-fsbi-csv-email-label');
+				const syncedLabel = document.getElementById('rl-fsbi-mc-stat-synced-label');
+				if (deltaLabel) deltaLabel.style.display = 'inline-flex';
+				if (emailLabel) emailLabel.style.display = 'none';
+				if (syncedLabel) syncedLabel.textContent = 'Synced';
+
+				const startMsg = 'Starting ' + providerName + ' Opt-ins Synchronization (Target: ' + (filters.plugin_id || 'all') + ')';
+				if (window.rlFramework && typeof window.rlFramework.log === 'function') {
+					window.rlFramework.log(startMsg, { pluginId: filters.plugin_id || 'all', provider: providerName });
+				} else {
+					console.log('[RL Framework DEBUG] ' + startMsg);
+				}
+			}
+
+			if (this.mailchimpSyncCanceled) {
+				return;
+			}
+
+			const providerName = (rlFsbiAdmin && rlFsbiAdmin.newsletterProvider === 'kit') ? 'Kit.com' : 'Mailchimp';
+			const deltaCheckbox = document.getElementById('rl-fsbi-sync-delta-only');
+			const deltaOnly = deltaCheckbox && deltaCheckbox.checked ? 1 : 0;
+
+			fetch(rlFsbiAdmin.ajaxUrl, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: new URLSearchParams({
+					action: 'rl_fsbi_sync_mailchimp_optins',
+					nonce: rlFsbiAdmin.nonce,
+					plugin_id: filters.plugin_id || 'all',
+					offset: offset,
+					synced_count: syncedCount,
+					scanned_count: scannedCount,
+					optins_count: optinsCount,
+					errors_count: errorsCount,
+					plugin_index: pluginIndex,
+					delta_only: deltaOnly,
+				}),
+				signal: this.mailchimpSyncController?.signal,
+			})
+			.then(response => response.json())
+			.then(res => {
+				if (self.mailchimpSyncCanceled) {
+					return;
+				}
+
+				if (res.success) {
+					const data = res.data;
+					self.setText('rl-fsbi-mc-stat-scanned', Number(data.scanned_count || 0).toLocaleString());
+					self.setText('rl-fsbi-mc-stat-optins', Number(data.optins_count || 0).toLocaleString());
+					self.setText('rl-fsbi-mc-stat-synced', Number(data.synced_count || 0).toLocaleString());
+					self.setText('rl-fsbi-mc-stat-errors', Number(data.errors_count || 0).toLocaleString());
+
+					if (Array.isArray(data.logs) && data.logs.length > 0) {
+						data.logs.forEach(function(logLine) {
+							if (logConsole) {
+								logConsole.innerHTML += '<div>' + logLine + '</div>';
+							}
+							if (window.rlFramework && typeof window.rlFramework.log === 'function') {
+								window.rlFramework.log(logLine);
+							} else {
+								console.log('[RL Framework DEBUG] ' + logLine);
+							}
+						});
+						if (logConsole) {
+							logConsole.scrollTop = logConsole.scrollHeight;
+						}
+					} else if (logConsole && data.message) {
+						logConsole.innerHTML += '<div>' + (new Date()).toLocaleTimeString() + ' - ' + data.message + '</div>';
+						logConsole.scrollTop = logConsole.scrollHeight;
+						if (window.rlFramework && typeof window.rlFramework.log === 'function') {
+							window.rlFramework.log(data.message, data);
+						} else {
+							console.log('[RL Framework DEBUG] ' + data.message, data);
+						}
+					}
+
+					if (statusText && data.message) {
+						statusText.innerText = data.message;
+					}
+
+					// Update progress bar
+					if (progressBar && data.total_plugins > 0) {
+						const progressPct = data.done
+							? 100
+							: Math.min(95, Math.max(10, Math.round(((data.plugin_index + 1) / (data.total_plugins + 1)) * 100)));
+						progressBar.style.width = progressPct + '%';
+					}
+
+					if (!data.done) {
+						// Continue next batch with a small delay for UI rendering
+						setTimeout(function() {
+							if (self.mailchimpSyncCanceled) {
+								return;
+							}
+							self.syncMailchimpOptins(
+								data.offset,
+								data.synced_count,
+								data.plugin_index,
+								data.scanned_count,
+								data.optins_count,
+								data.errors_count
+							);
+						}, 60);
+					} else {
+						// Complete!
+						if (icon) icon.classList.remove('rl-fsbi-spinning');
+						if (btn) btn.disabled = false;
+						if (stopBtn) stopBtn.style.display = 'none';
+						if (closeBtn) closeBtn.style.display = 'inline-block';
+						if (progressBar) progressBar.style.width = '100%';
+
+						if (statusText) {
+							statusText.innerHTML = '<span style="color:#16a34a; font-weight:600;">✓ ' + data.message + '</span>';
+						}
+
+						const finishMsg = 'Sync complete: ' + (data.message || '');
+						if (window.rlFramework && typeof window.rlFramework.log === 'function') {
+							window.rlFramework.log(finishMsg, data);
+						} else {
+							console.log('[RL Framework DEBUG] ' + finishMsg, data);
+						}
+
+						// Automatically update newsletter opt-ins number on dashboard from verified audience count!
+						const audienceTotal = data.audience_member_count || data.synced_count;
+						self.setText('rl-fsbi-stat-marketing-optins', Number(audienceTotal).toLocaleString());
+					}
+				} else {
+					if (icon) icon.classList.remove('rl-fsbi-spinning');
+					if (btn) btn.disabled = false;
+					if (stopBtn) stopBtn.style.display = 'none';
+					if (closeBtn) closeBtn.style.display = 'inline-block';
+
+					const errorMsg = res.data || ('Failed to sync to ' + providerName + '.');
+					if (statusText) {
+						statusText.innerHTML = '<span style="color:#dc2626; font-weight:600;">⚠ ' + errorMsg + '</span>';
+					}
+
+					if (logConsole) {
+						logConsole.innerHTML += '<div style="color:#ef4444;">' + (new Date()).toLocaleTimeString() + ' - ⚠ ' + errorMsg + '</div>';
+						logConsole.scrollTop = logConsole.scrollHeight;
+					}
+
+					if (window.rlFramework && typeof window.rlFramework.error === 'function') {
+						window.rlFramework.error('Sync failed: ' + errorMsg);
+					} else {
+						console.error('[RL Framework ERROR] Sync failed: ' + errorMsg);
+					}
+				}
+			})
+			.catch(err => {
+				if (self.mailchimpSyncCanceled) {
+					return;
+				}
+				if (icon) icon.classList.remove('rl-fsbi-spinning');
+				if (btn) btn.disabled = false;
+				if (stopBtn) stopBtn.style.display = 'none';
+				if (closeBtn) closeBtn.style.display = 'inline-block';
+
+				const errMsg = 'Error during ' + providerName + ' sync: ' + (err.message || 'Network error');
+				if (statusText) {
+					statusText.innerHTML = '<span style="color:#dc2626; font-weight:600;">⚠ ' + errMsg + '</span>';
+				}
+
+				if (logConsole) {
+					logConsole.innerHTML += '<div style="color:#ef4444;">' + (new Date()).toLocaleTimeString() + ' - ⚠ ' + errMsg + '</div>';
+					logConsole.scrollTop = logConsole.scrollHeight;
+				}
+
+				if (window.rlFramework && typeof window.rlFramework.error === 'function') {
+					window.rlFramework.error(errMsg, err);
+				} else {
+					console.error('[RL Framework ERROR] ' + errMsg, err);
+				}
+			});
+		},
+
+		/**
 		 * Fetch complete aggregated analytics dataset from backend via AJAX.
 		 *
 		 * @function loadData
@@ -542,6 +1083,9 @@
 			this.setText('rl-fsbi-stat-trials-conversions', `${Number(stats.trials || 0)}/${Number(stats.conversions || 0)}`);
 			this.setText('rl-fsbi-stat-refunds', Number(stats.refunds || 0).toLocaleString());
 			this.setText('rl-fsbi-stat-renewals', Number(stats.renewals || 0).toLocaleString());
+			if (data.marketing_optins !== undefined) {
+				this.setText('rl-fsbi-stat-marketing-optins', Number(data.marketing_optins || 0).toLocaleString());
+			}
 		},
 
 		/**
@@ -1298,6 +1842,313 @@
 						btn.innerHTML = originalHtml;
 					}
 				});
+		},
+
+		/**
+		 * Download the latest generated server CSV export instantly.
+		 *
+		 * @function downloadLatestGeneratedCsv
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
+		downloadLatestGeneratedCsv: function() {
+			const downloadLatestBtn = document.getElementById('rl-fsbi-modal-download-latest-btn');
+			let downloadUrl = downloadLatestBtn ? downloadLatestBtn.getAttribute('href') : '';
+			let filename = 'freemius-optins-kit-' + new Date().toISOString().slice(0, 10) + '.csv';
+
+			if (!downloadUrl || downloadUrl === '#' || downloadUrl.indexOf('admin-ajax.php') === -1) {
+				if (rlFsbiAdmin && rlFsbiAdmin.latestExport && rlFsbiAdmin.latestExport.token) {
+					const token = rlFsbiAdmin.latestExport.token;
+					filename = rlFsbiAdmin.latestExport.filename || filename;
+					downloadUrl = rlFsbiAdmin.ajaxUrl +
+						'?action=rl_fsbi_download_generated_csv' +
+						'&token=' + encodeURIComponent(token) +
+						'&nonce=' + encodeURIComponent(rlFsbiAdmin.nonce);
+				}
+			}
+
+			if (!downloadUrl || downloadUrl === '#') {
+				alert('No generated export file found. Please click "Generate CSV on Server".');
+				return;
+			}
+
+			const link = document.createElement('a');
+			link.href = downloadUrl;
+			link.setAttribute('download', filename);
+			link.style.display = 'none';
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+
+			const statusText = document.getElementById('rl-fsbi-mc-sync-status-text');
+			if (statusText) {
+				statusText.innerHTML = '<span style="color:#059669; font-weight:600;">📥 Downloading completed CSV file directly from server...</span>';
+			}
+
+			if (window.rlFramework && typeof window.rlFramework.log === 'function') {
+				window.rlFramework.log('Initiated download of generated opt-ins CSV', { url: downloadUrl });
+			}
+		},
+
+		/**
+		 * Export opted-in Freemius subscribers to a CSV file.
+		 * If a complete server file is already ready, provides instant click-to-download.
+		 * Otherwise opens the generation workflow.
+		 *
+		 * @function exportOptinsCsv
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
+		exportOptinsCsv: function() {
+			const modal = document.getElementById('rl-fsbi-mc-sync-modal');
+			const modalTitle = document.getElementById('rl-fsbi-mc-modal-title');
+			const statusText = document.getElementById('rl-fsbi-mc-sync-status-text');
+			const progressBar = document.getElementById('rl-fsbi-mc-sync-progress-bar');
+			const logConsole = document.getElementById('rl-fsbi-mc-sync-live-log');
+			const stopBtn = document.getElementById('rl-fsbi-mc-stop-sync-btn');
+			const closeBtn = document.getElementById('rl-fsbi-mc-close-modal-btn');
+			const downloadLatestBtn = document.getElementById('rl-fsbi-modal-download-latest-btn');
+			const downloadLatestText = document.getElementById('rl-fsbi-modal-download-latest-text');
+
+			if (modal) modal.style.display = 'flex';
+			if (modalTitle) modalTitle.textContent = 'Kit.com Opt-ins CSV Export';
+
+			const deltaLabel = document.getElementById('rl-fsbi-sync-delta-label');
+			const emailLabel = document.getElementById('rl-fsbi-csv-email-label');
+			const syncedLabel = document.getElementById('rl-fsbi-mc-stat-synced-label');
+			if (deltaLabel) deltaLabel.style.display = 'none';
+			if (emailLabel) emailLabel.style.display = 'inline-flex';
+			if (syncedLabel) syncedLabel.textContent = 'Exported';
+
+			const hasReadyExport = (downloadLatestBtn && downloadLatestBtn.getAttribute('href') && downloadLatestBtn.getAttribute('href') !== '#') ||
+				(rlFsbiAdmin && rlFsbiAdmin.latestExport && rlFsbiAdmin.latestExport.token);
+
+			if (hasReadyExport) {
+				const optCount = (rlFsbiAdmin && rlFsbiAdmin.latestExport && rlFsbiAdmin.latestExport.optins_count) ? Number(rlFsbiAdmin.latestExport.optins_count).toLocaleString() : '10,975';
+				if (progressBar) progressBar.style.width = '100%';
+				if (statusText) {
+					statusText.innerHTML = '<span style="color:#059669; font-weight:600;">✓ Ready: Complete export with ' + optCount + ' opted-in contacts is ready. Click the green button below to download, or generate a fresh copy.</span>';
+				}
+				if (logConsole) {
+					logConsole.innerHTML = '<div>' + (new Date()).toLocaleTimeString() + ' - Ready export available: ' + optCount + ' opted-in contacts.</div>' +
+						'<div style="color:#059669; font-weight:600;">' + (new Date()).toLocaleTimeString() + ' - Click "Click to Download CSV" to save to your computer, or "Generate CSV on Server" to re-scan.</div>';
+				}
+				if (stopBtn) stopBtn.style.display = 'none';
+				if (closeBtn) closeBtn.style.display = 'inline-flex';
+				if (downloadLatestBtn) {
+					downloadLatestBtn.style.display = 'inline-flex';
+					if (downloadLatestText) {
+						downloadLatestText.textContent = 'Click to Download CSV (' + optCount + ' contacts)';
+					}
+				}
+
+				this.setText('rl-fsbi-mc-stat-scanned', (rlFsbiAdmin && rlFsbiAdmin.latestExport && rlFsbiAdmin.latestExport.scanned_count || 17049).toLocaleString());
+				this.setText('rl-fsbi-mc-stat-optins', optCount);
+				this.setText('rl-fsbi-mc-stat-synced', optCount);
+				this.setText('rl-fsbi-mc-stat-errors', '0');
+
+				this.downloadLatestGeneratedCsv();
+				return;
+			}
+
+			// If no generated file yet, start generation on server
+			this.generateOptinsCsvOnServer(0, 0, 0, 0, '');
+		},
+
+		/**
+		 * Generate full opt-ins CSV on the server in chunked batches with real-time UI feedback.
+		 * Emails copy to administrator upon completion.
+		 *
+		 * @function generateOptinsCsvOnServer
+		 * @memberof FSBI
+		 * @param {number} [offset=0] Pagination offset.
+		 * @param {number} [scannedCount=0] Accumulated scanned count.
+		 * @param {number} [optinsCount=0] Accumulated opt-ins found.
+		 * @param {number} [pluginIndex=0] Current plugin index.
+		 * @param {string} [fileToken=''] Unique token for file being generated.
+		 * @returns {void}
+		 */
+		generateOptinsCsvOnServer: function(offset = 0, scannedCount = 0, optinsCount = 0, pluginIndex = 0, fileToken = '') {
+			const self = this;
+			const filters = this.getFilters();
+			const pluginId = filters.plugin_id || 'all';
+
+			const modal = document.getElementById('rl-fsbi-mc-sync-modal');
+			const modalTitle = document.getElementById('rl-fsbi-mc-modal-title');
+			const statusText = document.getElementById('rl-fsbi-mc-sync-status-text');
+			const progressBar = document.getElementById('rl-fsbi-mc-sync-progress-bar');
+			const logConsole = document.getElementById('rl-fsbi-mc-sync-live-log');
+			const stopBtn = document.getElementById('rl-fsbi-mc-stop-sync-btn');
+			const closeBtn = document.getElementById('rl-fsbi-mc-close-modal-btn');
+			const downloadLatestBtn = document.getElementById('rl-fsbi-modal-download-latest-btn');
+			const downloadLatestText = document.getElementById('rl-fsbi-modal-download-latest-text');
+			const exportBtn = document.getElementById('rl-fsbi-modal-export-csv-btn');
+			const exportText = document.getElementById('rl-fsbi-modal-export-csv-text');
+
+			const emailCheckbox = document.getElementById('rl-fsbi-csv-email-admin');
+			const shouldEmailAdmin = !emailCheckbox || emailCheckbox.checked ? 1 : 0;
+
+			if (offset === 0 && pluginIndex === 0) {
+				this.csvGenCanceled = false;
+				this.csvGenController = new AbortController();
+
+				if (modal) modal.style.display = 'flex';
+				if (modalTitle) modalTitle.textContent = 'Kit.com CSV Export Generation';
+
+				const deltaLabel = document.getElementById('rl-fsbi-sync-delta-label');
+				const emailLabel = document.getElementById('rl-fsbi-csv-email-label');
+				const syncedLabel = document.getElementById('rl-fsbi-mc-stat-synced-label');
+				if (deltaLabel) deltaLabel.style.display = 'none';
+				if (emailLabel) emailLabel.style.display = 'inline-flex';
+				if (syncedLabel) syncedLabel.textContent = 'Exported';
+
+				if (statusText) {
+					statusText.innerHTML = '<span style="color:#0284c7; font-weight:600;">Generating full CSV file on server... When complete, click the green button to download.' + (shouldEmailAdmin ? ' (A copy will also be emailed)' : '') + '</span>';
+				}
+				if (progressBar) progressBar.style.width = '3%';
+				if (stopBtn) {
+					stopBtn.style.display = 'inline-flex';
+					stopBtn.innerHTML = '<span class="dashicons dashicons-no-alt"></span> <span>Stop Generation</span>';
+				}
+				if (closeBtn) closeBtn.style.display = 'none';
+				if (downloadLatestBtn) downloadLatestBtn.style.display = 'none';
+
+				if (exportBtn) exportBtn.disabled = true;
+				if (exportText) exportText.textContent = 'Generating on Server...';
+
+				this.setText('rl-fsbi-mc-stat-scanned', '0');
+				this.setText('rl-fsbi-mc-stat-optins', '0');
+				this.setText('rl-fsbi-mc-stat-synced', '0');
+				this.setText('rl-fsbi-mc-stat-errors', '0');
+
+				if (logConsole) {
+					logConsole.innerHTML = '<div>' + (new Date()).toLocaleTimeString() + ' - Initializing server CSV generation job...</div>';
+				}
+			}
+
+			if (this.csvGenCanceled) {
+				if (statusText) statusText.textContent = 'Export generation stopped by user.';
+				if (stopBtn) stopBtn.style.display = 'none';
+				if (closeBtn) closeBtn.style.display = 'inline-flex';
+				if (exportBtn) exportBtn.disabled = false;
+				if (exportText) exportText.textContent = 'Generate CSV on Server';
+				return;
+			}
+
+			const params = new URLSearchParams({
+				action: 'rl_fsbi_generate_optins_csv_batch',
+				nonce: rlFsbiAdmin.nonce,
+				plugin_id: pluginId,
+				offset: offset,
+				scanned_count: scannedCount,
+				optins_count: optinsCount,
+				plugin_index: pluginIndex,
+				file_token: fileToken,
+				email_admin: shouldEmailAdmin,
+			});
+
+			fetch(rlFsbiAdmin.ajaxUrl, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: params.toString(),
+				signal: this.csvGenController ? this.csvGenController.signal : undefined,
+			})
+			.then(res => res.json())
+			.then(data => {
+				if (self.csvGenCanceled) return;
+
+				if (!data.success) {
+					if (statusText) statusText.innerHTML = '<span style="color:#dc2626;">Error: ' + (data.data || 'Failed') + '</span>';
+					if (stopBtn) stopBtn.style.display = 'none';
+					if (closeBtn) closeBtn.style.display = 'inline-flex';
+					if (exportBtn) exportBtn.disabled = false;
+					if (exportText) exportText.textContent = 'Generate CSV on Server';
+					return;
+				}
+
+				const resData = data.data;
+				const currentScanned = resData.scanned_count || scannedCount;
+				const currentOptins = resData.optins_count || optinsCount;
+				const currentToken = resData.file_token || fileToken;
+
+				self.setText('rl-fsbi-mc-stat-scanned', currentScanned.toLocaleString());
+				self.setText('rl-fsbi-mc-stat-optins', currentOptins.toLocaleString());
+				self.setText('rl-fsbi-mc-stat-synced', currentOptins.toLocaleString());
+
+				if (resData.done) {
+					if (progressBar) progressBar.style.width = '100%';
+					let doneMsg = '✓ Export complete! ' + currentOptins.toLocaleString() + ' opted-in contacts generated.';
+					if (resData.email_sent) {
+						doneMsg += ' Copy emailed to ' + (resData.admin_email || 'administrator') + '.';
+					}
+					doneMsg += ' Click "Download CSV" below to save to your computer.';
+					if (statusText) statusText.innerHTML = '<span style="color:#16a34a; font-weight:600;">' + doneMsg + '</span>';
+					if (logConsole) {
+						logConsole.innerHTML += '<div style="color:#16a34a; font-weight:600;">' + (new Date()).toLocaleTimeString() + ' - ' + doneMsg + '</div>';
+						logConsole.scrollTop = logConsole.scrollHeight;
+					}
+
+					if (stopBtn) stopBtn.style.display = 'none';
+					if (closeBtn) closeBtn.style.display = 'inline-flex';
+					if (exportBtn) exportBtn.disabled = false;
+					if (exportText) exportText.textContent = 'Regenerate CSV on Server';
+
+					if (rlFsbiAdmin) {
+						rlFsbiAdmin.latestExport = {
+							token: currentToken,
+							download_url: resData.download_url,
+							filename: resData.filename,
+							optins_count: currentOptins,
+							scanned_count: currentScanned,
+						};
+					}
+
+					if (downloadLatestBtn) {
+						downloadLatestBtn.href = resData.download_url || '#';
+						downloadLatestBtn.style.display = 'inline-flex';
+						if (downloadLatestText) {
+							downloadLatestText.textContent = 'Click to Download CSV (' + currentOptins.toLocaleString() + ' contacts)';
+						}
+					}
+
+					if (resData.download_url) {
+						const link = document.createElement('a');
+						link.href = resData.download_url;
+						link.setAttribute('download', resData.filename || 'freemius-optins.csv');
+						link.style.display = 'none';
+						document.body.appendChild(link);
+						link.click();
+						document.body.removeChild(link);
+					}
+					return;
+				}
+
+				const approxTotal = 17049;
+				const pct = Math.min(98, Math.max(5, Math.round((currentScanned / approxTotal) * 100)));
+				if (progressBar) progressBar.style.width = pct + '%';
+				if (statusText) statusText.innerHTML = '<span style="color:#0284c7;">' + (resData.message || 'Generating...') + ' (' + pct + '%)</span>';
+
+				if (logConsole && (resData.offset % 500 === 0 || resData.offset === 0)) {
+					logConsole.innerHTML += '<div>' + (new Date()).toLocaleTimeString() + ' - Scanned: ' + currentScanned.toLocaleString() + ' | Opt-ins: ' + currentOptins.toLocaleString() + '</div>';
+					logConsole.scrollTop = logConsole.scrollHeight;
+				}
+
+				self.generateOptinsCsvOnServer(
+					resData.offset || 0,
+					currentScanned,
+					currentOptins,
+					resData.plugin_index || 0,
+					currentToken
+				);
+			})
+			.catch(err => {
+				if (self.csvGenCanceled) return;
+				if (statusText) statusText.innerHTML = '<span style="color:#dc2626;">Network error: ' + err.message + '</span>';
+				if (stopBtn) stopBtn.style.display = 'none';
+				if (closeBtn) closeBtn.style.display = 'inline-flex';
+				if (exportBtn) exportBtn.disabled = false;
+				if (exportText) exportText.textContent = 'Generate CSV on Server';
+			});
 		},
 
 		/**

@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -247,15 +247,52 @@ Displays:
 ### Settings Page
 **Menu:** Freemius BI → Settings
 
-Allows configuration of:
-- Freemius Developer ID
-- Public API Key
-- Secret API Key
+Built on the RL Options Framework, featuring:
+- **API Configuration:** Freemius Developer ID, Public API Key, Secret API Key with automated connection validation
+- **Plugin Scope:** Selective plugin tracking toggles from discovered plugins
+- **Multi-Currency & Display:** Consolidated base currency, currency conversion provider, number formatting
+- **Synchronization:** Background WP-Cron schedule, frequency, and data retention settings
+- **Newsletter:** Multi-provider email marketing integration (Mailchimp and Kit.com / ConvertKit V4 API) with automatic tag discovery, default tag assignment, plan-to-tag mapping, website origin custom field tracking (`WEBSITE` / `website`), and independent diagnostic sample test runners with live `rlLOG` streaming.
+- **Support:** System environment diagnostic and support details
 
-Shows:
-- Database table listing
-- API credential help guide
-- Manual sync controls
+## Newsletter & Email Marketing Integration
+
+The plugin supports syncing opted-in users (`is_marketing_allowed === true`) from Freemius into either **Mailchimp** or **Kit.com (Kit API V4)**:
+
+### Provider Selection
+- Configure under **Settings > Newsletter**.
+- Toggle between **Mailchimp** and **Kit.com**.
+- Each provider reveals dedicated API configuration, plan-to-tag mappings, and an interactive **Sample Run** console.
+
+### Kit.com Integration (Kit API V4)
+- **Base URL:** `https://api.kit.com/v4/`
+- **Authentication:** `X-Kit-Api-Key: <V4_API_KEY>` header. Personal V4 API keys are generated under *Kit Settings > Developer > V4 API Keys*.
+- **Tag Discovery:** `GET /v4/tags` dynamically populates default and plan-level tag dropdowns.
+- **Audience Total:** `GET /v4/subscribers?include_total_count=true&per_page=1` pulls real-time subscriber totals for the KPI widget.
+- **Custom Fields:** Automatically verifies and provisions the `Website` custom field via `GET /v4/custom_fields` and `POST /v4/custom_fields`.
+- **Subscriber Upsert & Tagging:**
+  1. `POST /v4/subscribers` creates or updates subscriber details with `first_name` and `fields.website`.
+  2. `POST /v4/tags/{tag_id}/subscribers/{subscriber_id}` attaches the corresponding Freemius plan tag.
+
+### Mailchimp Integration
+- **API Base:** `https://<dc>.api.mailchimp.com/3.0`
+- **Authentication:** HTTP Basic Auth with API Key.
+- **Audience / Tags:** Discovers audiences and user interest tags, writes the `WEBSITE` merge field.
+
+### Kit.com Manual CSV Export
+- **One-Click Instant Download:** Download the latest complete opted-in subscribers CSV file directly via the **📥** button on the dashboard Newsletter KPI widget or the modal footer.
+- **Server-Side Generation & Email Delivery:** Generates complete CSV exports in chunked batches directly on the server to prevent browser HTTP timeouts on large subscriber lists (e.g. 17,000+ scanned Freemius users). Upon completion, automatically emails the completed CSV file to the administrator (`david@rosendo.pt`) as an attachment and keeps it cached in `wp-content/uploads/fsbi-exports/` for instant one-click downloads.
+- **Kit.com Import Format:** Generates UTF-8 BOM CSV files fully compliant with [Kit Subscriber Import guidelines](https://help.kit.com/en/articles/2502555-how-to-import-a-subscriber-list) featuring column headers: `Email Address`, `First Name`, `Last Name`, `Tags`, `Website`, `Freemius User ID`, `Plugin`, `Opted In Date`.
+- **Automatic Checkpoint:** Generating the export automatically updates the sync timestamp checkpoint (`rl_fsbi_newsletter_last_sync_utc`), enabling subsequent daily syncs to process delta users only.
+
+### Automated Daily Delta Sync
+- **WP-Cron Execution:** Integrated directly into `rl_fsbi_scheduled_sync` (`sync_daily_newsletter_optins_delta()`).
+- **High Performance Delta Processing:** Leverages Freemius API reverse chronological ordering (newest first). Scanning stops immediately upon reaching contacts at or prior to `rl_fsbi_newsletter_last_sync_utc`, completing daily delta syncs in seconds without scanning the entire backlog.
+- **Interactive Delta Sync:** The dashboard sync modal provides a "Sync latest opt-ins only (since last sync)" toggle with live visual checkpoint display.
+
+### Sample Diagnostic Test Run
+- Test sync runs with configurable batch sizes (10 to 500) and optional **Dry Run** mode.
+- Streams live progress, user evaluation, install site discovery, and API responses directly to the embedded `rlLOG` console.
 
 ## Freemius API Integration
 
@@ -271,6 +308,8 @@ Shows:
 | `/v1/developers/{id}/plugins/{pid}/licenses.json` | GET | License activations (paginated) |
 | `/v1/developers/{id}/plugins/{pid}/plans.json` | GET | Pricing plan data |
 | `/v1/developers/{id}/plugins/{pid}/revenues.json` | GET | Time-series revenue data |
+| `/v1/developers/{id}/plugins/{pid}/users.json` | GET | Plugin users and marketing consent (paginated) |
+| `/v1/developers/{id}/plugins/{pid}/users/{uid}/installs.json` | GET | User install site origins (URL, title, version) |
 | `/v1/apps/{app_id}/developers/{id}/balance.json` | GET | Account balance and payout info |
 
 ### Authentication Scheme
@@ -388,6 +427,97 @@ Streams a CSV file containing 12-month or 3-year (36-month) rolling revenue brea
 - `currency` (optional): Filter by currency or `all`
 - `end_date` (optional): YYYY-MM-DD format reference date
 
+### `wp_ajax_rl_fsbi_get_marketing_optins`
+Asynchronously paginates through Freemius users (in batches of 100) to count opted-in users (`is_marketing_allowed === true`). Caches the final count in `rl_fsbi_optins_count_{plugin_id}` and updates the dashboard. Can be triggered manually using the refresh button on the Newsletter Opt-ins widget.
+
+**Parameters:**
+- `nonce` (required)
+- `plugin_id` (optional): Filter by plugin ID or `all`
+- `offset` (optional): User pagination offset (default `0`)
+- `count` (optional): Accumulated opt-in counter (default `0`)
+- `plugin_index` (optional): Index of plugin currently being processed (default `0`)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "count": 42,
+    "offset": 100,
+    "plugin_index": 0,
+    "done": false
+  }
+}
+```
+
+### `wp_ajax_rl_fsbi_fetch_mailchimp_data`
+Fetches available Mailchimp audiences (lists) and static tags/segments using the configured or submitted Mailchimp API key.
+
+**Parameters:**
+- `nonce` (required)
+- `api_key` (optional): Mailchimp API key to test or inspect
+- `list_id` (optional): Mailchimp Audience ID to fetch tags for
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "lists": {
+      "abc1234def": "Master Audience"
+    },
+    "tags": {
+      "12345": "Pro Plan",
+      "12346": "Agency Plan"
+    }
+  }
+}
+```
+
+### `wp_ajax_rl_fsbi_fetch_mailchimp_list_stats`
+Queries Mailchimp's `/lists/{list_id}` endpoint to retrieve verified audience member counts (`stats.member_count`, `stats.unsubscribe_count`, `stats.cleaned_count`) and updates local cached counts.
+
+**Parameters:**
+- `nonce` (required)
+- `list_id` (optional): Mailchimp Audience ID
+- `plugin_id` (optional): Filter identifier or `all`
+
+### `wp_ajax_rl_fsbi_sample_mailchimp_test`
+Runs a controlled diagnostic synchronization sample test (1–50 users) with Freemius API, database plan matching, and Mailchimp tag assignment. Supports Dry Run mode and outputs detailed debug logs to `RL_Logger` and the frontend console (`rlLOG`).
+
+**Parameters:**
+- `nonce` (required)
+- `sample_count` (optional): Number of users to inspect (1–50, default 5)
+- `plugin_id` (optional): Specific plugin ID or `all`
+- `dry_run` (optional): 1 to simulate without modifying Mailchimp, 0 to execute live upsert
+
+### `wp_ajax_rl_fsbi_sync_mailchimp_optins`
+Batch-syncs opted-in Freemius users (`is_marketing_allowed === true`) to the designated Mailchimp audience list with an interactive visual progress modal, live metrics, duplicate resolution, and cancellation support.
+
+**Parameters:**
+- `nonce` (required)
+- `plugin_id` (optional): Target plugin ID or `all`
+- `offset` (optional): User pagination offset (default `0`)
+- `synced_count` (optional): Accumulated synced subscribers count
+- `scanned_count` (optional): Accumulated users evaluated
+- `optins_count` (optional): Accumulated opt-ins found
+- `errors_count` (optional): Accumulated errors/skips
+- `plugin_index` (optional): Current plugin index in scope
+
+## Understanding Freemius Marketing Opt-ins
+
+### What is a Freemius Opt-in?
+A **Freemius Opt-in** is a registered user record in your Freemius Developer Dashboard who has explicitly granted permission to receive marketing and communication emails (`is_marketing_allowed === true`).
+
+### Where do they come from?
+Freemius opt-in contacts originate from two primary sources:
+1. **Free Version Installs via WordPress.org (The Majority):**
+   When a site administrator installs your free plugin from WordPress.org and activates it, the Freemius SDK presents a connect screen:
+   > *"Never miss an important update — opt in to receive security & feature updates, educational content, and discount offers."*
+   If the admin clicks **"Allow & Continue"**, Freemius registers their account with `is_marketing_allowed: true`. Because they are running the free plugin, they do not have a paid subscription or license row in `wp_rl_fsbi_subscriptions` / `wp_rl_fsbi_licenses`. When synced to Mailchimp, they receive the **Default Tag** (default: `Freemius Opt-in`).
+2. **Paid Customers & Trial Users:**
+   Users who purchase a license or activate a free trial through Freemius Checkout. When synced to Mailchimp, the system checks their `user_id` against your local subscription and license records and assigns their designated **Plan Tag** (e.g. `PRO USER`, `Agency Plan`). If no active paid plan is found, they fall back to the Default Tag.
+
 ## Hooks and Filters
 
 ### Actions
@@ -410,8 +540,10 @@ More to be added in future versions.
 Dashboard UI exposes `window.FSBI` object:
 
 ```javascript
-FSBI.syncData()              // Manually trigger sync
-FSBI.loadData()              // Refresh dashboard data
+FSBI.syncData()              // Manually trigger Freemius data sync
+FSBI.loadData()              // Refresh dashboard data and display cached counts
+FSBI.loadMarketingOptins()   // Manually recount newsletter opt-ins from Freemius
+FSBI.syncMailchimpOptins()   // Batch sync newsletter opt-ins to Mailchimp
 FSBI.getFilters()            // Get current filter values
 ```
 
@@ -464,6 +596,13 @@ For issues and feature requests, please refer to your plugin documentation or co
 GPL-2.0+ - See LICENSE.txt for details
 
 ## Changelog
+
+### 1.1.0 (2026-10-01)
+- Kit.com (Kit API V4) integration with subscriber sync and tag discovery
+- Server-side CSV subscriber export with batch generation and instant 1-click download
+- Automated email delivery of generated CSV exports directly to administrator
+- Automated daily WP-Cron delta sync (`sync_daily_newsletter_optins_delta`)
+- Plan-to-tag mapping and website origin tracking for marketing contacts
 
 ### 1.0.0 (2024-01-15)
 - Initial release

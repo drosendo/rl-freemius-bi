@@ -53,6 +53,8 @@ class RL_FSBI {
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-i18n.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-repository.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-settings-manager.php';
+		require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-mailchimp.php';
+		require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-kit.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/freemius/class-rl-fsbi-api.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'admin/class-rl-fsbi-admin.php';
 
@@ -79,6 +81,17 @@ class RL_FSBI {
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_refresh_latest', $plugin_admin, 'handle_refresh_latest_ajax' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_get_dashboard_data', $plugin_admin, 'handle_get_dashboard_data_ajax' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_export_monthly_csv', $plugin_admin, 'handle_export_monthly_csv_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_get_marketing_optins', $plugin_admin, 'handle_get_marketing_optins_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_fetch_mailchimp_data', $plugin_admin, 'handle_fetch_mailchimp_data_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_fetch_mailchimp_list_stats', $plugin_admin, 'handle_fetch_mailchimp_list_stats_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_sync_mailchimp_optins', $plugin_admin, 'handle_sync_mailchimp_optins_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_sample_mailchimp_test', $plugin_admin, 'handle_sample_mailchimp_test_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_fetch_kit_data', $plugin_admin, 'handle_fetch_kit_data_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_fetch_kit_stats', $plugin_admin, 'handle_fetch_kit_stats_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_sample_kit_test', $plugin_admin, 'handle_sample_kit_test_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_export_optins_csv', $plugin_admin, 'handle_export_optins_csv_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_generate_optins_csv_batch', $plugin_admin, 'handle_generate_optins_csv_batch_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_download_generated_csv', $plugin_admin, 'handle_download_generated_csv_ajax' );
 		$this->loader->add_action( 'rl_fsbi_scheduled_sync', $plugin_admin, 'scheduled_sync' );
 	}
 
