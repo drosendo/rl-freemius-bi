@@ -83,7 +83,15 @@ class RL_FSBI_GitHub_Updater
 			return $transient;
 		}
 
-		if (! version_compare($release['version'], $this->version, '>')) {
+		// Compare against what WordPress believes is installed, which it reads
+		// from the plugin's Version header. Using RL_FSBI_VERSION instead caused
+		// a silent deadlock: editing the header changed the version on screen
+		// while the comparison still used the constant, so no update appeared.
+		$installed = isset($transient->checked[self::PLUGIN_BASENAME])
+			? (string) $transient->checked[self::PLUGIN_BASENAME]
+			: (string) $this->version;
+
+		if (! version_compare($release['version'], $installed, '>')) {
 			return $transient;
 		}
 

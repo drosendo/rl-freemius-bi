@@ -832,6 +832,9 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.22 (2026-11-06)
+- **The update row now follows the `Version:` header.** The check compared the release against the `RL_FSBI_VERSION` constant rather than the header WordPress displays. Lowering the header made the plugin *look* older on the Plugins screen while the comparison still used the constant, so no update was ever offered — a silent deadlock with no way out but a manual upload. The check now uses WordPress's own `checked` entry, which is read from the header, and only falls back to the constant when that entry is missing.
+
 ### 1.3.21 (2026-11-06)
 - **"Sales Activity: Current Month" follows the dates you pick.** The heading was hard-coded, so it kept claiming "Current Month" while showing a custom range. It now names the period in view: `November 2026` for the current month, `June 2026` for another full month, `2 Mar – 8 Mar 2026` for a week, `15 Dec 2025 – 15 Jan 2026` across years. A month is only named when the whole month is selected, so a single week never reads as a whole month. The title updates the moment the date changes, not after the request returns.
 
