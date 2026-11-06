@@ -1023,11 +1023,15 @@
 			const summary = data.summary || {};
 			const netRevenue = Number(summary.net_revenue || 0);
 			const previousNet = Number(summary.previous_net_revenue || 0);
-			const deltaPct = previousNet > 0 ? (((netRevenue - previousNet) / previousNet) * 100) : 0;
+			const hasPrevious = previousNet > 0;
+			const deltaPct = hasPrevious ? (((netRevenue - previousNet) / previousNet) * 100) : 0;
 			const deltaSign = deltaPct > 0 ? '+' : '';
+			const comparisonText = hasPrevious
+				? `${deltaSign}${deltaPct.toFixed(1)}% vs previous period`
+				: (netRevenue > 0 ? 'no revenue in previous period' : 'no revenue in either period');
 
 			this.setText('rl-fsbi-net-revenue', this.formatCurrency(netRevenue, currency));
-			this.setText('rl-fsbi-net-comparison', `${deltaSign}${deltaPct.toFixed(1)}% vs previous period`);
+			this.setText('rl-fsbi-net-comparison', comparisonText);
 			this.setText('rl-fsbi-expected-payout', this.formatCurrency(Number(summary.expected_payout || 0), currency));
 			this.setText('rl-fsbi-payout-note', summary.payout_note || 'Based on current MRR pace');
 
@@ -1058,7 +1062,9 @@
 			this.setText('rl-fsbi-arr', this.formatCurrency(arr, currency));
 			this.setText('rl-fsbi-mrr-as-of', `As of ${kpis.metric_as_of || 'selected period end'}`);
 			this.setText('rl-fsbi-arr-as-of', `Annualized from ${kpis.metric_as_of || 'selected period end'}`);
-			this.setText('rl-fsbi-aov', this.formatCurrency(Number(kpis.aov || 0), currency));
+			this.setText('rl-fsbi-aov', kpis.aov === null || kpis.aov === undefined
+				? '—'
+				: this.formatCurrency(Number(kpis.aov), currency));
 			this.setText('rl-fsbi-refund-rate', this.formatPercent(Number(kpis.refund_rate || 0), 1));
 			this.setText('rl-fsbi-churn-rate', this.formatPercent(Number(kpis.churn_rate || 0), 1));
 			this.setText('rl-fsbi-health-score', String(Math.round(Number(kpis.health_score || 0))));
@@ -1098,9 +1104,149 @@
 		 */
 		updateTrialPanel: function(data) {
 			const trial = data.trial_conversion || {};
-			this.setText('rl-fsbi-trials-total', Number(trial.total_trials || 0).toLocaleString());
-			this.setText('rl-fsbi-trials-converted', Number(trial.converted || 0).toLocaleString());
-			this.setText('rl-fsbi-trials-rate', this.formatPercent(Number(trial.rate || 0), 1));
+			const funnel = data.trial_funnel || {};
+			const started = Number(funnel.started ?? trial.total_trials ?? 0);
+			const withMethod = Number(funnel.with_payment_method || 0);
+			const converted = Number(funnel.converted ?? trial.converted ?? 0);
+			const canceled = Number(funnel.canceled || 0);
+			const rate = Number(funnel.rate ?? trial.rate ?? 0);
+
+			this.setText('rl-fsbi-trials-total', started.toLocaleString());
+			this.setText('rl-fsbi-trials-with-method', withMethod.toLocaleString());
+			this.setText('rl-fsbi-trials-converted', converted.toLocaleString());
+			this.setText('rl-fsbi-trials-canceled', canceled.toLocaleString());
+			this.setText('rl-fsbi-trials-rate', this.formatPercent(rate, 1));
+
+			const sourceEl = document.getElementById('rl-fsbi-trials-source');
+			if (sourceEl) {
+				const isLive = funnel.source === 'trials';
+				sourceEl.textContent = isLive
+					? 'Live trial records'
+					: 'Estimated from subscriptions';
+				sourceEl.className = 'rl-fsbi-data-source rl-fsbi-data-source--' + (isLive ? 'live' : 'estimated');
+			}
+
+			this.renderTrialFunnel([
+				{ label: 'Started', value: started },
+				{ label: 'With payment method', value: withMethod },
+				{ label: 'Converted', value: converted },
+				{ label: 'Canceled', value: canceled },
+			]);
+
+			this.renderChurnReasons(data.churn_reasons || [], Number(data.uninstalls || 0));
+		},
+
+		/**
+		 * Render the trial funnel bars, scaled to the started count.
+		 *
+		 * @function renderTrialFunnel
+		 * @memberof FSBI
+		 * @param {Array<{label: string, value: number}>} stages - Funnel stages.
+		 * @returns {void}
+		 */
+		renderTrialFunnel: function(stages) {
+			const container = document.getElementById('rl-fsbi-trial-funnel');
+			if (!container) return;
+
+			const max = stages.reduce((acc, stage) => Math.max(acc, Number(stage.value) || 0), 0);
+
+			container.textContent = '';
+
+			stages.forEach(function(stage, index) {
+				const value = Number(stage.value) || 0;
+				const percent = max > 0 ? Math.round((value / max) * 100) : 0;
+
+				const row = document.createElement('div');
+				row.className = 'rl-fsbi-funnel-row';
+
+				const label = document.createElement('span');
+				label.className = 'rl-fsbi-funnel-label';
+				label.textContent = stage.label;
+
+				const track = document.createElement('span');
+				track.className = 'rl-fsbi-funnel-track';
+
+				const fill = document.createElement('span');
+				fill.className = 'rl-fsbi-funnel-fill rl-fsbi-funnel-fill--' + index;
+				fill.style.width = percent + '%';
+				track.appendChild(fill);
+
+				const amount = document.createElement('strong');
+				amount.className = 'rl-fsbi-funnel-value';
+				amount.textContent = value.toLocaleString();
+
+				row.appendChild(label);
+				row.appendChild(track);
+				row.appendChild(amount);
+				container.appendChild(row);
+			});
+		},
+
+		/**
+		 * Render the uninstall reason list with proportional bars.
+		 *
+		 * @function renderChurnReasons
+		 * @memberof FSBI
+		 * @param {Array<{reason_id: number, count: number, reason_info: string}>} reasons - Grouped reasons.
+		 * @param {number} uninstallTotal - Uninstalls recorded in the selected period.
+		 * @returns {void}
+		 */
+		renderChurnReasons: function(reasons, uninstallTotal) {
+			const list = document.getElementById('rl-fsbi-churn-reasons');
+			if (!list) return;
+
+			const items = Array.isArray(reasons) ? reasons.filter(function(item) {
+				return Number(item.count) > 0;
+			}) : [];
+
+			list.textContent = '';
+
+			if (!items.length) {
+				const empty = document.createElement('li');
+				empty.className = 'rl-fsbi-churn-empty';
+				empty.textContent = uninstallTotal > 0
+					? 'Uninstalls detected, but no reasons returned by Freemius yet.'
+					: 'No uninstall feedback stored yet. Run a sync to collect it.';
+				list.appendChild(empty);
+				return;
+			}
+
+			const max = items.reduce(function(acc, item) {
+				return Math.max(acc, Number(item.count) || 0);
+			}, 0);
+
+			items.forEach(function(item) {
+				const count = Number(item.count) || 0;
+				const info = String(item.reason_info || '').trim();
+				const reasonLabel = String(item.reason_label || '').trim();
+				let label = reasonLabel || info;
+
+				if (!label) {
+					label = Number(item.reason_id) > 0
+						? 'Reason #' + Number(item.reason_id)
+						: 'No reason provided';
+				}
+
+				const row = document.createElement('li');
+				row.className = 'rl-fsbi-churn-reason';
+
+				const text = document.createElement('span');
+				text.className = 'rl-fsbi-churn-reason-label';
+				text.textContent = label;
+
+				const bar = document.createElement('span');
+				bar.className = 'rl-fsbi-churn-reason-bar';
+				bar.style.width = (max > 0 ? Math.round((count / max) * 100) : 0) + '%';
+
+				const value = document.createElement('strong');
+				value.className = 'rl-fsbi-churn-reason-count';
+				value.textContent = count.toLocaleString();
+
+				row.appendChild(text);
+				row.appendChild(bar);
+				row.appendChild(value);
+				list.appendChild(row);
+			});
 		},
 
 		/**

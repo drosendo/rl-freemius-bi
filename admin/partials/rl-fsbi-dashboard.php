@@ -210,11 +210,33 @@ if ( ! defined( 'WPINC' ) ) {
 		</div>
 
 		<div class="rl-fsbi-card rl-fsbi-span-3 rl-fsbi-trial-panel">
-			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Trial Conversion', 'rl-freemius-bi' ); ?></div>
-			<div class="rl-fsbi-trial-numbers">
-				<div><span><?php echo esc_html__( 'Total Trials', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-trials-total">0</strong></div>
-				<div><span><?php echo esc_html__( 'Converted', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-trials-converted">0</strong></div>
-				<div><span><?php echo esc_html__( 'Conversion Rate', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-trials-rate">0%</strong></div>
+			<div class="rl-fsbi-trial-panel-grid">
+				<div class="rl-fsbi-trial-funnel-col">
+					<div class="rl-fsbi-panel-title">
+						<?php echo esc_html__( 'Trial Funnel', 'rl-freemius-bi' ); ?>
+						<span class="rl-fsbi-data-source" id="rl-fsbi-trials-source"><?php echo esc_html__( 'Estimated from subscriptions', 'rl-freemius-bi' ); ?></span>
+					</div>
+					<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Trials started in the selected period and what happened to them.', 'rl-freemius-bi' ); ?></div>
+					<div class="rl-fsbi-trial-numbers">
+						<div><span><?php echo esc_html__( 'Total Trials', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-trials-total">0</strong></div>
+						<div><span><?php echo esc_html__( 'With Payment Method', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-trials-with-method">0</strong></div>
+						<div><span><?php echo esc_html__( 'Converted', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-trials-converted">0</strong></div>
+						<div><span><?php echo esc_html__( 'Canceled', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-trials-canceled">0</strong></div>
+						<div><span><?php echo esc_html__( 'Conversion Rate', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-trials-rate">0%</strong></div>
+					</div>
+					<div class="rl-fsbi-funnel" id="rl-fsbi-trial-funnel" aria-live="polite"></div>
+				</div>
+				<div class="rl-fsbi-churn-col">
+					<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Churn Reasons', 'rl-freemius-bi' ); ?></div>
+					<div class="rl-fsbi-card-sub rl-fsbi-chart-note">
+						<?php
+						echo esc_html__( 'Uninstall feedback collected by Freemius over the last 12 months, most frequent first.', 'rl-freemius-bi' );
+						?>
+					</div>
+					<ul class="rl-fsbi-churn-reasons" id="rl-fsbi-churn-reasons" aria-live="polite">
+						<li class="rl-fsbi-churn-empty"><?php echo esc_html__( 'No uninstall feedback stored yet. Run a sync to collect it.', 'rl-freemius-bi' ); ?></li>
+					</ul>
+				</div>
 			</div>
 		</div>
 
