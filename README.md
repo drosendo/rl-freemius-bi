@@ -832,6 +832,9 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.18 (2026-11-06)
+- **The cards no longer run flush to the right edge of the screen.** The dashboard sets `margin: 0 auto`, which discarded the 20px right margin WordPress's `.wrap` normally provides, and it had no horizontal padding of its own — measured gap to the viewport edge: **0px**. It now carries 32px of horizontal padding, so the content sits 32px inside both edges at every width.
+
 ### 1.3.17 (2026-11-06)
 - **The dashboard no longer scrolls sideways.** The filter toolbar used a fixed ten-column grid that could not shrink, so at ordinary desktop widths the row was wider than the container and pushed the whole admin page into horizontal scroll (viewport 1343px, document 1377px). It is now a wrapping flex row: measured 0px overflow at 1343, 1085, 945 and 785px.
 - **Cancel Sync no longer shows when it should not.** WordPress's `.button` rule outranks the `hidden` attribute, so the button rendered permanently even though the markup marks it hidden. A scoped `.rl-fsbi-dashboard [hidden] { display: none !important; }` fixes it for every element in the dashboard, not just this one.
