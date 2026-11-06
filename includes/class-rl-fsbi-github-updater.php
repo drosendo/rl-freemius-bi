@@ -241,7 +241,11 @@ class RL_FSBI_GitHub_Updater
 		// costs no API quota. The REST API allows 60 anonymous requests per hour
 		// per IP, which a shared host cannot rely on: the whole server's traffic
 		// shares one address, so the quota can be spent by unrelated sites.
-		$release = $this->release_from_web();
+		$release = $this->release_from_atom();
+
+		if (null === $release) {
+			$release = $this->release_from_redirect();
+		}
 
 		if (null === $release) {
 			$release = $this->release_from_api();
@@ -262,16 +266,48 @@ class RL_FSBI_GitHub_Updater
 	}
 
 	/**
-	 * Resolve the newest release without spending API quota.
+	 * Resolve the newest release from the public Atom feed.
 	 *
-	 * `/releases/latest` redirects to the newest tag, so the version comes from
-	 * the Location header. The download URL is then derived from the tag and
-	 * verified before use, falling back to the tag archive when an asset of the
-	 * expected name is absent.
+	 * The feed costs no API quota and, unlike the `/releases/latest` redirect,
+	 * it is not served stale from GitHub's CDN: right after publishing, the
+	 * redirect still pointed at the previous tag while the feed already listed
+	 * the new one.
 	 *
 	 * @return array|null Release data, or null when this path fails.
 	 */
-	private function release_from_web()
+	private function release_from_atom()
+	{
+		$response = wp_remote_get(
+			'https://github.com/' . self::OWNER . '/' . self::REPO . '/releases.atom',
+			array(
+				'timeout' => 10,
+				'headers' => array('User-Agent' => 'RL-FSBI/' . $this->version),
+			)
+		);
+
+		if (is_wp_error($response) || 200 !== (int) wp_remote_retrieve_response_code($response)) {
+			return null;
+		}
+
+		$body = (string) wp_remote_retrieve_body($response);
+
+		// The first entry is the newest release.
+		if (! preg_match('#<entry>.*?/releases/tag/([^"<>\s]+)#s', $body, $matches)) {
+			return null;
+		}
+
+		return $this->release_from_tag($matches[1]);
+	}
+
+	/**
+	 * Resolve the newest release from the `/releases/latest` redirect.
+	 *
+	 * Secondary: the redirect can lag behind a fresh publish because it is
+	 * cached at the CDN edge.
+	 *
+	 * @return array|null Release data, or null when this path fails.
+	 */
+	private function release_from_redirect()
 	{
 		$response = wp_remote_get(
 			'https://github.com/' . self::OWNER . '/' . self::REPO . '/releases/latest',
@@ -297,13 +333,30 @@ class RL_FSBI_GitHub_Updater
 			return null;
 		}
 
-		$tag     = $matches[1];
-		$version = ltrim($tag, 'vV');
+		return $this->release_from_tag($matches[1]);
+	}
 
+	/**
+	 * Build release data from a tag name.
+	 *
+	 * @param string $tag Tag, e.g. v1.3.24.
+	 * @return array|null
+	 */
+	private function release_from_tag($tag)
+	{
+		$tag = trim((string) $tag);
+
+		if (! preg_match('#^v?[0-9][0-9A-Za-z.\-]*$#', $tag)) {
+			return null;
+		}
+
+		$version = ltrim($tag, 'vV');
 		$base    = 'https://github.com/' . self::OWNER . '/' . self::REPO;
 		$asset   = $base . '/releases/download/' . $tag . '/' . self::SLUG . '-' . $version . '.zip';
 		$archive = $base . '/archive/refs/tags/' . $tag . '.zip';
 
+		// The asset is confirmed before it is offered, so an update can never
+		// point at a URL that 404s at install time.
 		$zip = $this->asset_exists($asset) ? $asset : $archive;
 
 		return array(
