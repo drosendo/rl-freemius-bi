@@ -1242,6 +1242,9 @@ class RL_FSBI_Settings_Manager {
 		$next_run   = class_exists( 'RL_FSBI_User_Sync' )
 			? wp_next_scheduled( RL_FSBI_User_Sync::CRON_HOOK )
 			: false;
+		$cooldown   = class_exists( 'RL_FSBI_User_Sync' )
+			? (int) RL_FSBI_User_Sync::CYCLE_COOLDOWN
+			: 6 * HOUR_IN_SECONDS;
 
 		$notice = get_transient( 'rl_fsbi_backfill_notice' );
 		if ( $notice ) {
@@ -1307,9 +1310,11 @@ class RL_FSBI_Settings_Manager {
 				</div>
 			</div>
 
-			<div style="height:6px;background:#f0f0f1;border-radius:3px;overflow:hidden;margin:0 0 8px">
-				<span style="display:block;height:100%;width:<?php echo esc_attr( (string) round( $progress, 1 ) ); ?>%;background:#2271b1"></span>
-			</div>
+			<?php if ( $offset > 0 ) : ?>
+				<div style="height:6px;background:#f0f0f1;border-radius:3px;overflow:hidden;margin:0 0 8px">
+					<span style="display:block;height:100%;width:<?php echo esc_attr( (string) round( $progress, 1 ) ); ?>%;background:#2271b1"></span>
+				</div>
+			<?php endif; ?>
 
 			<p style="margin:0 0 12px;font-size:12px;color:#50575e">
 				<?php
@@ -1328,11 +1333,24 @@ class RL_FSBI_Settings_Manager {
 						esc_html( number_format_i18n( $progress, 1 ) )
 					);
 				} elseif ( $cycle_done > 0 ) {
+					$wait = max( 0, $cooldown - ( time() - $cycle_done ) );
+
 					printf(
 						/* translators: %s: human readable time difference */
-						esc_html__( 'Crawl complete — every user fetched %s ago. The next pass starts on its own.', 'rl-freemius-bi' ),
+						esc_html__( 'Last full pass finished %s ago.', 'rl-freemius-bi' ),
 						esc_html( human_time_diff( $cycle_done, time() ) )
 					);
+
+					if ( $wait > 0 ) {
+						printf(
+							' ' . /* translators: %s: human readable time difference */ esc_html__( 'Next pass starts in %s.', 'rl-freemius-bi' ),
+							esc_html( human_time_diff( time() + $wait, time() ) )
+						);
+					} else {
+						printf(
+							' ' . esc_html__( 'The next pass is due now.', 'rl-freemius-bi' )
+						);
+					}
 				} else {
 					esc_html_e( 'Waiting for the first pass to run.', 'rl-freemius-bi' );
 				}
@@ -1346,7 +1364,7 @@ class RL_FSBI_Settings_Manager {
 
 				if ( $next_run ) {
 					printf(
-						' ' . /* translators: %s: human readable time difference */ esc_html__( 'Next run in %s.', 'rl-freemius-bi' ),
+						' ' . /* translators: %s: human readable time difference */ esc_html__( 'Next check in %s.', 'rl-freemius-bi' ),
 						esc_html( human_time_diff( time(), $next_run ) )
 					);
 				}

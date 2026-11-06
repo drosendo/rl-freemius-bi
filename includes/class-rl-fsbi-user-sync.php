@@ -76,6 +76,16 @@ class RL_FSBI_User_Sync
 	const TIME_BUDGET = 25;
 
 	/**
+	 * Seconds to wait after a full pass before starting the next one.
+	 *
+	 * Without this the crawl restarts the instant it finishes, so the panel's
+	 * progress bar resets to zero forever and the API is asked for all 17,084
+	 * users every hour of every day. Emails change slowly enough that a pass
+	 * every 6 hours is more than enough.
+	 */
+	const CYCLE_COOLDOWN = 6 * HOUR_IN_SECONDS;
+
+	/**
 	 * Days the REST access log is kept.
 	 */
 	const LOG_RETENTION_DAYS = 90;
@@ -158,7 +168,36 @@ class RL_FSBI_User_Sync
 	 */
 	public function run_cron()
 	{
+		if ($this->in_cooldown()) {
+			return;
+		}
+
 		$this->run_batch(self::PAGES_PER_RUN, self::TIME_BUDGET);
+	}
+
+	/**
+	 * Whether the last full pass is recent enough to skip this run.
+	 *
+	 * An unfinished pass never counts: a job killed mid-cycle must resume on the
+	 * next tick, not wait out a cooldown.
+	 *
+	 * @return bool
+	 */
+	private function in_cooldown()
+	{
+		$state = $this->get_state();
+
+		if ((int) $state['offset'] > 0) {
+			return false;
+		}
+
+		$done = (int) get_option(self::OPT_CYCLE_DONE, 0);
+
+		if ($done <= 0) {
+			return false;
+		}
+
+		return (time() - $done) < self::CYCLE_COOLDOWN;
 	}
 
 	/**
@@ -212,6 +251,12 @@ class RL_FSBI_User_Sync
 		$pages  = 0;
 		$saved  = 0;
 		$done   = false;
+
+		if (0 === (int) $state['offset']) {
+			// A pass is starting, so the previous completion no longer describes
+			// the current state.
+			delete_option(self::OPT_CYCLE_DONE);
+		}
 
 		while ($pages < $max_pages && (time() - $start) < $time_budget) {
 			$plugin_id = $plugins[$state['plugin_index']] ?? null;

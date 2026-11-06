@@ -832,6 +832,11 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.14 (2026-11-06)
+- **The crawl no longer restarts the instant it finishes.** `run_cron()` had no guard at all: every completed pass reset the cursor to zero and immediately began re-crawling all 17,084 users, so the progress bar looped 0→100% forever and looked stuck, and Freemius was asked for every user every hour of every day. There is now a 6-hour cooldown between full passes. An unfinished pass is never held back — a job killed mid-cycle resumes on the next tick.
+- `cycle_done` is cleared when a pass starts, so `/sync-status` reports `running` during a pass instead of staying `idle` forever after the first one.
+- The panel shows the progress bar only while a pass is actually in flight. Between passes it says when the last full pass finished and when the next one starts, and the scheduler line is now "Next check in …" so it cannot be confused with the next pass.
+
 ### 1.3.13 (2026-11-06)
 - **The backfill panel reports coverage, not crawl volume.** It used to say "Stored: 17,084 user(s) — State: running", which answered neither question worth asking. It now shows licence holders resolved as a percentage (1,095 of 1,096 — 99.9%), how many emails are missing and what share of holders that is, users stored, and a progress bar for the pass in flight.
 - **"State: running" is gone.** It was derived from "last run under 10 minutes ago", and since the crawl cycles forever that condition is always true, so the panel was permanently "running". It now reports what is actually happening: crawling with a position and percentage, complete with when, or the last error.
