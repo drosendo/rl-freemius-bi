@@ -50,13 +50,23 @@ class RL_FSBI_User_Sync
 	const OPT_CYCLE_DONE = 'rl_fsbi_user_sync_cycle_done';
 
 	/**
-	 * Pages per cron run. Kept small on purpose: a long request on a busy host
-	 * starves the PHP workers.
+	 * Page size for the user list.
+	 *
+	 * Not tunable: Freemius returns 50 rows whatever `count` asks for, so a
+	 * larger value is silently ignored by the API.
 	 */
-	const PAGES_PER_RUN = 20;
+	const PAGE_SIZE = 50;
 
 	/**
-	 * Seconds per cron run.
+	 * Pages per cron run. A ceiling, not a target — the time budget below is
+	 * what actually protects the PHP workers on a busy host, and a slow API
+	 * stops the loop well before this many pages.
+	 */
+	const PAGES_PER_RUN = 30;
+
+	/**
+	 * Seconds per cron run. Stays under the 30s max_execution_time most hosts
+	 * impose, which is the real constraint here.
 	 */
 	const TIME_BUDGET = 25;
 
@@ -210,7 +220,7 @@ class RL_FSBI_User_Sync
 				break;
 			}
 
-			$rows = $api->retrieve_users((int) $plugin_id, array('count' => 50, 'offset' => $state['offset']));
+			$rows = $api->retrieve_users((int) $plugin_id, array('count' => self::PAGE_SIZE, 'offset' => $state['offset']));
 			$pages++;
 
 			if (is_wp_error($rows)) {
@@ -226,13 +236,13 @@ class RL_FSBI_User_Sync
 
 			$saved += $this->upsert_users((int) $plugin_id, $rows);
 
-			if (count($rows) < 50) {
+			if (count($rows) < self::PAGE_SIZE) {
 				$state = $this->next_plugin($state);
 				$this->save_state($state);
 				continue;
 			}
 
-			$state['offset'] += 50;
+			$state['offset'] += self::PAGE_SIZE;
 			$this->save_state($state);
 		}
 

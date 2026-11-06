@@ -832,6 +832,11 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.11 (2026-11-06)
+- **User crawl is ~45% faster per run.** The page ceiling went from 20 to 30, so runs now use the 25-second budget that was already there instead of stopping early (measured: 1,450 users per run, up from 1,000, still 25.3s).
+- Corrected the documented crawl limits. The docs claimed "50 pages or 90 seconds"; the code has always run 20 pages in a 25-second budget. `README-API.md` now states the real values and explains why page size cannot be raised.
+- Freemius caps `/users.json` at 50 rows per request — `count` is declared `maximum: 50` in the OpenAPI document. Confirmed `count=100/200/500` all return 50 rows, so the page size is not ours to tune.
+
 ### 1.3.10 (2026-11-06)
 - Documented the GitHub release update channel: how it behaves, its caching, and the exact steps to cut a release. No functional change.
 

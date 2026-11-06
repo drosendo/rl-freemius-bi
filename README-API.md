@@ -163,8 +163,18 @@ curl -s -u "agent@example.com:APP_PASSWORD" \
 }
 ```
 
-The crawl runs every 5 minutes, 50 pages (or 90 seconds) per run, and persists
-its cursor after **every page** — killing the job loses at most one page.
+The crawl runs every 5 minutes and stops after **25 seconds or 30 pages**,
+whichever comes first, then persists its cursor after **every page** — killing
+the job loses at most one page. At the observed 0.85s per request that is about
+1,450 users per run.
+
+Page size is fixed at **50** and cannot be raised. `/users.json` declares `count`
+with a schema `maximum: 50` (`components/parameters/count` in the published
+OpenAPI document), and the API returns exactly 50 rows whatever larger value is
+asked for — verified with `count=100`, `200` and `500`, which all returned 50.
+Throughput is therefore governed by pages per run, not by the page size, and the
+time budget is the real guard: a slow API stops the loop well before 30 pages.
+
 When a plugin's user list is exhausted the cursor moves to the next plugin; at
 the end of the list the cycle is marked complete and the cursor resets to 0.
 
