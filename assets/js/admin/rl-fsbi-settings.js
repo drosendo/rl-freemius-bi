@@ -637,6 +637,472 @@
 			});
 		});
 
+		/**
+		 * Kit subscriber quota panel: preview and prune the oldest tagged subscribers.
+		 *
+		 * Pruning unsubscribes real people, so it always requires an explicit
+		 * confirmation and only ever runs one bounded batch per click.
+		 */
+		/**
+		 * Kit subscriber quota panel: preview and prune the oldest tagged subscribers.
+		 *
+		 * Pruning unsubscribes real people, so it always requires an explicit
+		 * confirmation and only ever runs bounded batches per click.
+		 */
+		const quotaData = (window.rlFsbiSettingsData && window.rlFsbiSettingsData) || {};
+		const quotaState = { total: 0, excess: 0, candidates: 0, candidateIds: [], scope: 'all', drainRunning: false, drainStopRequested: false };
+
+		function quotaRequest(action, payload) {
+			return $.post(quotaData.ajaxUrl, Object.assign({
+				action: action,
+				nonce: quotaData.nonce
+			}, payload || {}));
+		}
+
+		/**
+		 * Promise wrapper so the drain loop can await a jQuery request.
+		 */
+		function quotaPost(action, payload) {
+			return new Promise(function(resolve, reject) {
+				quotaRequest(action, payload).done(resolve).fail(reject);
+			});
+		}
+
+		/**
+		 * Confirm dialog that works on the framework's SweetAlert2 v9
+		 * ({value}) and on v10+ ({isConfirmed}).
+		 */
+		function quotaConfirm(title, text) {
+			if (window.Swal && typeof window.Swal.fire === 'function') {
+				return window.Swal.fire({
+					icon: 'warning',
+					title: title,
+					text: text,
+					showCancelButton: true,
+					confirmButtonText: 'Yes, unsubscribe',
+					cancelButtonText: 'Cancel',
+					confirmButtonColor: '#d63638',
+					reverseButtons: true,
+					focusCancel: true
+				}).then(function(result) {
+					return !!result && (result.isConfirmed === true || result.value === true);
+				});
+			}
+
+			return Promise.resolve(window.confirm(title + '\n\n' + text));
+		}
+
+		function quotaScopeWarning() {
+			return quotaState.scope === 'tagged'
+				? 'Kit treats this as permanent: each person stops receiving all email and must opt in again explicitly. Only subscribers carrying this plugin\'s Kit tags are removed.'
+				: 'Kit treats this as permanent: each person stops receiving all email and must opt in again explicitly. Any active subscriber is eligible, oldest first.';
+		}
+
+		/**
+		 * Paint the panel from a preview payload.
+		 */
+		function quotaApplyPreview(data) {
+			quotaState.total = Number(data.total || 0);
+			quotaState.excess = Number(data.excess || 0);
+			quotaState.candidates = Number(data.candidate_count || 0);
+			quotaState.scope = data.scope || 'all';
+			quotaState.candidateIds = (data.candidates || [])
+				.map(function(candidate) { return Number(candidate.id); })
+				.filter(function(id) { return id > 0; });
+
+			$('#rl-fsbi-kit-quota-total').text(quotaState.total.toLocaleString());
+			$('#rl-fsbi-kit-quota-excess').text(quotaState.excess.toLocaleString());
+			$('#rl-fsbi-kit-quota-candidates').text(quotaState.candidates.toLocaleString());
+			$('#rl-fsbi-kit-quota-limit').text(Number(data.limit || 0) > 0 ? Number(data.limit).toLocaleString() : 'Unlimited');
+
+			quotaMessage(data.message || '');
+			quotaRenderCandidates(data.candidates);
+			$('#rl-fsbi-kit-quota-warning').prop('hidden', quotaState.excess <= 0);
+
+			const idle = !quotaState.drainRunning;
+			$('#rl-fsbi-kit-quota-prune').prop('disabled', !idle || quotaState.candidates <= 0 || quotaState.excess <= 0);
+			$('#rl-fsbi-kit-quota-drain').prop('disabled', !idle || quotaState.excess <= 0);
+			$('#rl-fsbi-kit-quota-preview').prop('disabled', !idle);
+
+			return data;
+		}
+
+		/**
+		 * Re-read the quota and the next N candidates from Kit.
+		 *
+		 * @param {number} [previewSize] Candidates to fetch (server caps at 500).
+		 */
+		function quotaLoadCandidates(previewSize) {
+			return quotaPost('rl_fsbi_kit_prune_preview', previewSize ? { preview_size: previewSize } : null)
+				.then(function(res) {
+					if (!res || !res.success) {
+						throw new Error(typeof res.data === 'string' ? res.data : 'Preview failed.');
+					}
+
+					return quotaApplyPreview(res.data || {});
+				});
+		}
+
+		function quotaSpinner(active) {
+			$('.rl-fsbi-kit-quota-spinner').toggleClass('is-active', !!active);
+		}
+
+		function quotaMessage(text, isError) {
+			$('#rl-fsbi-kit-quota-output')
+				.text(text)
+				.css('color', isError ? '#b32d2e' : '#1d2327');
+		}
+
+		function quotaProgress(percent, text) {
+			const $wrap = $('#rl-fsbi-kit-quota-progress');
+			if (!$wrap.length) { return; }
+			$wrap.prop('hidden', false);
+			$('#rl-fsbi-kit-quota-progress-fill').css('width', Math.max(0, Math.min(100, percent)) + '%');
+			if (typeof text === 'string') {
+				$('#rl-fsbi-kit-quota-progress-text').text(text);
+			}
+		}
+
+		function quotaProgressReset() {
+			$('#rl-fsbi-kit-quota-progress').prop('hidden', true);
+			$('#rl-fsbi-kit-quota-progress-fill').css('width', '0%');
+			$('#rl-fsbi-kit-quota-progress-text').text('');
+		}
+
+		function quotaRenderCandidates(candidates) {
+			const $list = $('#rl-fsbi-kit-quota-list').empty();
+			(candidates || []).forEach(function(candidate) {
+				const when = candidate.created_at ? new Date(candidate.created_at).toLocaleDateString() : '';
+				$('<li>').text(candidate.email + (when ? ' — joined ' + when : '')).appendTo($list);
+			});
+		}
+
+		function quotaNotify(options) {
+			if (window.Swal && typeof window.Swal.fire === 'function') {
+				return window.Swal.fire(options);
+			}
+			window.alert((options.title || '') + (options.text ? '\n\n' + options.text : ''));
+			return null;
+		}
+
+		/**
+		 * Populate the quota panel on page load so it never shows empty dashes.
+		 * Read-only: the preview endpoint never changes subscriber state.
+		 */
+		$(function() {
+			if (!$('.rl-fsbi-kit-quota').length) { return; }
+
+			if (!quotaData.kitQuotaEnabled) {
+				// No key at render time: say so instead of leaving silent dashes.
+				quotaMessage('Save a Kit API key above, then reload this page to load your quota.', false);
+				$('#rl-fsbi-kit-quota-prune').prop('disabled', true);
+				return;
+			}
+
+			$('#rl-fsbi-kit-quota-preview').trigger('click');
+		});
+
+		$(document).on('click', '#rl-fsbi-kit-quota-preview', function(e) {
+			e.preventDefault();
+
+			const $btn = $(this);
+
+			quotaSpinner(true);
+			$btn.prop('disabled', true);
+
+			quotaLoadCandidates()
+				.catch(function(err) {
+					quotaMessage((err && err.message) || 'Preview failed: network error.', true);
+				})
+				.then(function() {
+					quotaSpinner(false);
+					$btn.prop('disabled', quotaState.drainRunning);
+				});
+		});
+
+		$(document).on('click', '#rl-fsbi-kit-quota-prune', function(e) {
+			e.preventDefault();
+
+			const target = Math.min(25, quotaState.excess, quotaState.candidateIds.length);
+
+			if (target <= 0) {
+				quotaMessage('Nothing to remove — use "Refresh from Kit" to load the current candidates.', false);
+				return;
+			}
+
+			quotaConfirm('Unsubscribe ' + target + ' subscriber' + (target === 1 ? '' : 's') + '?', quotaScopeWarning())
+				.then(function(confirmed) {
+					if (confirmed) { runPruneBatch(target); }
+				});
+		});
+
+		$(document).on('click', '#rl-fsbi-kit-quota-drain', function(e) {
+			e.preventDefault();
+
+			const goal = quotaState.excess;
+
+			if (goal <= 0) {
+				quotaMessage('You are within the limit — nothing to remove.', false);
+				return;
+			}
+
+			quotaConfirm(
+				'Unsubscribe all ' + goal.toLocaleString() + ' over the limit?',
+				quotaScopeWarning() + ' This runs continuously until you are back under the limit. Keep this tab open and use Stop to interrupt.'
+			).then(function(confirmed) {
+				if (confirmed) { runDrain(); }
+			});
+		});
+
+		$(document).on('click', '#rl-fsbi-kit-quota-stop', function(e) {
+			e.preventDefault();
+			quotaState.drainRunning = false;
+			quotaState.drainStopRequested = true;
+			$(this).prop('disabled', true);
+			quotaMessage('Stopping after the current chunk…', false);
+		});
+
+		/**
+		 * Remove everything above the limit, one server-safe chunk at a time.
+		 *
+		 * The loop is client-driven so every request stays short and the tab
+		 * shows live progress. Stop takes effect between chunks, never mid-request.
+		 */
+		function runDrain() {
+			const $drain   = $('#rl-fsbi-kit-quota-drain');
+			const $prune   = $('#rl-fsbi-kit-quota-prune');
+			const $refresh = $('#rl-fsbi-kit-quota-preview');
+			const $stop    = $('#rl-fsbi-kit-quota-stop');
+
+			const goal = Math.max(0, quotaState.excess);
+			const CHUNK = 25;
+			const MAX_REQUESTS = 400;
+
+			let removed = 0;
+			let failed = 0;
+			let requests = 0;
+
+			quotaState.drainRunning = true;
+
+			$drain.prop('disabled', true);
+			$prune.prop('disabled', true);
+			$refresh.prop('disabled', true);
+			$stop.prop('hidden', false).prop('disabled', false);
+			quotaSpinner(true);
+			quotaProgress(0, 'Loading candidates from Kit…');
+
+			const paint = function(isFinal) {
+				const done = removed + failed;
+				quotaProgress(
+					goal > 0 ? Math.min(100, Math.round((done / goal) * 100)) : 100,
+					'Removed ' + removed.toLocaleString() + ' of ' + goal.toLocaleString()
+						+ (failed ? ' (' + failed + ' failed)' : '') + (isFinal ? '.' : '…')
+				);
+			};
+
+			const finish = function(reason) {
+				const stopped = !!reason || quotaState.drainStopRequested === true;
+
+				quotaState.drainRunning = false;
+				quotaState.drainStopRequested = false;
+				quotaSpinner(false);
+				$stop.prop('hidden', true);
+				$drain.prop('disabled', quotaState.excess <= 0);
+				$prune.prop('disabled', quotaState.excess <= 0);
+				$refresh.prop('disabled', false);
+
+				paint(true);
+
+				if (reason) { quotaMessage(reason, true); }
+
+				quotaNotify({
+					icon: failed ? 'warning' : (stopped ? 'info' : 'success'),
+					title: stopped ? 'Stopped' : 'Done',
+					text: 'Removed ' + removed.toLocaleString() + ' subscriber' + (removed === 1 ? '' : 's') + '. '
+						+ (quotaState.excess > 0
+							? quotaState.excess.toLocaleString() + ' still over the limit.'
+							: 'You are now within the limit.'),
+					confirmButtonText: 'OK'
+				});
+
+				setTimeout(function() {
+					if (quotaData.kitQuotaEnabled) { $('#rl-fsbi-kit-quota-preview').trigger('click'); }
+				}, 600);
+			};
+
+			const nextChunk = function() {
+				if (!quotaState.drainRunning || quotaState.excess <= 0) {
+					finish('');
+					return;
+				}
+
+				if (requests >= MAX_REQUESTS) {
+					finish('Stopped after ' + MAX_REQUESTS + ' requests — click again to continue.');
+					return;
+				}
+
+				const ready = quotaState.candidateIds.length
+					? Promise.resolve()
+					: quotaLoadCandidates(500);
+
+				ready.then(function() {
+					if (!quotaState.candidateIds.length) {
+						finish('Kit returned no more eligible subscribers.');
+						return;
+					}
+
+					const chunk = quotaState.candidateIds.splice(0, Math.min(CHUNK, Math.max(1, quotaState.excess)));
+					requests++;
+
+					return quotaPost('rl_fsbi_kit_prune_batch', {
+						confirm: 'yes',
+						batch_size: chunk.length,
+						subscriber_ids: JSON.stringify(chunk)
+					}).then(function(res) {
+						if (!res || !res.success) {
+							throw new Error(typeof res.data === 'string' ? res.data : 'Prune failed.');
+						}
+
+						const data = res.data || {};
+						const chunkRemoved = Number(data.removed || 0);
+						const chunkFailed = Number(data.failed || 0);
+
+						removed += chunkRemoved;
+						failed += chunkFailed;
+
+						quotaState.total = Number(data.total || quotaState.total);
+						quotaState.excess = Number(data.excess || 0);
+						$('#rl-fsbi-kit-quota-total').text(quotaState.total.toLocaleString());
+						$('#rl-fsbi-kit-quota-excess').text(quotaState.excess.toLocaleString());
+
+						paint();
+
+						// A chunk that changes nothing means we are stuck rather than done.
+						if (0 === chunkRemoved && 0 === chunkFailed) {
+							finish('Kit stopped accepting removals.');
+							return;
+						}
+
+						nextChunk();
+					});
+				}).catch(function(err) {
+					finish((err && err.message) || 'Request failed.');
+				});
+			};
+
+			// Pull a large candidate list up front so the loop only refetches
+			// once per 500 removals instead of once per chunk.
+			if (goal > CHUNK) {
+				quotaLoadCandidates(500)
+					.then(function() { nextChunk(); })
+					.catch(function(err) {
+						finish((err && err.message) || 'Could not load candidates.');
+					});
+			} else {
+				nextChunk();
+			}
+		}
+
+		/**
+		 * Remove one batch in small chunks so the progress bar reflects real work.
+		 *
+		 * Each chunk is a separate request; the server caps the size regardless.
+		 *
+		 * @param {number} target How many to remove for this click.
+		 */
+		function runPruneBatch(target) {
+			const CHUNK = 5;
+			const $prune = $('#rl-fsbi-kit-quota-prune');
+			const ids = quotaState.candidateIds.slice(0, target);
+			let index = 0;
+			let removed = 0;
+			let failed = 0;
+
+			quotaSpinner(true);
+			$prune.prop('disabled', true);
+			$('#rl-fsbi-kit-quota-preview').prop('disabled', true);
+			quotaProgress(0, 'Starting…');
+
+			const finish = function(isError) {
+				quotaSpinner(false);
+				$('#rl-fsbi-kit-quota-preview').prop('disabled', false);
+
+				const doneCount = removed + failed;
+				quotaProgress(target > 0 ? Math.round((doneCount / target) * 100) : 100,
+					'Removed ' + removed + ' of ' + target + (failed ? ' (' + failed + ' failed)' : '') + '.');
+
+				if (!isError) {
+					quotaNotify({
+						icon: failed ? 'warning' : 'success',
+						title: failed ? 'Partially completed' : 'Done',
+						text: 'Removed ' + removed + ' subscriber' + (removed === 1 ? '' : 's') + '. '
+							+ (quotaState.excess > 0
+								? quotaState.excess.toLocaleString() + ' still over the limit.'
+								: 'You are now within the limit.'),
+						confirmButtonText: 'OK'
+					});
+				}
+
+				$prune.prop('disabled', quotaState.candidates <= 0 || quotaState.excess <= 0);
+
+				// Refresh the candidate list so the next preview is accurate.
+				setTimeout(function() {
+					if (quotaData.kitQuotaEnabled) {
+						$('#rl-fsbi-kit-quota-preview').trigger('click');
+					}
+				}, 400);
+			};
+
+			const step = function() {
+				if (index >= ids.length) { finish(false); return; }
+
+				const chunk = ids.slice(index, index + CHUNK);
+				index += chunk.length;
+
+				// Send the exact previewed IDs: asking the server for "the oldest N"
+				// again re-selects the same people while Kit's active list catches up.
+				quotaRequest('rl_fsbi_kit_prune_batch', {
+					confirm: 'yes',
+					batch_size: chunk.length,
+					subscriber_ids: JSON.stringify(chunk)
+				})
+					.done(function(res) {
+						if (!res || !res.success) {
+							const msg = (res && res.data) ? res.data : 'Prune failed.';
+							quotaMessage(typeof msg === 'string' ? msg : 'Prune failed.', true);
+							finish(true);
+							return;
+						}
+
+						const data = res.data || {};
+
+						removed += Number(data.removed || 0);
+						failed += Number(data.failed || 0);
+
+						quotaState.total = Number(data.total || quotaState.total);
+						quotaState.excess = Number(data.excess || 0);
+
+						$('#rl-fsbi-kit-quota-total').text(quotaState.total.toLocaleString());
+						$('#rl-fsbi-kit-quota-excess').text(quotaState.excess.toLocaleString());
+
+						const doneCount = removed + failed;
+						quotaProgress(
+							target > 0 ? Math.round((doneCount / target) * 100) : 100,
+							'Removing ' + doneCount + ' of ' + target + '…'
+						);
+
+						if (data.done || index >= ids.length || quotaState.excess <= 0) { finish(false); return; }
+						step();
+					})
+					.fail(function() {
+						quotaMessage('Prune failed: network error.', true);
+						finish(true);
+					});
+			};
+
+			step();
+		}
+
 		$(document).on('click', '#rl-fsbi-clear-kit-sample-log-btn', function(e) {
 			e.preventDefault();
 			$('#rl-fsbi-kit-sample-log-console').empty();

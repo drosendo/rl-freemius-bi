@@ -92,9 +92,10 @@ class RL_FSBI_Kit {
 	 * @param string $method   HTTP method ('GET', 'POST', 'PUT', 'DELETE').
 	 * @param array  $body     Request body payload.
 	 * @param array  $query    URL query parameters.
+	 * @param int    $timeout Seconds before the request gives up.
 	 * @return array|WP_Error Response body decoded as array or WP_Error.
 	 */
-	public function request( string $endpoint, string $method = 'GET', array $body = array(), array $query = array() ) {
+	public function request( string $endpoint, string $method = 'GET', array $body = array(), array $query = array(), int $timeout = 25 ) {
 		if ( ! $this->is_configured() ) {
 			return new WP_Error( 'not_configured', esc_html__( 'Kit API key is not configured.', 'rl-freemius-bi' ) );
 		}
@@ -102,12 +103,15 @@ class RL_FSBI_Kit {
 		$url = self::API_BASE . '/' . ltrim( $endpoint, '/' );
 
 		if ( ! empty( $query ) ) {
-			$url = add_query_arg( $query, $url );
+			// Build the query string explicitly: add_query_arg() leaves base64
+			// cursor padding unencoded, which Kit rejects with
+			// "The given cursor could not be decoded".
+			$url .= ( false === strpos( $url, '?' ) ? '?' : '&' ) . http_build_query( $query, '', '&', PHP_QUERY_RFC3986 );
 		}
 
 		$args = array(
 			'method'  => strtoupper( $method ),
-			'timeout' => 25,
+			'timeout' => $timeout > 0 ? $timeout : 25,
 			'headers' => array(
 				'Accept'        => 'application/json',
 				'Content-Type'  => 'application/json; charset=utf-8',
@@ -199,9 +203,10 @@ class RL_FSBI_Kit {
 	/**
 	 * Fetch total active subscriber count from Kit (v4).
 	 *
+	 * @param int $timeout Optional request timeout in seconds.
 	 * @return int Total active subscribers, or 0 on error.
 	 */
-	public function get_total_subscribers(): int {
+	public function get_total_subscribers( int $timeout = 0 ): int {
 		if ( ! $this->is_configured() ) {
 			return 0;
 		}
@@ -209,7 +214,7 @@ class RL_FSBI_Kit {
 		$response = $this->request( '/subscribers', 'GET', array(), array(
 			'include_total_count' => 'true',
 			'per_page'            => 500,
-		) );
+		), $timeout );
 
 		if ( is_wp_error( $response ) || ! is_array( $response ) ) {
 			return 0;
@@ -254,6 +259,101 @@ class RL_FSBI_Kit {
 		}
 
 		return 0;
+	}
+
+	/**
+	 * Fetch one page of subscribers, oldest first by default.
+	 *
+	 * `status` defaults to `active` in the Kit API, which is the set that
+	 * counts against the plan quota.
+	 *
+	 * @param array $query Query overrides.
+	 * @return array{subscribers: array, pagination: array, total_count: int, error: string}
+	 */
+	public function list_subscribers( array $query = array() ): array {
+		$empty = array(
+			'subscribers' => array(),
+			'pagination'  => array(),
+			'total_count' => 0,
+			'error'       => '',
+		);
+
+		if ( ! $this->is_configured() ) {
+			$empty['error'] = esc_html__( 'Kit API key is not configured.', 'rl-freemius-bi' );
+			return $empty;
+		}
+
+		$defaults = array(
+			'per_page'   => 500,
+			'status'     => 'active',
+			'sort_field' => 'created_at',
+			'sort_order' => 'asc',
+			'include'    => 'tags',
+		);
+
+		$response = $this->request( '/subscribers', 'GET', array(), wp_parse_args( $query, $defaults ) );
+
+		if ( is_wp_error( $response ) ) {
+			$empty['error'] = $response->get_error_message();
+			return $empty;
+		}
+
+		if ( ! is_array( $response ) ) {
+			return $empty;
+		}
+
+		return array(
+			'subscribers' => isset( $response['subscribers'] ) && is_array( $response['subscribers'] ) ? $response['subscribers'] : array(),
+			'pagination'  => isset( $response['pagination'] ) && is_array( $response['pagination'] ) ? $response['pagination'] : array(),
+			'total_count' => $this->extract_total_count( $response ),
+			'error'       => '',
+		);
+	}
+
+	/**
+	 * Read the account total from any of the shapes Kit uses.
+	 *
+	 * `include_total_count=true` returns it under `pagination.total_count`,
+	 * while some responses expose it at the top level.
+	 *
+	 * @param array $response Decoded API response.
+	 * @return int
+	 */
+	private function extract_total_count( array $response ): int {
+		$candidates = array(
+			$response['pagination']['total_count'] ?? null,
+			$response['pagination']['total'] ?? null,
+			$response['total_count'] ?? null,
+			$response['total'] ?? null,
+			$response['total_subscribers'] ?? null,
+		);
+
+		foreach ( $candidates as $candidate ) {
+			if ( null !== $candidate && '' !== $candidate ) {
+				return (int) $candidate;
+			}
+		}
+
+		return 0;
+	}
+
+	/**
+	 * Unsubscribe a subscriber from all future emails.
+	 *
+	 * Kit treats this as consent-revoking and effectively permanent: the record
+	 * and tags are kept, but the person must explicitly opt in again.
+	 *
+	 * @param int $subscriber_id Kit subscriber ID.
+	 * @return array|WP_Error Empty array on success (HTTP 204).
+	 */
+	public function unsubscribe_subscriber( $subscriber_id ) {
+		$subscriber_id = (int) $subscriber_id;
+
+		if ( $subscriber_id <= 0 ) {
+			return new WP_Error( 'invalid_subscriber', esc_html__( 'Invalid Kit subscriber ID.', 'rl-freemius-bi' ) );
+		}
+
+		return $this->request( "/subscribers/{$subscriber_id}/unsubscribe", 'POST', array() );
 	}
 
 	/**
