@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.3.28  
+**Version:** 1.3.29  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -413,7 +413,7 @@ Existing subscribers are still matched, updated, and tagged — only new additio
 
 ### Kit.com Manual CSV Export
 - **One-Click Instant Download:** Download the latest complete opted-in subscribers CSV file directly via the **📥** button on the dashboard Newsletter KPI widget or the modal footer.
-- **Server-Side Generation & Email Delivery:** Generates complete CSV exports in chunked batches directly on the server to prevent browser HTTP timeouts on large subscriber lists (e.g. 17,000+ scanned Freemius users). Upon completion, automatically emails the completed CSV file to the administrator (`the site admin email`) as an attachment and keeps it cached in `wp-content/uploads/fsbi-exports/` for instant one-click downloads.
+- **Server-Side Generation & Email Delivery:** Generates complete CSV exports in chunked batches directly on the server to prevent browser HTTP timeouts on large subscriber lists (e.g. 17,000+ scanned Freemius users). Upon completion, automatically emails the completed CSV file to the site's admin address (`admin_email`) as an attachment and keeps it cached in `wp-content/uploads/fsbi-exports/` for instant one-click downloads.
 - **Export Storage Hardening:** Exports contain customer emails, so the `fsbi-exports/` directory is created with an `.htaccess` deny rule (Apache 2.4 and 2.2 syntax) plus an `index.php` silence file, files are named with a random 32-character token, and exports older than 24 hours are pruned automatically on the next generation. Delivery always goes through the nonce- and capability-protected `admin-ajax.php` handler; files are never linked directly. On Nginx, add an equivalent `location` deny rule for `wp-content/uploads/fsbi-exports/`.
 - **Kit.com Import Format:** Generates UTF-8 BOM CSV files fully compliant with [Kit Subscriber Import guidelines](https://help.kit.com/en/articles/2502555-how-to-import-a-subscriber-list) featuring column headers: `Email Address`, `First Name`, `Last Name`, `Tags`, `Website`, `Freemius User ID`, `Plugin`, `Opted In Date`.
 - **Automatic Checkpoint:** Generating the export automatically updates the sync timestamp checkpoint (`rl_fsbi_newsletter_last_sync_utc`), enabling subsequent daily syncs to process delta users only.
@@ -837,6 +837,10 @@ gh release create v1.3.11 /tmp/rl-freemius-bi-1.3.11.zip --target master --notes
 bumping `Version:` means no site will ever see it.
 
 ## Changelog
+
+### 1.3.29 (2026-11-06)
+- Removed a personal email address from the README. The export section described the recipient as a hardcoded address when the code actually uses the site's `admin_email`, so the line was both a disclosure and inaccurate on a public repository.
+- Replaced the real Freemius product id in the `README-API.md` example payload with a neutral one.
 
 ### 1.3.28 (2026-11-06)
 - Added a dashboard screenshot to the README so the repository shows what the plugin looks like. Captured from the demo plugin's sample data, with the WordPress admin chrome cropped out; the image is excluded from the release archive via `.gitattributes` so the installable zip stays lean.
