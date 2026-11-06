@@ -74,10 +74,18 @@
 }
 
 .rl-fsbi-controls {
-	display: grid;
-	grid-template-columns: 80px minmax(180px, 1fr) 80px minmax(180px, 1fr) 85px 130px 20px 130px auto auto;
+	/* A fixed grid of ten columns cannot shrink: once the labels, two date
+	   inputs and both buttons exceed the container, the row pushes the whole
+	   admin page sideways. Flex wrapping degrades instead of overflowing. */
+	display: flex;
+	flex-wrap: wrap;
 	gap: 10px;
 	align-items: center;
+}
+
+.rl-fsbi-controls label,
+.rl-fsbi-controls span {
+	flex: 0 0 auto;
 }
 
 .rl-fsbi-controls label {
@@ -88,12 +96,22 @@
 
 .rl-fsbi-controls select,
 .rl-fsbi-controls input {
-	width: 100%;
+	flex: 1 1 170px;
+	min-width: 0;
 	min-height: 36px;
 	padding: 6px 10px;
 	border: 1px solid #cfd7e8;
 	border-radius: 8px;
 	font-size: 13px;
+}
+
+.rl-fsbi-controls > button {
+	flex: 0 0 auto;
+	margin-left: auto;
+}
+
+.rl-fsbi-controls > button + button {
+	margin-left: 0;
 }
 
 .rl-fsbi-controls span {
@@ -851,8 +869,13 @@
 }
 
 @media (max-width: 1220px) {
-	.rl-fsbi-controls {
-		grid-template-columns: 1fr 1fr;
+	.rl-fsbi-controls select,
+	.rl-fsbi-controls input {
+		flex: 1 1 140px;
+	}
+
+	.rl-fsbi-controls > button {
+		margin-left: 0;
 	}
 
 	.rl-fsbi-mini-kpis {
@@ -1241,4 +1264,10 @@ p.rl-fsbi-field-desc,
 .rl-fsbi-churn-chip:focus-visible {
 	outline: 2px solid var(--fsbi-accent, #5f6bff);
 	outline-offset: 2px;
+}
+
+/* WordPress gives .button a display, which beats the hidden attribute.
+   Without this, buttons marked hidden stay visible inside the dashboard. */
+.rl-fsbi-dashboard [hidden] {
+	display: none !important;
 }

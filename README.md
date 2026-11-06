@@ -832,6 +832,10 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.17 (2026-11-06)
+- **The dashboard no longer scrolls sideways.** The filter toolbar used a fixed ten-column grid that could not shrink, so at ordinary desktop widths the row was wider than the container and pushed the whole admin page into horizontal scroll (viewport 1343px, document 1377px). It is now a wrapping flex row: measured 0px overflow at 1343, 1085, 945 and 785px.
+- **Cancel Sync no longer shows when it should not.** WordPress's `.button` rule outranks the `hidden` attribute, so the button rendered permanently even though the markup marks it hidden. A scoped `.rl-fsbi-dashboard [hidden] { display: none !important; }` fixes it for every element in the dashboard, not just this one.
+
 ### 1.3.16 (2026-11-06)
 - **Churn Reasons now splits by who left.** A segmented filter (Free / Trial / Paying / All) shows uninstall reasons per customer type; Free means never paid and never trialled, and a trial that converted counts as paying. Filtering is client-side, so switching is instant and needs no request. Payload gained `free`, `trial`, `paid` and `unknown` counts per reason.
 - **The WordPress admin footer sat mid-page on the dashboard.** The template closed one `</div>` too many, which closed `#wpwrap` early and left `#wpfooter` as a direct child of `<body>`; being `position: absolute` it resolved against the viewport instead of the document. The footer is now inside `#wpwrap` at y=4674 of a 4714px page.
