@@ -832,6 +832,12 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.15 (2026-11-06)
+- **The dashboard no longer flashes empty cards while it loads.** It paints immediately and fills from one AJAX payload, so every visit began with a wall of blanks. The content is now blurred behind a centred card with a spinner, a status line and a percentage, and it clears as soon as the payload is rendered.
+- The percentage moves on milestones that actually exist — the request leaves at 4%, the plugin refresh lands and the dataset request starts at 45%, the payload arrives at 88%, rendering completes at 100% — with a slow ease toward 90% in between, because a single round-trip gives nothing finer to measure. It never runs backwards.
+- The overlay clears on failure too, so a broken request cannot leave the page stuck behind a blur.
+- Strings are translatable and passed through `rlFsbiAdmin.loadingStrings`; the overlay respects `prefers-reduced-motion`.
+
 ### 1.3.14 (2026-11-06)
 - **The crawl no longer restarts the instant it finishes.** `run_cron()` had no guard at all: every completed pass reset the cursor to zero and immediately began re-crawling all 17,084 users, so the progress bar looped 0→100% forever and looked stuck, and Freemius was asked for every user every hour of every day. There is now a 6-hour cooldown between full passes. An unfinished pass is never held back — a job killed mid-cycle resumes on the next tick.
 - `cycle_done` is cleared when a pass starts, so `/sync-status` reports `running` during a pass instead of staying `idle` forever after the first one.

@@ -195,6 +195,12 @@ class RL_FSBI_Admin
 			'lastNewsletterSync' => (string) get_option('rl_fsbi_newsletter_last_sync_utc', ''),
 			'latestExport'       => $this->get_latest_export_for_ui(),
 			'adminEmail'         => (string) get_option('admin_email', ''),
+			'loadingStrings'     => array(
+				'contacting' => __('Contacting Freemius…', 'rl-freemius-bi'),
+				'building'   => __('Building your analytics…', 'rl-freemius-bi'),
+				'rendering'  => __('Rendering charts…', 'rl-freemius-bi'),
+				'done'       => __('Ready', 'rl-freemius-bi'),
+			),
 		));
 	}
 

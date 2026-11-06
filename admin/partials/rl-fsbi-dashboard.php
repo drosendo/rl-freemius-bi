@@ -8,7 +8,17 @@ if ( ! defined( 'WPINC' ) ) {
 }
 ?>
 
-<div class="wrap rl-fsbi-dashboard">
+<div class="wrap rl-fsbi-dashboard is-loading" aria-busy="true">
+	<div class="rl-fsbi-loading-overlay" id="rl-fsbi-loading" role="status" aria-live="polite">
+		<div class="rl-fsbi-loading-card">
+			<div class="rl-fsbi-loading-spinner" aria-hidden="true"></div>
+			<p class="rl-fsbi-loading-message" id="rl-fsbi-loading-message"><?php echo esc_html__( 'Loading analytics…', 'rl-freemius-bi' ); ?></p>
+			<div class="rl-fsbi-loading-bar">
+				<span id="rl-fsbi-loading-fill"></span>
+			</div>
+			<p class="rl-fsbi-loading-pct" id="rl-fsbi-loading-pct">0%</p>
+		</div>
+	</div>
 	<?php
 	$forced_plugin_id = isset( $GLOBALS['rl_fsbi_forced_plugin_id'] ) ? (int) $GLOBALS['rl_fsbi_forced_plugin_id'] : 0;
 	$plugins_catalog  = isset( $GLOBALS['rl_fsbi_plugins_catalog'] ) && is_array( $GLOBALS['rl_fsbi_plugins_catalog'] ) ? $GLOBALS['rl_fsbi_plugins_catalog'] : array();

@@ -68,6 +68,24 @@
 		currentReportCurrency: null,
 
 		/**
+		 * Whether the loading overlay is currently on screen.
+		 * @type {boolean}
+		 */
+		loadingActive: false,
+
+		/**
+		 * Current loading percentage.
+		 * @type {number}
+		 */
+		loadingValue: 0,
+
+		/**
+		 * Timer that eases the loading percentage while the request is in flight.
+		 * @type {number|null}
+		 */
+		loadingTimer: null,
+
+		/**
 		 * AbortController instance for in-flight AJAX synchronization requests.
 		 * @type {AbortController|null}
 		 */
@@ -109,7 +127,171 @@
 			this.applyDefaultFilters();
 			this.bindEvents();
 			this.initTooltips();
-			this.refreshLatestData().finally(() => this.loadData());
+			this.showLoading(this.loadingText('contacting'));
+			this.refreshLatestData().finally(() => {
+				this.setLoadingProgress(45, this.loadingText('building'));
+				this.loadData();
+			});
+		},
+
+		/**
+		 * Read a translated loading string.
+		 *
+		 * @function loadingText
+		 * @memberof FSBI
+		 * @param {string} key - String key supplied by the PHP side.
+		 * @returns {string}
+		 */
+		loadingText: function(key) {
+			const strings = (window.rlFsbiAdmin && window.rlFsbiAdmin.loadingStrings) || {};
+			return strings[key] || '';
+		},
+
+		/**
+		 * Blur the dashboard and show the progress card.
+		 *
+		 * Idempotent: calling it while the card is already up only updates the
+		 * message, so init() and loadData() can both ask for it without the
+		 * percentage restarting halfway through.
+		 *
+		 * @function showLoading
+		 * @memberof FSBI
+		 * @param {string} message - Message to display.
+		 * @returns {void}
+		 */
+		showLoading: function(message) {
+			const overlay = document.getElementById('rl-fsbi-loading');
+			const wrap = document.querySelector('.rl-fsbi-dashboard');
+
+			if (!overlay || !wrap) {
+				return;
+			}
+
+			if (this.loadingActive) {
+				if (message) {
+					this.setLoadingMessage(message);
+				}
+				return;
+			}
+
+			this.loadingActive = true;
+			this.loadingValue = 4;
+			wrap.classList.add('is-loading');
+			wrap.setAttribute('aria-busy', 'true');
+			overlay.style.display = 'flex';
+			overlay.style.opacity = '1';
+
+			if (message) {
+				this.setLoadingMessage(message);
+			}
+
+			this.paintLoading();
+
+			// The payload arrives in a single round-trip, so there is no real
+			// progress to measure. Ease towards 90% and let the response finish it.
+			this.loadingTimer = window.setInterval(() => {
+				if (this.loadingValue >= 90) {
+					return;
+				}
+
+				this.loadingValue += (90 - this.loadingValue) * 0.07;
+				this.paintLoading();
+			}, 140);
+		},
+
+		/**
+		 * Replace the loading message.
+		 *
+		 * @function setLoadingMessage
+		 * @memberof FSBI
+		 * @param {string} message - Message to display.
+		 * @returns {void}
+		 */
+		setLoadingMessage: function(message) {
+			const el = document.getElementById('rl-fsbi-loading-message');
+
+			if (el && message) {
+				el.textContent = message;
+			}
+		},
+
+		/**
+		 * Advance the progress indicator. Never moves backwards.
+		 *
+		 * @function setLoadingProgress
+		 * @memberof FSBI
+		 * @param {number} value - Percentage.
+		 * @param {string} [message] - Optional new message.
+		 * @returns {void}
+		 */
+		setLoadingProgress: function(value, message) {
+			this.loadingValue = Math.max(this.loadingValue, Math.min(100, value));
+
+			if (message) {
+				this.setLoadingMessage(message);
+			}
+
+			this.paintLoading();
+		},
+
+		/**
+		 * Render the current progress value.
+		 *
+		 * @function paintLoading
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
+		paintLoading: function() {
+			const pct = Math.round(this.loadingValue);
+			const fill = document.getElementById('rl-fsbi-loading-fill');
+			const label = document.getElementById('rl-fsbi-loading-pct');
+
+			if (fill) {
+				fill.style.width = pct + '%';
+			}
+
+			if (label) {
+				label.textContent = pct + '%';
+			}
+		},
+
+		/**
+		 * Complete the bar, then unblur and remove the overlay.
+		 *
+		 * @function hideLoading
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
+		hideLoading: function() {
+			const overlay = document.getElementById('rl-fsbi-loading');
+			const wrap = document.querySelector('.rl-fsbi-dashboard');
+
+			if (!overlay) {
+				return;
+			}
+
+			if (this.loadingTimer) {
+				window.clearInterval(this.loadingTimer);
+				this.loadingTimer = null;
+			}
+
+			this.setLoadingProgress(100, this.loadingText('done'));
+
+			window.setTimeout(() => {
+				overlay.style.opacity = '0';
+
+				window.setTimeout(() => {
+					overlay.style.display = 'none';
+					overlay.style.opacity = '';
+
+					if (wrap) {
+						wrap.classList.remove('is-loading');
+						wrap.removeAttribute('aria-busy');
+					}
+
+					this.loadingActive = false;
+				}, 200);
+			}, 220);
 		},
 
 		/**
@@ -938,6 +1120,8 @@
 			const self = this;
 			const filters = this.getFilters();
 
+			this.showLoading(this.loadingText('building'));
+
 			fetch(rlFsbiAdmin.ajaxUrl, {
 				method: 'POST',
 				headers: {
@@ -952,14 +1136,18 @@
 			.then((response) => response.json())
 			.then((res) => {
 				if (!res.success) {
+					self.hideLoading();
 					alert('Error: ' + (res.data || 'Failed to load dashboard data'));
 					return;
 				}
 
+				self.setLoadingProgress(88, self.loadingText('rendering'));
 				self.renderDashboard(res.data || {});
+				self.hideLoading();
 			})
 			.catch((error) => {
 				console.error('Error loading dashboard data:', error);
+				self.hideLoading();
 				alert('Failed to load dashboard data.');
 			});
 		},
