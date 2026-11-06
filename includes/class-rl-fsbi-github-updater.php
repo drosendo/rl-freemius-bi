@@ -41,11 +41,11 @@ class RL_FSBI_GitHub_Updater
 	/**
 	 * How long a release lookup is reused.
 	 *
-	 * One hour, not six: GitHub allows 60 anonymous requests per hour and this
-	 * costs one, so a long cache buys nothing but a window where a fresh release
-	 * is invisible.
+	 * Five minutes. The feed costs no API quota, so there is nothing to conserve:
+	 * a longer cache only widens the window where a freshly published release is
+	 * invisible to a site that is otherwise perfectly configured.
 	 */
-	const CACHE_TTL = HOUR_IN_SECONDS;
+	const CACHE_TTL = 5 * MINUTE_IN_SECONDS;
 
 	/**
 	 * How long a failure is remembered, to stop hammering the API.

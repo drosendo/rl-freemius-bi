@@ -832,6 +832,9 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.27 (2026-11-06)
+- Release lookups are cached for **five minutes** instead of an hour. The Atom feed costs no API quota, so there is nothing to conserve, and the longer cache only widened the window in which a freshly published release stayed invisible. Updated on production end to end: with 1.3.25 installed, the Plugins screen now shows *"You have version 1.3.25 installed. Update to 1.3.26."*
+
 ### 1.3.26 (2026-11-06)
 - **The update row is now added when the transient is read, not when it is written.** `pre_set_site_transient_update_plugins` only fires when WordPress rewrites the transient, which it throttles to one hour on the Plugins screen and twelve hours otherwise — so a release published after the last write stayed invisible regardless of how correct the lookup was. `site_transient_update_plugins` fires on every read, so the row appears on the next page load. Credit for the pattern: anchor.host's guide to self-hosting updates from GitHub.
 
