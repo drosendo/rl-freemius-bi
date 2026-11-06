@@ -832,6 +832,9 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.19 (2026-11-06)
+- **Trial Funnel figures share a baseline.** Labels wrap at different lengths ("With Payment Method", "Conversion Rate"), so those cards pushed their numbers lower than the single-line ones. The value is now pinned to the bottom of each card: all five report `valueBottom=2258` at equal 95px heights, whatever the label does.
+
 ### 1.3.18 (2026-11-06)
 - **The cards no longer run flush to the right edge of the screen.** The dashboard sets `margin: 0 auto`, which discarded the 20px right margin WordPress's `.wrap` normally provides, and it had no horizontal padding of its own — measured gap to the viewport edge: **0px**. It now carries 32px of horizontal padding, so the content sits 32px inside both edges at every width.
 
