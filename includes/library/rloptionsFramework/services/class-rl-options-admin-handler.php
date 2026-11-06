@@ -103,6 +103,12 @@ class RL_Options_Admin_Handler {
 		$field_errors      = [];
 
 		foreach ( $fields_map as $field_id => $field ) {
+			// A field missing from the payload was not rendered (inactive tab,
+			// unmet condition). Keep the stored value instead of blanking it.
+			if ( ! array_key_exists( $field_id, $input ) ) {
+				continue;
+			}
+
 			$value = $input[ $field_id ] ?? null;
 			$value = $this->framework->prepare_value_for_validation( $field, $value );
 
@@ -322,6 +328,12 @@ class RL_Options_Admin_Handler {
 		$field_errors      = [];
 
 		foreach ( $fields_map as $field_id => $field ) {
+			// A field missing from the payload was not rendered (inactive tab,
+			// unmet condition). Keep the stored value instead of blanking it.
+			if ( ! array_key_exists( $field_id, $input ) ) {
+				continue;
+			}
+
 			$value = $input[ $field_id ] ?? null;
 			$value = $this->framework->prepare_value_for_validation( $field, $value );
 
