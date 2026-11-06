@@ -58,6 +58,7 @@ class RL_FSBI {
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-user-sync.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-rest-api.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-cli.php';
+		require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-github-updater.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/freemius/class-rl-fsbi-api.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'admin/class-rl-fsbi-admin.php';
 
@@ -87,6 +88,14 @@ class RL_FSBI {
 		$this->loader->add_action( 'rl_fsbi_user_sync', $this, 'run_user_sync_cron' );
 		$this->loader->add_action( 'rl_fsbi_api_log_cleanup', $this, 'run_api_log_cleanup' );
 		$this->loader->add_action( 'rl_fsbi_rest_warm', $this, 'run_rest_warm' );
+
+		// GitHub release updates. Manual only: this surfaces the normal update
+		// row, nothing is installed without an administrator clicking Update.
+		$updater = new RL_FSBI_GitHub_Updater( $this->get_version() );
+		$this->loader->add_filter( 'pre_set_site_transient_update_plugins', $updater, 'check_for_update' );
+		$this->loader->add_filter( 'plugins_api', $updater, 'plugin_info', 20, 3 );
+		$this->loader->add_filter( 'upgrader_source_selection', $updater, 'fix_source_dir', 10, 3 );
+		$this->loader->add_action( 'upgrader_process_complete', $updater, 'flush_after_update', 10, 2 );
 
 		$this->loader->add_action( 'admin_notices', $plugin_admin, 'render_kit_quota_notice' );
 		$this->loader->add_action( 'wp_dashboard_setup', $plugin_admin, 'register_wordpress_dashboard_widget' );
