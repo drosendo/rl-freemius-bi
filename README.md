@@ -832,6 +832,10 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.20 (2026-11-06)
+- **"Failed to load dashboard data" no longer hides an expired session.** WordPress rejects a stale nonce with a bare `0` or `-1` and a 4xx status, and both are valid JSON values — `JSON.parse("0")` returns the number `0`, whose `.success` is `undefined`. The old check therefore reported a perfectly ordinary nonce rejection as a data failure. A 400/401/403 now says the session expired and offers to reload; other failures report the HTTP status and log the body to the console.
+- The overlay is cleared on every failure path, so a rejected request cannot leave the page stuck behind the blur.
+
 ### 1.3.19 (2026-11-06)
 - **Trial Funnel figures share a baseline.** Labels wrap at different lengths ("With Payment Method", "Conversion Rate"), so those cards pushed their numbers lower than the single-line ones. The value is now pinned to the bottom of each card: all five report `valueBottom=2258` at equal 95px heights, whatever the label does.
 

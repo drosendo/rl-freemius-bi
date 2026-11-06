@@ -1177,23 +1177,64 @@
 					...filters,
 				}),
 			})
-			.then((response) => response.json())
-			.then((res) => {
-				if (!res.success) {
-					self.hideLoading();
-					alert('Error: ' + (res.data || 'Failed to load dashboard data'));
-					return;
-				}
-
-				self.setLoadingProgress(88, self.loadingText('rendering'));
-				self.renderDashboard(res.data || {});
-				self.hideLoading();
-			})
+			.then((response) => response.text().then((raw) => ({ response: response, raw: raw })))
+			.then((result) => self.handleDashboardResponse(result.response, result.raw))
 			.catch((error) => {
 				console.error('Error loading dashboard data:', error);
 				self.hideLoading();
 				alert('Failed to load dashboard data.');
 			});
+		},
+
+		/**
+		 * Report why a dashboard request failed, in terms the user can act on.
+		 *
+		 * WordPress answers a rejected nonce with a bare `0` or `-1` and a 4xx
+		 * status. Both are valid JSON values, so a naive `res.success` check
+		 * reports them as a generic data failure and hides the real cause: the
+		 * session expired and the page needs a reload.
+		 *
+		 * @function handleDashboardResponse
+		 * @memberof FSBI
+		 * @param {Response} response - Fetch response.
+		 * @param {string}   raw      - Response body as text.
+		 * @returns {void}
+		 */
+		handleDashboardResponse: function(response, raw) {
+			let payload = null;
+
+			try {
+				payload = JSON.parse(raw);
+			} catch (error) {
+				payload = null;
+			}
+
+			const isObject = payload !== null && typeof payload === 'object' && !Array.isArray(payload);
+
+			if (!response.ok || !isObject) {
+				this.hideLoading();
+
+				if (response.status === 400 || response.status === 401 || response.status === 403) {
+					if (window.confirm('Your WordPress session has expired, so the dashboard could not refresh. Reload the page now?')) {
+						window.location.reload();
+					}
+					return;
+				}
+
+				console.error('[RL FSBI] dashboard request failed', response.status, String(raw).slice(0, 500));
+				alert('Could not load dashboard data (HTTP ' + response.status + ').');
+				return;
+			}
+
+			if (!payload.success) {
+				this.hideLoading();
+				alert('Error: ' + (payload.data || 'The server rejected the request.'));
+				return;
+			}
+
+			this.setLoadingProgress(88, this.loadingText('rendering'));
+			this.renderDashboard(payload.data || {});
+			this.hideLoading();
 		},
 
 		/**
