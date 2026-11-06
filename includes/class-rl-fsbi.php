@@ -97,6 +97,7 @@ class RL_FSBI {
 		$this->loader->add_filter( 'upgrader_source_selection', $updater, 'fix_source_dir', 10, 3 );
 		$this->loader->add_action( 'upgrader_process_complete', $updater, 'flush_after_update', 10, 2 );
 		$this->loader->add_action( 'deleted_site_transient_update_plugins', $updater, 'flush_cache' );
+		$this->loader->add_action( 'admin_notices', $updater, 'render_status_notice' );
 
 		$this->loader->add_action( 'admin_notices', $plugin_admin, 'render_kit_quota_notice' );
 		$this->loader->add_action( 'wp_dashboard_setup', $plugin_admin, 'register_wordpress_dashboard_widget' );

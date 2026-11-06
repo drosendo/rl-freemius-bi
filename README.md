@@ -832,6 +832,10 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.24 (2026-11-06)
+- **Release lookups no longer depend on the GitHub API quota.** `api.github.com` allows 60 anonymous requests per hour **per IP**, and a shared host shares that address with every other site on the machine, so the quota can be spent by traffic that has nothing to do with this plugin. The lookup now reads the public `/releases/latest` redirect (no quota), derives the download URL from the tag, verifies it with a HEAD request, and falls back to the tag archive or the API only when that fails.
+- **A failed lookup is no longer silent.** The outcome is stored and shown as a warning on the Plugins and Updates screens: *"No release could be read from GitHub (…). Last attempt 5 minutes ago. The plugin is unchanged; this only affects update detection."* Previously the only symptom was an update row that never appeared, which looks identical to being up to date.
+
 ### 1.3.23 (2026-11-06)
 - **"Check again" now actually refreshes the release lookup.** WordPress forces only the *core* check: `wp_update_plugins()` is throttled to one minute on `update-core.php` and one hour on `plugins.php`, and ignores `force-check` entirely, so nothing invalidated this plugin's release cache. A request carrying `force-check` now bypasses the cache.
 - Release lookups are cached for **one hour** instead of six. GitHub allows 60 anonymous requests per hour and this uses one, so the long cache only created a window in which a fresh release was invisible.

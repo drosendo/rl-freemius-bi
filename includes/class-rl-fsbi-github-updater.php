@@ -237,6 +237,117 @@ class RL_FSBI_GitHub_Updater
 
 		$empty = array('version' => '', 'zip' => '', 'body' => '', 'published_at' => '');
 
+		// The public releases page answers with a redirect to the newest tag and
+		// costs no API quota. The REST API allows 60 anonymous requests per hour
+		// per IP, which a shared host cannot rely on: the whole server's traffic
+		// shares one address, so the quota can be spent by unrelated sites.
+		$release = $this->release_from_web();
+
+		if (null === $release) {
+			$release = $this->release_from_api();
+		}
+
+		if (null === $release || '' === $release['version']) {
+			$this->record_status('error', 0, 'No release could be resolved from GitHub.');
+			set_transient(self::CACHE_KEY, $empty, self::FAILURE_TTL);
+
+			return $empty;
+		}
+
+		$this->record_status('ok', 200, '');
+
+		set_transient(self::CACHE_KEY, $release, self::CACHE_TTL);
+
+		return $release;
+	}
+
+	/**
+	 * Resolve the newest release without spending API quota.
+	 *
+	 * `/releases/latest` redirects to the newest tag, so the version comes from
+	 * the Location header. The download URL is then derived from the tag and
+	 * verified before use, falling back to the tag archive when an asset of the
+	 * expected name is absent.
+	 *
+	 * @return array|null Release data, or null when this path fails.
+	 */
+	private function release_from_web()
+	{
+		$response = wp_remote_get(
+			'https://github.com/' . self::OWNER . '/' . self::REPO . '/releases/latest',
+			array(
+				'timeout'     => 10,
+				'redirection' => 0,
+				'headers'     => array('User-Agent' => 'RL-FSBI/' . $this->version),
+			)
+		);
+
+		if (is_wp_error($response)) {
+			return null;
+		}
+
+		$code     = (int) wp_remote_retrieve_response_code($response);
+		$location = (string) wp_remote_retrieve_header($response, 'location');
+
+		if ($code < 300 || $code >= 400 || '' === $location) {
+			return null;
+		}
+
+		if (! preg_match('#/tag/(v?[0-9][0-9A-Za-z.\-]*)$#', $location, $matches)) {
+			return null;
+		}
+
+		$tag     = $matches[1];
+		$version = ltrim($tag, 'vV');
+
+		$base    = 'https://github.com/' . self::OWNER . '/' . self::REPO;
+		$asset   = $base . '/releases/download/' . $tag . '/' . self::SLUG . '-' . $version . '.zip';
+		$archive = $base . '/archive/refs/tags/' . $tag . '.zip';
+
+		$zip = $this->asset_exists($asset) ? $asset : $archive;
+
+		return array(
+			'version'      => sanitize_text_field($version),
+			'zip'          => esc_url_raw($zip),
+			'body'         => '',
+			'published_at' => '',
+		);
+	}
+
+	/**
+	 * Confirm a release asset is downloadable.
+	 *
+	 * @param string $url Asset URL.
+	 * @return bool
+	 */
+	private function asset_exists($url)
+	{
+		$response = wp_remote_head(
+			$url,
+			array(
+				'timeout'     => 8,
+				'redirection' => 3,
+				'headers'     => array('User-Agent' => 'RL-FSBI/' . $this->version),
+			)
+		);
+
+		if (is_wp_error($response)) {
+			return false;
+		}
+
+		return 200 === (int) wp_remote_retrieve_response_code($response);
+	}
+
+	/**
+	 * Resolve the newest release through the REST API.
+	 *
+	 * Kept as a fallback only: the anonymous quota is per IP and a shared host
+	 * shares it with every other site on the machine.
+	 *
+	 * @return array|null Release data, or null when the lookup fails.
+	 */
+	private function release_from_api()
+	{
 		$response = wp_remote_get(
 			'https://api.github.com/repos/' . self::OWNER . '/' . self::REPO . '/releases/latest',
 			array(
@@ -248,30 +359,30 @@ class RL_FSBI_GitHub_Updater
 			)
 		);
 
-		if (is_wp_error($response) || 200 !== (int) wp_remote_retrieve_response_code($response)) {
-			set_transient(self::CACHE_KEY, $empty, self::FAILURE_TTL);
+		if (is_wp_error($response)) {
+			$this->record_status('http_error', 0, $response->get_error_message());
+			return null;
+		}
 
-			return $empty;
+		$code = (int) wp_remote_retrieve_response_code($response);
+
+		if (200 !== $code) {
+			$this->record_status('http_error', $code, 'api.github.com answered HTTP ' . $code);
+			return null;
 		}
 
 		$data = json_decode(wp_remote_retrieve_body($response), true);
 
 		if (! is_array($data)) {
-			set_transient(self::CACHE_KEY, $empty, self::FAILURE_TTL);
-
-			return $empty;
+			return null;
 		}
 
 		$version = ltrim((string) ($data['tag_name'] ?? ''), 'vV');
 
 		if ('' === $version) {
-			set_transient(self::CACHE_KEY, $empty, self::FAILURE_TTL);
-
-			return $empty;
+			return null;
 		}
 
-		// Prefer a release asset (a clean zip with the folder already named
-		// correctly); fall back to the auto-generated tag archive.
 		$zip = '';
 
 		foreach ((array) ($data['assets'] ?? array()) as $asset) {
@@ -287,15 +398,67 @@ class RL_FSBI_GitHub_Updater
 			$zip = (string) ($data['zipball_url'] ?? '');
 		}
 
-		$release = array(
+		return array(
 			'version'      => sanitize_text_field($version),
 			'zip'          => esc_url_raw($zip),
 			'body'         => (string) ($data['body'] ?? ''),
 			'published_at' => (string) ($data['published_at'] ?? ''),
 		);
+	}
 
-		set_transient(self::CACHE_KEY, $release, self::CACHE_TTL);
+	/**
+	 * Show a notice when the last update lookup failed.
+	 *
+	 * Without this the only symptom is an update row that never appears, which
+	 * is indistinguishable from "you are up to date".
+	 *
+	 * @return void
+	 */
+	public function render_status_notice()
+	{
+		if (! current_user_can('manage_options')) {
+			return;
+		}
 
-		return $release;
+		$screen = function_exists('get_current_screen') ? get_current_screen() : null;
+
+		if (! $screen || ! in_array($screen->id, array('plugins', 'update-core'), true)) {
+			return;
+		}
+
+		$status = get_option('rl_fsbi_github_release_status');
+
+		if (! is_array($status) || empty($status['state']) || 'ok' === $status['state']) {
+			return;
+		}
+
+		printf(
+			'<div class="notice notice-warning"><p><strong>%s</strong> %s</p></div>',
+			esc_html__('RL Freemius BI: update check failed.', 'rl-freemius-bi'),
+			esc_html(sprintf(
+				/* translators: 1: error detail, 2: when the check ran */
+				__('No release could be read from GitHub (%1$s). Last attempt %2$s ago. The plugin is unchanged; this only affects update detection.', 'rl-freemius-bi'),
+				'' !== (string) $status['error'] ? (string) $status['error'] : 'HTTP ' . (int) $status['code'],
+				human_time_diff((int) $status['time'], time())
+			))
+		);
+	}
+
+	/**
+	 * Remember how the last lookup went, so a silent failure is visible.
+	 *
+	 * @param string $state Lookup state.
+	 * @param int    $code  HTTP status, when there was one.
+	 * @param string $error Error detail.
+	 * @return void
+	 */
+	private function record_status($state, $code, $error)
+	{
+		update_option('rl_fsbi_github_release_status', array(
+			'time'  => time(),
+			'state' => (string) $state,
+			'code'  => (int) $code,
+			'error' => (string) $error,
+		), false);
 	}
 }
