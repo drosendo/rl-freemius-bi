@@ -832,6 +832,11 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.13 (2026-11-06)
+- **The backfill panel reports coverage, not crawl volume.** It used to say "Stored: 17,084 user(s) — State: running", which answered neither question worth asking. It now shows licence holders resolved as a percentage (1,095 of 1,096 — 99.9%), how many emails are missing and what share of holders that is, users stored, and a progress bar for the pass in flight.
+- **"State: running" is gone.** It was derived from "last run under 10 minutes ago", and since the crawl cycles forever that condition is always true, so the panel was permanently "running". It now reports what is actually happening: crawling with a position and percentage, complete with when, or the last error.
+- Added the next scheduled run, and a note when holders cannot be resolved at all — a holder whose user record is absent from the product never gets an email, however many times it is crawled.
+
 ### 1.3.12 (2026-11-06)
 - **`wp rl-fsbi sync-users --all` now finishes in seconds instead of an hour.** Freemius exposes a CSV export (`/v1/developers/{id}/plugins/{id}/users.csv`) that returns every user in one 1.5MB response, so the backfill reads 17,084 rows in a single request rather than 342 paged ones. Measured 17,084 rows written in 3.8s.
 - The import streams through a temp handle in 500-row chunks; the write path moved from one `REPLACE` per user to 35 multi-row `INSERT ... ON DUPLICATE KEY UPDATE` statements.

@@ -1214,45 +1214,156 @@ class RL_FSBI_Settings_Manager {
 		global $wpdb;
 
 		$table      = $wpdb->prefix . 'rl_fsbi_users';
+		$licences   = $wpdb->prefix . 'rl_fsbi_licenses';
 		$has_table  = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
 		$total      = $has_table ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ) : 0;
 		$with_email = $has_table ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE email IS NOT NULL AND email <> ''" ) : 0;
+
+		// The number that actually matters is whether we can reach the people who
+		// hold a licence, not how many user records were crawled.
+		$holders = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT user_id) FROM {$licences} WHERE user_id > 0" );
+		$missing = $has_table
+			? (int) $wpdb->get_var(
+				"SELECT COUNT(DISTINCT l.user_id) FROM {$licences} l
+				LEFT JOIN {$table} u ON u.user_id = l.user_id
+				WHERE l.user_id > 0 AND ( u.email IS NULL OR u.email = '' )"
+			)
+			: $holders;
+		$covered = max( 0, $holders - $missing );
+		$percent = $holders > 0 ? ( $covered / $holders ) * 100 : 100.0;
+
+		$sync_state = get_option( 'rl_fsbi_user_sync_state' );
+		$offset     = is_array( $sync_state ) ? (int) ( $sync_state['offset'] ?? 0 ) : 0;
+		$progress   = $total > 0 ? min( 100, ( $offset / $total ) * 100 ) : 0.0;
+
 		$last_run   = (string) get_option( 'rl_fsbi_user_sync_last_run', '' );
-		$state      = ( '' !== $last_run && ( time() - strtotime( $last_run ) ) < 10 * MINUTE_IN_SECONDS ) ? 'running' : 'idle';
-		$status     = array(
-			'total_known' => $total,
-			'with_email'  => $with_email,
-			'state'       => $state,
-		);
+		$cycle_done = (int) get_option( 'rl_fsbi_user_sync_cycle_done', 0 );
+		$error      = (string) get_option( 'rl_fsbi_user_sync_error', '' );
+		$next_run   = class_exists( 'RL_FSBI_User_Sync' )
+			? wp_next_scheduled( RL_FSBI_User_Sync::CRON_HOOK )
+			: false;
 
 		$notice = get_transient( 'rl_fsbi_backfill_notice' );
 		if ( $notice ) {
 			delete_transient( 'rl_fsbi_backfill_notice' );
 		}
 
+		$stat_style  = 'display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#646970;margin-bottom:2px';
+		$value_style = 'display:block;font-size:20px;line-height:1.25;color:#1d2327';
+		$sub_style   = 'display:block;font-size:11px;color:#646970;margin-top:1px';
+
 		ob_start();
 		?>
 		<div class="rl-fsbi-user-backfill" style="background:#fff;border:1px solid #c3c4c7;border-radius:6px;padding:16px 18px;max-width:860px">
 			<h3 style="margin:0 0 6px;font-size:14px"><?php echo esc_html__( 'Customer emails (background sync)', 'rl-freemius-bi' ); ?></h3>
-			<p class="description" style="margin:0 0 10px">
-				<?php echo esc_html__( 'Freemius exposes emails 50 users at a time, so they are crawled in the background every 5 minutes. Use this button to push it along now.', 'rl-freemius-bi' ); ?>
+			<p class="description" style="margin:0 0 12px">
+				<?php echo esc_html__( 'Freemius returns emails 50 users per request, so they are fetched in a resumable background pass every 5 minutes. Each pass picks up where the last one stopped.', 'rl-freemius-bi' ); ?>
 			</p>
 
 			<?php if ( $notice ) : ?>
 				<div class="notice notice-success inline" style="margin:0 0 10px"><p><?php echo esc_html( (string) $notice ); ?></p></div>
 			<?php endif; ?>
 
-			<p style="margin:0 0 10px;font-size:13px;color:#50575e">
+			<div style="display:flex;gap:32px;flex-wrap:wrap;margin:0 0 12px">
+				<div>
+					<span style="<?php echo esc_attr( $stat_style ); ?>"><?php echo esc_html__( 'Licence holders resolved', 'rl-freemius-bi' ); ?></span>
+					<strong style="<?php echo esc_attr( $value_style ); ?>"><?php echo esc_html( number_format_i18n( $percent, 1 ) . '%' ); ?></strong>
+					<span style="<?php echo esc_attr( $sub_style ); ?>">
+						<?php
+						printf(
+							/* translators: 1: covered holders, 2: total holders */
+							esc_html__( '%1$s of %2$s', 'rl-freemius-bi' ),
+							esc_html( number_format_i18n( $covered ) ),
+							esc_html( number_format_i18n( $holders ) )
+						);
+						?>
+					</span>
+				</div>
+				<div>
+					<span style="<?php echo esc_attr( $stat_style ); ?>"><?php echo esc_html__( 'Emails missing', 'rl-freemius-bi' ); ?></span>
+					<strong style="<?php echo esc_attr( $value_style ); ?>"><?php echo esc_html( number_format_i18n( $missing ) ); ?></strong>
+					<span style="<?php echo esc_attr( $sub_style ); ?>">
+						<?php
+						printf(
+							/* translators: %s: percentage of licence holders */
+							esc_html__( '%s%% of licence holders', 'rl-freemius-bi' ),
+							esc_html( number_format_i18n( $holders > 0 ? ( $missing / $holders ) * 100 : 0, 1 ) )
+						);
+						?>
+					</span>
+				</div>
+				<div>
+					<span style="<?php echo esc_attr( $stat_style ); ?>"><?php echo esc_html__( 'Users stored', 'rl-freemius-bi' ); ?></span>
+					<strong style="<?php echo esc_attr( $value_style ); ?>"><?php echo esc_html( number_format_i18n( $total ) ); ?></strong>
+					<span style="<?php echo esc_attr( $sub_style ); ?>">
+						<?php
+						printf(
+							/* translators: %s: users with an email */
+							esc_html__( '%s with an email', 'rl-freemius-bi' ),
+							esc_html( number_format_i18n( $with_email ) )
+						);
+						?>
+					</span>
+				</div>
+			</div>
+
+			<div style="height:6px;background:#f0f0f1;border-radius:3px;overflow:hidden;margin:0 0 8px">
+				<span style="display:block;height:100%;width:<?php echo esc_attr( (string) round( $progress, 1 ) ); ?>%;background:#2271b1"></span>
+			</div>
+
+			<p style="margin:0 0 12px;font-size:12px;color:#50575e">
 				<?php
-				printf(
-					/* translators: 1: users stored, 2: users with email, 3: state */
-					esc_html__( 'Stored: %1$s user(s) — %2$s with an email. State: %3$s.', 'rl-freemius-bi' ),
-					esc_html( number_format_i18n( $status['total_known'] ) ),
-					esc_html( number_format_i18n( $status['with_email'] ) ),
-					esc_html( $status['state'] )
-				);
+				if ( '' !== $error ) {
+					printf(
+						/* translators: %s: error message */
+						esc_html__( 'Last pass stopped with an error: %s', 'rl-freemius-bi' ),
+						esc_html( $error )
+					);
+				} elseif ( $offset > 0 ) {
+					printf(
+						/* translators: 1: crawled so far, 2: total users, 3: percentage */
+						esc_html__( 'Crawling — %1$s of %2$s crawled (%3$s%%).', 'rl-freemius-bi' ),
+						esc_html( number_format_i18n( $offset ) ),
+						esc_html( number_format_i18n( $total ) ),
+						esc_html( number_format_i18n( $progress, 1 ) )
+					);
+				} elseif ( $cycle_done > 0 ) {
+					printf(
+						/* translators: %s: human readable time difference */
+						esc_html__( 'Crawl complete — every user fetched %s ago. The next pass starts on its own.', 'rl-freemius-bi' ),
+						esc_html( human_time_diff( $cycle_done, time() ) )
+					);
+				} else {
+					esc_html_e( 'Waiting for the first pass to run.', 'rl-freemius-bi' );
+				}
+
+				if ( '' !== $last_run ) {
+					printf(
+						' ' . /* translators: %s: human readable time difference */ esc_html__( 'Last run %s ago.', 'rl-freemius-bi' ),
+						esc_html( human_time_diff( strtotime( $last_run ), time() ) )
+					);
+				}
+
+				if ( $next_run ) {
+					printf(
+						' ' . /* translators: %s: human readable time difference */ esc_html__( 'Next run in %s.', 'rl-freemius-bi' ),
+						esc_html( human_time_diff( time(), $next_run ) )
+					);
+				}
 				?>
 			</p>
+
+			<?php if ( $missing > 0 ) : ?>
+				<p style="margin:0 0 12px;font-size:12px;color:#8a4b00">
+					<?php
+					printf(
+						/* translators: %s: number of licence holders */
+						esc_html__( '%s licence holder(s) have no email in Freemius at all. Crawling cannot resolve them — their user record is not in this product.', 'rl-freemius-bi' ),
+						esc_html( number_format_i18n( $missing ) )
+					);
+					?>
+				</p>
+			<?php endif; ?>
 
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="rl_fsbi_user_backfill" />
