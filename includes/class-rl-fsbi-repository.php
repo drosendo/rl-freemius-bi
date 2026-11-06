@@ -686,25 +686,42 @@ class RL_FSBI_Repository {
 	 * @return array
 	 */
 	public function get_churn_reasons( $plugin_id = 0, $since = null, $limit = 8 ) {
-		$table = $this->wpdb->prefix . 'rl_fsbi_uninstalls';
+		$table    = $this->wpdb->prefix . 'rl_fsbi_uninstalls';
+		$installs = $this->wpdb->prefix . 'rl_fsbi_installs';
+		$trials   = $this->wpdb->prefix . 'rl_fsbi_trials';
+		$payments = $this->wpdb->prefix . 'rl_fsbi_payments';
+
 		$where = ' WHERE 1=1';
 
 		if ( $plugin_id > 0 ) {
-			$where .= $this->wpdb->prepare( ' AND plugin_id = %d', $plugin_id );
+			$where .= $this->wpdb->prepare( ' AND u.plugin_id = %d', $plugin_id );
 		}
 
 		if ( $since ) {
-			$where .= $this->wpdb->prepare( ' AND (uninstalled_at IS NULL OR uninstalled_at >= %s)', $since . ' 00:00:00' );
+			$where .= $this->wpdb->prepare( ' AND (u.uninstalled_at IS NULL OR u.uninstalled_at >= %s)', $since . ' 00:00:00' );
 		}
 
 		$limit = max( 1, min( 20, (int) $limit ) );
 
+		// Who left matters as much as why. Payers and triallists are classified
+		// first so a trial that converted counts as a payer, not a trial.
+		$paid_join  = "LEFT JOIN ( SELECT DISTINCT user_id FROM {$payments} WHERE user_id > 0 ) p ON p.user_id = i.user_id";
+		$trial_join = "LEFT JOIN ( SELECT DISTINCT user_id FROM {$trials} WHERE user_id > 0 ) t ON t.user_id = i.user_id";
+
 		$rows = $this->wpdb->get_results(
-			"SELECT reason_id, COUNT(*) AS total,
-				MAX(reason_label) AS reason_label,
-				MAX(reason_info) AS reason_info
-			FROM {$table}{$where}
-			GROUP BY reason_id
+			"SELECT u.reason_id, COUNT(*) AS total,
+				MAX(u.reason_label) AS reason_label,
+				MAX(u.reason_info) AS reason_info,
+				SUM(CASE WHEN i.user_id > 0 AND p.user_id IS NOT NULL THEN 1 ELSE 0 END) AS paid,
+				SUM(CASE WHEN i.user_id > 0 AND p.user_id IS NULL AND t.user_id IS NOT NULL THEN 1 ELSE 0 END) AS trial,
+				SUM(CASE WHEN i.user_id > 0 AND p.user_id IS NULL AND t.user_id IS NULL THEN 1 ELSE 0 END) AS free,
+				SUM(CASE WHEN i.user_id IS NULL OR i.user_id <= 0 THEN 1 ELSE 0 END) AS unknown
+			FROM {$table} u
+			LEFT JOIN {$installs} i ON i.install_id = u.install_id
+			{$paid_join}
+			{$trial_join}
+			{$where}
+			GROUP BY u.reason_id
 			ORDER BY total DESC
 			LIMIT {$limit}"
 		);
@@ -715,6 +732,10 @@ class RL_FSBI_Repository {
 			$out[] = array(
 				'reason_id'    => (int) $row->reason_id,
 				'count'        => (int) $row->total,
+				'free'         => (int) $row->free,
+				'trial'        => (int) $row->trial,
+				'paid'         => (int) $row->paid,
+				'unknown'      => (int) $row->unknown,
 				'reason_label' => isset( $row->reason_label ) ? (string) $row->reason_label : '',
 				'reason_info'  => isset( $row->reason_info ) ? (string) $row->reason_info : '',
 			);

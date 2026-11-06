@@ -240,8 +240,14 @@ if ( ! defined( 'WPINC' ) ) {
 					<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Churn Reasons', 'rl-freemius-bi' ); ?></div>
 					<div class="rl-fsbi-card-sub rl-fsbi-chart-note">
 						<?php
-						echo esc_html__( 'Uninstall feedback collected by Freemius over the last 12 months, most frequent first.', 'rl-freemius-bi' );
+						echo esc_html__( 'Why people uninstalled, split by who they were. Free means never paid and never trialled.', 'rl-freemius-bi' );
 						?>
+					</div>
+					<div class="rl-fsbi-churn-segments" id="rl-fsbi-churn-segments" role="group" aria-label="<?php echo esc_attr__( 'Filter uninstall reasons by customer type', 'rl-freemius-bi' ); ?>">
+						<button type="button" class="rl-fsbi-churn-chip is-active" data-segment="free"><?php echo esc_html__( 'Free', 'rl-freemius-bi' ); ?></button>
+						<button type="button" class="rl-fsbi-churn-chip" data-segment="trial"><?php echo esc_html__( 'Trial', 'rl-freemius-bi' ); ?></button>
+						<button type="button" class="rl-fsbi-churn-chip" data-segment="paid"><?php echo esc_html__( 'Paying', 'rl-freemius-bi' ); ?></button>
+						<button type="button" class="rl-fsbi-churn-chip" data-segment="all"><?php echo esc_html__( 'All', 'rl-freemius-bi' ); ?></button>
 					</div>
 					<ul class="rl-fsbi-churn-reasons" id="rl-fsbi-churn-reasons" aria-live="polite">
 						<li class="rl-fsbi-churn-empty"><?php echo esc_html__( 'No uninstall feedback stored yet. Run a sync to collect it.', 'rl-freemius-bi' ); ?></li>
@@ -412,4 +418,3 @@ if ( ! defined( 'WPINC' ) ) {
 			</div>
 		</div>
 	</div>
-</div>

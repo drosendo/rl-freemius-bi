@@ -832,6 +832,11 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.16 (2026-11-06)
+- **Churn Reasons now splits by who left.** A segmented filter (Free / Trial / Paying / All) shows uninstall reasons per customer type; Free means never paid and never trialled, and a trial that converted counts as paying. Filtering is client-side, so switching is instant and needs no request. Payload gained `free`, `trial`, `paid` and `unknown` counts per reason.
+- **The WordPress admin footer sat mid-page on the dashboard.** The template closed one `</div>` too many, which closed `#wpwrap` early and left `#wpfooter` as a direct child of `<body>`; being `position: absolute` it resolved against the viewport instead of the document. The footer is now inside `#wpwrap` at y=4674 of a 4714px page.
+- **Filter changes are visibly acknowledged.** The loading overlay was being torn down immediately on cached responses, flashing for a single frame. It now holds for at least ~480ms so the blur reads as intentional rather than a glitch.
+
 ### 1.3.15 (2026-11-06)
 - **The dashboard no longer flashes empty cards while it loads.** It paints immediately and fills from one AJAX payload, so every visit began with a wall of blanks. The content is now blurred behind a centred card with a spinner, a status line and a percentage, and it clears as soon as the payload is rendered.
 - The percentage moves on milestones that actually exist — the request leaves at 4%, the plugin refresh lands and the dataset request starts at 45%, the payload arrives at 88%, rendering completes at 100% — with a slow ease toward 90% in between, because a single round-trip gives nothing finer to measure. It never runs backwards.

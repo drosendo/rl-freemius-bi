@@ -86,6 +86,30 @@
 		loadingTimer: null,
 
 		/**
+		 * Timestamp the overlay became visible, used to avoid a flicker on fast loads.
+		 * @type {number}
+		 */
+		loadingShownAt: 0,
+
+		/**
+		 * Active customer-type segment for the uninstall reasons panel.
+		 * @type {string}
+		 */
+		churnSegment: 'free',
+
+		/**
+		 * Last uninstall reason payload, kept so segment switches need no request.
+		 * @type {Array}
+		 */
+		churnReasons: [],
+
+		/**
+		 * Uninstalls recorded in the selected period.
+		 * @type {number}
+		 */
+		uninstallTotal: 0,
+
+		/**
 		 * AbortController instance for in-flight AJAX synchronization requests.
 		 * @type {AbortController|null}
 		 */
@@ -176,6 +200,7 @@
 
 			this.loadingActive = true;
 			this.loadingValue = 4;
+			this.loadingShownAt = Date.now();
 			wrap.classList.add('is-loading');
 			wrap.setAttribute('aria-busy', 'true');
 			overlay.style.display = 'flex';
@@ -277,6 +302,11 @@
 
 			this.setLoadingProgress(100, this.loadingText('done'));
 
+			// A cached response can return in under 200ms, which would flash the
+			// blur for a single frame. Hold it long enough to read as intentional.
+			const shownFor = Date.now() - (this.loadingShownAt || 0);
+			const holdMs = Math.max(0, 480 - shownFor);
+
 			window.setTimeout(() => {
 				overlay.style.opacity = '0';
 
@@ -291,7 +321,7 @@
 
 					this.loadingActive = false;
 				}, 200);
-			}, 220);
+			}, holdMs + 120);
 		},
 
 		/**
@@ -415,6 +445,20 @@
 
 			document.getElementById('rl-fsbi-end-date')?.addEventListener('change', function() {
 				self.loadData();
+			});
+
+			document.querySelectorAll('#rl-fsbi-churn-segments .rl-fsbi-churn-chip').forEach(function(chip) {
+				chip.addEventListener('click', function() {
+					const segment = this.getAttribute('data-segment') || 'free';
+					self.churnSegment = segment;
+
+					document.querySelectorAll('#rl-fsbi-churn-segments .rl-fsbi-churn-chip').forEach(function(other) {
+						other.classList.toggle('is-active', other === chip);
+						other.setAttribute('aria-pressed', other === chip ? 'true' : 'false');
+					});
+
+					self.paintChurnReasons();
+				});
 			});
 
 			document.getElementById('rl-fsbi-export-monthly-csv')?.addEventListener('click', function() {
@@ -1380,12 +1424,51 @@
 		 * @returns {void}
 		 */
 		renderChurnReasons: function(reasons, uninstallTotal) {
+			this.churnReasons = Array.isArray(reasons) ? reasons : [];
+			this.uninstallTotal = Number(uninstallTotal) || 0;
+			this.paintChurnReasons();
+		},
+
+		/**
+		 * Count for one reason within the active customer-type segment.
+		 *
+		 * @function churnSegmentCount
+		 * @memberof FSBI
+		 * @param {Object} item - Reason row with free/trial/paid counts.
+		 * @returns {number}
+		 */
+		churnSegmentCount: function(item) {
+			if ('all' === this.churnSegment) {
+				return Number(item.count) || 0;
+			}
+
+			return Number(item[this.churnSegment]) || 0;
+		},
+
+		/**
+		 * Repaint the reason list for the active segment.
+		 *
+		 * Filtering happens client-side so switching is instant: the payload
+		 * already carries a count per segment.
+		 *
+		 * @function paintChurnReasons
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
+		paintChurnReasons: function() {
 			const list = document.getElementById('rl-fsbi-churn-reasons');
 			if (!list) return;
 
-			const items = Array.isArray(reasons) ? reasons.filter(function(item) {
+			const segment = this.churnSegment || 'free';
+			const segmentLabels = { free: 'free', trial: 'trial', paid: 'paying', all: 'any' };
+			const uninstallTotal = Number(this.uninstallTotal) || 0;
+			const source = Array.isArray(this.churnReasons) ? this.churnReasons : [];
+
+			const items = source.map((item) => {
+				return Object.assign({}, item, { count: this.churnSegmentCount(item) });
+			}).filter(function(item) {
 				return Number(item.count) > 0;
-			}) : [];
+			});
 
 			list.textContent = '';
 
@@ -1393,7 +1476,7 @@
 				const empty = document.createElement('li');
 				empty.className = 'rl-fsbi-churn-empty';
 				empty.textContent = uninstallTotal > 0
-					? 'Uninstalls detected, but no reasons returned by Freemius yet.'
+					? 'No uninstalls recorded for ' + (segmentLabels[segment] || segment) + ' users in this period.'
 					: 'No uninstall feedback stored yet. Run a sync to collect it.';
 				list.appendChild(empty);
 				return;

@@ -1202,3 +1202,43 @@ p.rl-fsbi-field-desc,
 	.rl-fsbi-loading-spinner { animation-duration: 2s; }
 	.rl-fsbi-dashboard.is-loading > *:not(.rl-fsbi-loading-overlay) { transition: none; }
 }
+
+/* Customer-type filter for the uninstall reasons panel */
+
+.rl-fsbi-churn-segments {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0 0 10px;
+}
+
+.rl-fsbi-churn-chip {
+	appearance: none;
+	border: 1px solid var(--fsbi-border, #2b3150);
+	background: transparent;
+	color: var(--fsbi-muted, #9aa4cc);
+	border-radius: 999px;
+	padding: 3px 12px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1.6;
+	cursor: pointer;
+	transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.rl-fsbi-churn-chip:hover {
+	color: var(--fsbi-text, #e7ebff);
+	border-color: var(--fsbi-accent, #5f6bff);
+}
+
+.rl-fsbi-churn-chip.is-active {
+	background: rgba(95, 107, 255, 0.18);
+	border-color: var(--fsbi-accent, #5f6bff);
+	color: var(--fsbi-text, #e7ebff);
+}
+
+.rl-fsbi-churn-chip:focus-visible {
+	outline: 2px solid var(--fsbi-accent, #5f6bff);
+	outline-offset: 2px;
+}
