@@ -40,8 +40,12 @@ class RL_FSBI_GitHub_Updater
 
 	/**
 	 * How long a release lookup is reused.
+	 *
+	 * One hour, not six: GitHub allows 60 anonymous requests per hour and this
+	 * costs one, so a long cache buys nothing but a window where a fresh release
+	 * is invisible.
 	 */
-	const CACHE_TTL = 6 * HOUR_IN_SECONDS;
+	const CACHE_TTL = HOUR_IN_SECONDS;
 
 	/**
 	 * How long a failure is remembered, to stop hammering the API.
@@ -218,10 +222,17 @@ class RL_FSBI_GitHub_Updater
 	 */
 	private function get_release()
 	{
-		$cached = get_transient(self::CACHE_KEY);
+		// WordPress's "Check again" only forces the core check; wp_update_plugins()
+		// is throttled to a minute and never honours force-check, so nothing else
+		// would ever invalidate this cache on demand.
+		$forced = isset($_GET['force-check']) || isset($_GET['force_check']);
 
-		if (is_array($cached)) {
-			return $cached;
+		if (! $forced) {
+			$cached = get_transient(self::CACHE_KEY);
+
+			if (is_array($cached)) {
+				return $cached;
+			}
 		}
 
 		$empty = array('version' => '', 'zip' => '', 'body' => '', 'published_at' => '');

@@ -832,6 +832,10 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.23 (2026-11-06)
+- **"Check again" now actually refreshes the release lookup.** WordPress forces only the *core* check: `wp_update_plugins()` is throttled to one minute on `update-core.php` and one hour on `plugins.php`, and ignores `force-check` entirely, so nothing invalidated this plugin's release cache. A request carrying `force-check` now bypasses the cache.
+- Release lookups are cached for **one hour** instead of six. GitHub allows 60 anonymous requests per hour and this uses one, so the long cache only created a window in which a fresh release was invisible.
+
 ### 1.3.22 (2026-11-06)
 - **The update row now follows the `Version:` header.** The check compared the release against the `RL_FSBI_VERSION` constant rather than the header WordPress displays. Lowering the header made the plugin *look* older on the Plugins screen while the comparison still used the constant, so no update was ever offered — a silent deadlock with no way out but a manual upload. The check now uses WordPress's own `checked` entry, which is read from the header, and only falls back to the constant when that entry is missing.
 
