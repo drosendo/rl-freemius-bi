@@ -92,7 +92,10 @@ class RL_FSBI {
 		// GitHub release updates. Manual only: this surfaces the normal update
 		// row, nothing is installed without an administrator clicking Update.
 		$updater = new RL_FSBI_GitHub_Updater( $this->get_version() );
-		$this->loader->add_filter( 'pre_set_site_transient_update_plugins', $updater, 'check_for_update' );
+		// Read filter, not pre_set: pre_set only runs when WordPress rewrites the
+		// transient, which it throttles to once an hour or day. A freshly published
+		// release would then stay invisible until that schedule came round.
+		$this->loader->add_filter( 'site_transient_update_plugins', $updater, 'check_for_update' );
 		$this->loader->add_filter( 'plugins_api', $updater, 'plugin_info', 20, 3 );
 		$this->loader->add_filter( 'upgrader_source_selection', $updater, 'fix_source_dir', 10, 3 );
 		$this->loader->add_action( 'upgrader_process_complete', $updater, 'flush_after_update', 10, 2 );

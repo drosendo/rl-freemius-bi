@@ -832,6 +832,9 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.26 (2026-11-06)
+- **The update row is now added when the transient is read, not when it is written.** `pre_set_site_transient_update_plugins` only fires when WordPress rewrites the transient, which it throttles to one hour on the Plugins screen and twelve hours otherwise — so a release published after the last write stayed invisible regardless of how correct the lookup was. `site_transient_update_plugins` fires on every read, so the row appears on the next page load. Credit for the pattern: anchor.host's guide to self-hosting updates from GitHub.
+
 ### 1.3.25 (2026-11-06)
 - Republished the update-channel fix, which 1.3.24 carried only partially. Release assets are cached at GitHub's CDN edge, so replacing a release under the same tag kept serving the **previous** file: the download URL for v1.3.24 returned 301,478 bytes while the new build was 301,823. Never reuse a version number — publish a patch instead.
 
