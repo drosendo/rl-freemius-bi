@@ -50,3 +50,4 @@ temp/
 **/*.md
 !README.md
 !readme.md
+!README-API.md
