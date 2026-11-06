@@ -179,6 +179,16 @@ class RL_FSBI_GitHub_Updater
 	}
 
 	/**
+	 * WordPress is rebuilding its own update data (the "Check again" button):
+	 * drop the cached lookup so the check is genuinely fresh instead of being
+	 * answered from a 6-hour-old copy.
+	 */
+	public function flush_cache()
+	{
+		delete_transient(self::CACHE_KEY);
+	}
+
+	/**
 	 * Drop the cached lookup after an update.
 	 *
 	 * @param mixed $upgrader_object Upgrader instance.
