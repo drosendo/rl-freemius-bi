@@ -1154,6 +1154,58 @@
 		},
 
 		/**
+		 * Title the sales activity panel after the period actually being viewed.
+		 *
+		 * The heading used to be hard-coded to "Current Month", which was simply
+		 * wrong once a custom range was selected.
+		 *
+		 * @function updateSalesActivityTitle
+		 * @memberof FSBI
+		 * @param {Object} filters - Active filters, including start_date/end_date.
+		 * @returns {void}
+		 */
+		updateSalesActivityTitle: function(filters) {
+			const el = document.getElementById('rl-fsbi-sales-activity-title');
+			if (!el) return;
+
+			const base = 'Sales Activity';
+			const toDate = function(value) {
+				const parts = String(value || '').split('-').map(Number);
+				if (parts.length !== 3 || parts.some(isNaN)) return null;
+				return new Date(parts[0], parts[1] - 1, parts[2]);
+			};
+
+			const start = toDate(filters.start_date);
+			const end = toDate(filters.end_date);
+
+			if (!start || !end) {
+				el.textContent = base;
+				return;
+			}
+
+			const sameMonth = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
+			const lastDayOfMonth = new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate();
+			const fullMonth = sameMonth && 1 === start.getDate() && lastDayOfMonth === end.getDate();
+
+			// Only name the month when the whole month is in view; a 2-8 March
+			// range labelled "March 2026" would claim more than it shows.
+			if (fullMonth) {
+				el.textContent = base + ': ' + end.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+				return;
+			}
+
+			const sameYear = start.getFullYear() === end.getFullYear();
+			const startLabel = start.toLocaleDateString(undefined, {
+				day: 'numeric',
+				month: 'short',
+				year: sameYear ? undefined : 'numeric',
+			});
+			const endLabel = end.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+
+			el.textContent = base + ': ' + startLabel + ' \u2013 ' + endLabel;
+		},
+
+		/**
 		 * Fetch complete aggregated analytics dataset from backend via AJAX.
 		 *
 		 * @function loadData
@@ -1165,6 +1217,7 @@
 			const filters = this.getFilters();
 
 			this.showLoading(this.loadingText('building'));
+			this.updateSalesActivityTitle(filters);
 
 			fetch(rlFsbiAdmin.ajaxUrl, {
 				method: 'POST',

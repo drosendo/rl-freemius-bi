@@ -832,6 +832,9 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.21 (2026-11-06)
+- **"Sales Activity: Current Month" follows the dates you pick.** The heading was hard-coded, so it kept claiming "Current Month" while showing a custom range. It now names the period in view: `November 2026` for the current month, `June 2026` for another full month, `2 Mar – 8 Mar 2026` for a week, `15 Dec 2025 – 15 Jan 2026` across years. A month is only named when the whole month is selected, so a single week never reads as a whole month. The title updates the moment the date changes, not after the request returns.
+
 ### 1.3.20 (2026-11-06)
 - **"Failed to load dashboard data" no longer hides an expired session.** WordPress rejects a stale nonce with a bare `0` or `-1` and a 4xx status, and both are valid JSON values — `JSON.parse("0")` returns the number `0`, whose `.success` is `undefined`. The old check therefore reported a perfectly ordinary nonce rejection as a data failure. A 400/401/403 now says the session expired and offers to reload; other failures report the HTTP status and log the body to the console.
 - The overlay is cleared on every failure path, so a rejected request cannot leave the page stuck behind the blur.

@@ -161,7 +161,7 @@ if ( ! defined( 'WPINC' ) ) {
 
 	<div class="rl-fsbi-content-grid">
 		<div class="rl-fsbi-card rl-fsbi-span-2">
-			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Sales Activity: Current Month', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-panel-title" id="rl-fsbi-sales-activity-title"><?php echo esc_html__( 'Sales Activity', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-sales-activity-chart"></canvas>
 		</div>
 
