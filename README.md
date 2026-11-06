@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.3.8  
+**Version:** 1.3.10  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -790,7 +790,50 @@ For issues and feature requests, please refer to your plugin documentation or co
 
 GPL-2.0+ - See LICENSE.txt for details
 
+## Updating from GitHub releases
+
+The plugin is not on WordPress.org. Updates are published as GitHub releases on
+[drosendo/rl-freemius-bi](https://github.com/drosendo/rl-freemius-bi) and offered
+through the normal Plugins screen.
+
+- **Manual only.** The plugin surfaces the standard "update available" row; nothing
+  is ever installed without an administrator clicking **Update**. There is no
+  auto-update code path.
+- The release lookup is cached for **6 hours** (failures for 15 minutes) because
+  the unauthenticated GitHub API allows 60 requests/hour **per IP**, which shared
+  hosting shares. Use **Plugins → Check again** to force a check.
+- The plugin prefers a **release asset** over GitHub's generated tag archive, so
+  the archive already contains the correct `rl-freemius-bi/` folder.
+  `upgrader_source_selection` renames the folder as a safety net if a generated
+  archive is ever used instead.
+- The `Update URI` header declares ownership, so a WordPress.org plugin with the
+  same slug can never take over update delivery.
+- An update **replaces the whole plugin folder**. Never edit files directly on the
+  server; the next update will discard them.
+
+### Cutting a release
+
+```bash
+# 1. bump BOTH the header and the constant in rl-freemius-bi.php
+#    Version:           1.3.11
+#    define( 'RL_FSBI_VERSION', '1.3.11' );
+
+git add -A && git commit -m "release 1.3.11: ..." && git push origin master
+
+# 2. build from the commit; --prefix gives the folder the right name
+git archive --format=zip --prefix=rl-freemius-bi/ -o /tmp/rl-freemius-bi-1.3.11.zip HEAD
+
+# 3. publish; the asset is what the updater downloads
+gh release create v1.3.11 /tmp/rl-freemius-bi-1.3.11.zip --target master --notes "..."
+```
+
+**The version bump is what triggers everything.** Tagging a release without
+bumping `Version:` means no site will ever see it.
+
 ## Changelog
+
+### 1.3.10 (2026-11-06)
+- Documented the GitHub release update channel: how it behaves, its caching, and the exact steps to cut a release. No functional change.
 
 ### 1.3.8 (2026-11-06) — DB 1.2.4
 - **Customer emails now resolve for every licence holder.** New table `rl_fsbi_users` filled by a resumable background crawl (`rl_fsbi_user_sync`, every 5 minutes, 50 pages or 90 seconds per run). The cursor is persisted after every page, so a killed job resumes where it stopped. `/customers` joins this table locally — no Freemius call in any request.
