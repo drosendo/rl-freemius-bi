@@ -697,6 +697,62 @@ class RL_FSBI_API
 	}
 
 	/**
+	 * Retrieve trials
+	 *
+	 * GET /v1/developers/{developer_id}/plugins/{plugin_id}/trials.json
+	 *
+	 * @param int   $plugin_id Plugin ID.
+	 * @param array $query Query parameters (count, offset).
+	 * @return array Trial records or empty array.
+	 */
+	public function retrieve_trials($plugin_id, $query = array())
+	{
+		$this->log('retrieve_trials() called', array(
+			'plugin_id'    => $plugin_id,
+			'custom_query' => ! empty($query),
+		));
+
+		$endpoint = "/v1/developers/{$this->developer_id}/plugins/{$plugin_id}/trials.json";
+		$defaults = array(
+			'count'  => 50,
+			'offset' => 0,
+		);
+		$query = wp_parse_args($query, $defaults);
+
+		$response = $this->request($endpoint, 'GET', array(), $query);
+
+		$trials = $this->extract_collection($response, 'trials');
+		$this->log('retrieve_trials() completed', array('count' => count($trials)));
+
+		return $trials;
+	}
+
+	/**
+	 * Retrieve uninstall feedback for a single install
+	 *
+	 * GET /v1/developers/{developer_id}/plugins/{plugin_id}/installs/{install_id}/uninstall.json
+	 *
+	 * @param int $plugin_id  Plugin ID.
+	 * @param int $install_id Install ID.
+	 * @return array Uninstall details or empty array.
+	 */
+	public function retrieve_install_uninstall($plugin_id, $install_id)
+	{
+		$this->log('retrieve_install_uninstall() called', array(
+			'plugin_id'  => $plugin_id,
+			'install_id' => $install_id,
+		));
+
+		$endpoint = "/v1/developers/{$this->developer_id}/plugins/{$plugin_id}/installs/{$install_id}/uninstall.json";
+		$response = $this->request($endpoint, 'GET');
+
+		$result = is_array($response) ? $response : array();
+		$this->log('retrieve_install_uninstall() completed', array('has_data' => ! empty($result)));
+
+		return $result;
+	}
+
+	/**
 	 * Retrieve revenue data
 	 *
 	 * GET /v1/developers/{developer_id}/plugins/{plugin_id}/revenues.json

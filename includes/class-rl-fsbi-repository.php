@@ -153,14 +153,29 @@ class RL_FSBI_Repository {
 			'is_refund'       => 0,
 			'refund_id'       => null,
 			'metadata'        => null,
+			'payment_type'    => null,
+			'is_renewal'      => 0,
+			'gateway'         => null,
+			'gateway_fee'     => null,
+			'vat'             => null,
+			'coupon_id'       => null,
+			'plan_id'         => null,
+			'pricing_id'      => null,
+			'license_id'      => null,
+			'install_id'      => null,
+			'bound_payment_id' => null,
+			'refund_reason'   => null,
 		);
 
 		$data = wp_parse_args( $data, $defaults );
 
 		// Explicit cast to float to prevent PHP 8.2+ type coercion errors
-		$data['gross'] = (float) $data['gross'];
-		$data['net']   = (float) $data['net'];
-		$data['fee']   = (float) $data['fee'];
+		$data['gross']       = (float) $data['gross'];
+		$data['net']         = (float) $data['net'];
+		$data['fee']         = (float) $data['fee'];
+		$data['is_renewal']  = ! empty( $data['is_renewal'] ) ? 1 : 0;
+		$data['gateway_fee'] = null === $data['gateway_fee'] ? null : (float) $data['gateway_fee'];
+		$data['vat']         = null === $data['vat'] ? null : (float) $data['vat'];
 
 		$existing = $this->wpdb->get_row(
 			$this->wpdb->prepare(
@@ -185,6 +200,18 @@ class RL_FSBI_Repository {
 			'%d', // is_refund
 			'%d', // refund_id
 			'%s', // metadata
+			'%s', // payment_type
+			'%d', // is_renewal
+			'%s', // gateway
+			'%f', // gateway_fee
+			'%f', // vat
+			'%d', // coupon_id
+			'%d', // plan_id
+			'%d', // pricing_id
+			'%d', // license_id
+			'%d', // install_id
+			'%d', // bound_payment_id
+			'%s', // refund_reason
 		);
 
 		if ( $existing ) {
@@ -224,10 +251,21 @@ class RL_FSBI_Repository {
 			'outstanding_balance' => 0,
 			'currency'         => 'USD',
 			'metadata'         => null,
+			'failed_payments'  => 0,
+			'canceled_at'      => null,
+			'amount_per_cycle' => null,
+			'renewal_amount'   => null,
+			'initial_amount'   => null,
+			'total_gross'      => null,
+			'tax_rate'         => null,
+			'pricing_id'       => null,
+			'license_id'       => null,
+			'install_id'       => null,
 		);
 
 		$data = wp_parse_args( $data, $defaults );
 		$data['outstanding_balance'] = (float) $data['outstanding_balance'];
+		$data['failed_payments']     = (int) $data['failed_payments'];
 
 		$existing = $this->wpdb->get_row(
 			$this->wpdb->prepare(
@@ -249,6 +287,16 @@ class RL_FSBI_Repository {
 			'%f', // outstanding_balance
 			'%s', // currency
 			'%s', // metadata
+			'%d', // failed_payments
+			'%s', // canceled_at
+			'%f', // amount_per_cycle
+			'%f', // renewal_amount
+			'%f', // initial_amount
+			'%f', // total_gross
+			'%f', // tax_rate
+			'%d', // pricing_id
+			'%d', // license_id
+			'%d', // install_id
 		);
 
 		if ( $existing ) {
@@ -276,15 +324,21 @@ class RL_FSBI_Repository {
 	 */
 	public function upsert_license( $data ) {
 		$defaults = array(
-			'plugin_id'    => 0,
-			'license_id'   => 0,
-			'user_id'      => 0,
-			'plan_id'      => null,
-			'license_key'  => null,
-			'status'       => 'valid',
-			'quota_sites'  => null,
-			'active_sites' => 0,
-			'expires_at'   => null,
+			'plugin_id'     => 0,
+			'license_id'    => 0,
+			'user_id'       => 0,
+			'plan_id'       => null,
+			'pricing_id'    => null,
+			'license_key'   => null,
+			'status'        => 'active',
+			'quota_sites'   => null,
+			'active_sites'  => 0,
+			'activated'     => 0,
+			'is_cancelled'  => 0,
+			'expires_at'    => null,
+			'fs_created_at' => null,
+			'fs_updated_at' => null,
+			'updated_at'    => null,
 		);
 
 		$data = wp_parse_args( $data, $defaults );
@@ -296,7 +350,7 @@ class RL_FSBI_Repository {
 			)
 		);
 
-		$formats = array( '%d', '%d', '%d', '%d', '%s', '%s', '%d', '%d', '%s' );
+		$formats = array( '%d', '%d', '%d', '%d', '%d', '%s', '%s', '%d', '%d', '%d', '%d', '%s', '%s', '%s', '%s' );
 
 		if ( $existing ) {
 			return $this->wpdb->update(
@@ -423,5 +477,303 @@ class RL_FSBI_Repository {
 		}
 
 		return (int) $result;
+	}
+
+	/**
+	 * Insert or update a trial record.
+	 *
+	 * @param array $data Trial data.
+	 * @return int|false
+	 */
+	public function upsert_trial( $data ) {
+		$defaults = array(
+			'plugin_id'           => 0,
+			'trial_id'            => 0,
+			'user_id'             => 0,
+			'payment_id'          => null,
+			'subscription_id'     => null,
+			'license_id'          => null,
+			'started_at'          => null,
+			'trial_ends_at'       => null,
+			'with_payment_method' => 0,
+			'canceled_at'         => null,
+			'converted_at'        => null,
+			'environment'         => null,
+			'metadata'            => null,
+		);
+
+		$data = wp_parse_args( $data, $defaults );
+		$data['with_payment_method'] = ! empty( $data['with_payment_method'] ) ? 1 : 0;
+
+		$existing = $this->wpdb->get_row(
+			$this->wpdb->prepare(
+				"SELECT id FROM {$this->wpdb->prefix}rl_fsbi_trials WHERE trial_id = %d",
+				$data['trial_id']
+			)
+		);
+
+		$formats = array( '%d', '%d', '%d', '%d', '%d', '%d', '%s', '%s', '%d', '%s', '%s', '%s', '%s' );
+
+		if ( $existing ) {
+			return $this->wpdb->update(
+				$this->wpdb->prefix . 'rl_fsbi_trials',
+				$data,
+				array( 'id' => $existing->id ),
+				$formats,
+				array( '%d' )
+			);
+		}
+
+		return $this->wpdb->insert( $this->wpdb->prefix . 'rl_fsbi_trials', $data, $formats );
+	}
+
+	/**
+	 * Insert or update an install record.
+	 *
+	 * @param array $data Install data.
+	 * @return int|false
+	 */
+	public function upsert_install( $data ) {
+		$defaults = array(
+			'plugin_id'      => 0,
+			'install_id'     => 0,
+			'user_id'        => 0,
+			'license_id'     => null,
+			'plan_id'        => null,
+			'site_id'        => null,
+			'title'          => null,
+			'url'            => null,
+			'version'        => null,
+			'is_active'      => 1,
+			'is_premium'     => 0,
+			'is_uninstalled' => 0,
+			'last_seen_at'   => null,
+			'environment'    => null,
+			'metadata'       => null,
+		);
+
+		$data = wp_parse_args( $data, $defaults );
+		$data['is_active']      = ! empty( $data['is_active'] ) ? 1 : 0;
+		$data['is_premium']     = ! empty( $data['is_premium'] ) ? 1 : 0;
+		$data['is_uninstalled'] = ! empty( $data['is_uninstalled'] ) ? 1 : 0;
+
+		$existing = $this->wpdb->get_row(
+			$this->wpdb->prepare(
+				"SELECT id FROM {$this->wpdb->prefix}rl_fsbi_installs WHERE install_id = %d",
+				$data['install_id']
+			)
+		);
+
+		$formats = array( '%d', '%d', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%s' );
+
+		if ( $existing ) {
+			return $this->wpdb->update(
+				$this->wpdb->prefix . 'rl_fsbi_installs',
+				$data,
+				array( 'id' => $existing->id ),
+				$formats,
+				array( '%d' )
+			);
+		}
+
+		return $this->wpdb->insert( $this->wpdb->prefix . 'rl_fsbi_installs', $data, $formats );
+	}
+
+	/**
+	 * Insert or update the uninstall feedback for an install.
+	 *
+	 * @param array $data Uninstall data.
+	 * @return int|false
+	 */
+	public function upsert_uninstall( $data ) {
+		$defaults = array(
+			'plugin_id'      => 0,
+			'install_id'     => 0,
+			'uninstall_id'   => 0,
+			'site_id'        => null,
+			'reason_id'      => 0,
+			'reason_label'   => null,
+			'reason_info'    => null,
+			'uninstalled_at' => null,
+			'metadata'       => null,
+		);
+
+		$data = wp_parse_args( $data, $defaults );
+
+		$existing = $this->wpdb->get_row(
+			$this->wpdb->prepare(
+				"SELECT id FROM {$this->wpdb->prefix}rl_fsbi_uninstalls WHERE plugin_id = %d AND install_id = %d",
+				$data['plugin_id'],
+				$data['install_id']
+			)
+		);
+
+		$formats = array( '%d', '%d', '%d', '%s', '%d', '%s', '%s', '%s', '%s' );
+
+		if ( $existing ) {
+			return $this->wpdb->update(
+				$this->wpdb->prefix . 'rl_fsbi_uninstalls',
+				$data,
+				array( 'id' => $existing->id ),
+				$formats,
+				array( '%d' )
+			);
+		}
+
+		return $this->wpdb->insert( $this->wpdb->prefix . 'rl_fsbi_uninstalls', $data, $formats );
+	}
+
+	/**
+	 * Trial funnel counts for the dashboard.
+	 *
+	 * @param int    $plugin_id  Plugin ID or 0 for all.
+	 * @param string $start_date Period start (YYYY-MM-DD).
+	 * @param string $end_date   Period end (YYYY-MM-DD).
+	 * @return array
+	 */
+	public function get_trial_funnel( $plugin_id = 0, $start_date = null, $end_date = null ) {
+		$table = $this->wpdb->prefix . 'rl_fsbi_trials';
+		$where = ' WHERE 1=1';
+
+		if ( $plugin_id > 0 ) {
+			$where .= $this->wpdb->prepare( ' AND plugin_id = %d', $plugin_id );
+		}
+
+		if ( $start_date ) {
+			$where .= $this->wpdb->prepare( ' AND started_at >= %s', $start_date . ' 00:00:00' );
+		}
+
+		if ( $end_date ) {
+			$where .= $this->wpdb->prepare( ' AND started_at <= %s', $end_date . ' 23:59:59' );
+		}
+
+		$row = $this->wpdb->get_row(
+			"SELECT COUNT(*) AS started,
+				SUM(CASE WHEN with_payment_method = 1 THEN 1 ELSE 0 END) AS with_payment_method,
+				SUM(CASE WHEN converted_at IS NOT NULL THEN 1 ELSE 0 END) AS converted,
+				SUM(CASE WHEN canceled_at IS NOT NULL AND converted_at IS NULL THEN 1 ELSE 0 END) AS canceled
+			FROM {$table}{$where}"
+		);
+
+		if ( ! $row ) {
+			return array(
+				'started'             => 0,
+				'with_payment_method' => 0,
+				'converted'           => 0,
+				'canceled'            => 0,
+				'rate'                => 0.0,
+			);
+		}
+
+		$started   = (int) $row->started;
+		$converted = (int) $row->converted;
+
+		return array(
+			'started'             => $started,
+			'with_payment_method' => (int) $row->with_payment_method,
+			'converted'           => $converted,
+			'canceled'            => (int) $row->canceled,
+			'rate'                => $started > 0 ? round( ( $converted / $started ) * 100, 2 ) : 0.0,
+		);
+	}
+
+	/**
+	 * Uninstall reasons grouped for the dashboard, most frequent first.
+	 *
+	 * @param int    $plugin_id Plugin ID or 0 for all.
+	 * @param string $since     Only count uninstalls on or after this date.
+	 * @param int    $limit     Maximum number of reasons.
+	 * @return array
+	 */
+	public function get_churn_reasons( $plugin_id = 0, $since = null, $limit = 8 ) {
+		$table = $this->wpdb->prefix . 'rl_fsbi_uninstalls';
+		$where = ' WHERE 1=1';
+
+		if ( $plugin_id > 0 ) {
+			$where .= $this->wpdb->prepare( ' AND plugin_id = %d', $plugin_id );
+		}
+
+		if ( $since ) {
+			$where .= $this->wpdb->prepare( ' AND (uninstalled_at IS NULL OR uninstalled_at >= %s)', $since . ' 00:00:00' );
+		}
+
+		$limit = max( 1, min( 20, (int) $limit ) );
+
+		$rows = $this->wpdb->get_results(
+			"SELECT reason_id, COUNT(*) AS total,
+				MAX(reason_label) AS reason_label,
+				MAX(reason_info) AS reason_info
+			FROM {$table}{$where}
+			GROUP BY reason_id
+			ORDER BY total DESC
+			LIMIT {$limit}"
+		);
+
+		$out = array();
+
+		foreach ( (array) $rows as $row ) {
+			$out[] = array(
+				'reason_id'    => (int) $row->reason_id,
+				'count'        => (int) $row->total,
+				'reason_label' => isset( $row->reason_label ) ? (string) $row->reason_label : '',
+				'reason_info'  => isset( $row->reason_info ) ? (string) $row->reason_info : '',
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Count uninstalls in a period, including installs whose reason was not
+	 * returned by the API yet.
+	 *
+	 * @param int    $plugin_id  Plugin ID or 0 for all.
+	 * @param string $start_date Period start (YYYY-MM-DD).
+	 * @param string $end_date   Period end (YYYY-MM-DD).
+	 * @return int
+	 */
+	public function count_uninstalls( $plugin_id = 0, $start_date = null, $end_date = null ) {
+		$table = $this->wpdb->prefix . 'rl_fsbi_installs';
+		$where = ' WHERE is_uninstalled = 1';
+
+		if ( $plugin_id > 0 ) {
+			$where .= $this->wpdb->prepare( ' AND plugin_id = %d', $plugin_id );
+		}
+
+		if ( $start_date ) {
+			$where .= $this->wpdb->prepare( ' AND last_seen_at >= %s', $start_date . ' 00:00:00' );
+		}
+
+		if ( $end_date ) {
+			$where .= $this->wpdb->prepare( ' AND last_seen_at <= %s', $end_date . ' 23:59:59' );
+		}
+
+		return (int) $this->wpdb->get_var( "SELECT COUNT(*) FROM {$table}{$where}" );
+	}
+
+	/**
+	 * Install IDs that need their uninstall reason fetched.
+	 *
+	 * @param int $plugin_id Plugin ID.
+	 * @param int $limit     Maximum number of installs.
+	 * @return int[]
+	 */
+	public function get_installs_missing_uninstall_reason( $plugin_id, $limit = 3 ) {
+		$installs   = $this->wpdb->prefix . 'rl_fsbi_installs';
+		$uninstalls = $this->wpdb->prefix . 'rl_fsbi_uninstalls';
+		$limit      = max( 1, min( 10, (int) $limit ) );
+
+		$rows = $this->wpdb->get_col(
+			$this->wpdb->prepare(
+				"SELECT i.install_id FROM {$installs} i
+				LEFT JOIN {$uninstalls} u ON u.install_id = i.install_id AND u.plugin_id = i.plugin_id
+				WHERE i.plugin_id = %d AND i.is_uninstalled = 1 AND u.id IS NULL
+				ORDER BY i.last_seen_at DESC
+				LIMIT {$limit}",
+				$plugin_id
+			)
+		);
+
+		return array_map( 'intval', (array) $rows );
 	}
 }
