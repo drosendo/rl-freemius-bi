@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.1.0  
+**Version:** 1.3.8  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -31,6 +31,8 @@ The plugin integrates directly with the Freemius REST API using HMAC-SHA256 auth
   - Renewal vs. First-Time Purchase Analysis
   - Refund Tracking
 - **Database Persistence:** 5 dedicated tables for payments, subscriptions, licenses, plans, and balances
+- **Kit Subscriber Limit:** Optional cap on active Kit subscribers (empty or `0` = unlimited) with sync-time enforcement
+- **Manual Kit Pruning:** Preview and unsubscribe the oldest subscribers that carry this plugin's tags, one bounded batch at a time
 - **Zero Data-Loss Policy:** Tables are never dropped on deactivation—historical data is preserved
 - **PHP 8.2+ Ready:** Strict type handling, no dynamic properties, explicit float casting
 
@@ -120,7 +122,7 @@ Hovering over the info icon next to **Health Score** on the dashboard displays t
 
 ## Database Schema
 
-The plugin creates 5 custom tables (with your site's `wp_` prefix):
+The plugin creates 8 custom tables (with your site's `wp_` prefix). Schema upgrades run automatically on `plugins_loaded` whenever `RL_FSBI_DB_VERSION` increases, so updates do not require deactivation:
 
 ### `wp_rl_fsbi_payments`
 Stores all payment transactions from Freemius.
@@ -142,6 +144,18 @@ Stores all payment transactions from Freemius.
 | `country_code` | varchar(2) | ISO 3166-1 alpha-2 code |
 | `is_refund` | tinyint(1) | Boolean: is this a refund? |
 | `refund_id` | bigint | Refund payment ID (if applicable) |
+| `payment_type` | varchar(20) | Freemius `type` (purchase, renewal, refund, …) |
+| `is_renewal` | tinyint(1) | Authoritative renewal flag reported by Freemius |
+| `gateway` | varchar(50) | Payment gateway identifier |
+| `gateway_fee` | decimal(10,2) | Gateway processing fee |
+| `vat` | decimal(10,2) | Tax portion of the transaction |
+| `coupon_id` | bigint | Coupon applied to the transaction |
+| `plan_id` | bigint | Plan purchased |
+| `pricing_id` | bigint | Pricing row purchased |
+| `license_id` | bigint | License created by the payment |
+| `install_id` | bigint | Install that generated the payment |
+| `bound_payment_id` | bigint | Original payment a refund is bound to |
+| `refund_reason` | varchar(100) | Freemius refund reason code |
 | `metadata` | longtext | JSON blob for future extension |
 | `created_at` | datetime | Record creation timestamp |
 | `updated_at` | datetime | Last update timestamp |
@@ -165,6 +179,16 @@ Stores active and historical subscription records.
 | `expires_at` | datetime | Subscription end date |
 | `outstanding_balance` | decimal(10,2) | Due amount |
 | `currency` | varchar(3) | Billing currency |
+| `failed_payments` | int(11) | Consecutive failed renewal attempts (dunning risk) |
+| `canceled_at` | datetime | Cancellation timestamp |
+| `amount_per_cycle` | decimal(10,2) | Recurring amount per billing cycle |
+| `renewal_amount` | decimal(10,2) | Amount expected on renewal |
+| `initial_amount` | decimal(10,2) | First payment amount |
+| `total_gross` | decimal(10,2) | Lifetime gross for the subscription |
+| `tax_rate` | decimal(6,3) | Tax rate applied |
+| `pricing_id` | bigint | Pricing row in use |
+| `license_id` | bigint | License tied to the subscription |
+| `install_id` | bigint | Install tied to the subscription |
 | `metadata` | longtext | Extra data (JSON) |
 | `created_at` | datetime | Creation timestamp |
 | `updated_at` | datetime | Update timestamp |
@@ -230,6 +254,74 @@ Stores developer payout and balance information.
 
 **Indexes:** developer_id, app_id
 
+### `wp_rl_fsbi_trials`
+Stores trial records from the Freemius trials endpoint.
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `id` | bigint | Primary key |
+| `plugin_id` | bigint | Freemius plugin ID |
+| `trial_id` | bigint | Freemius trial ID (UNIQUE) |
+| `user_id` | bigint | Freemius user ID |
+| `payment_id` | bigint | Payment linked to the trial, if any |
+| `subscription_id` | bigint | Subscription created from the trial |
+| `license_id` | bigint | License issued for the trial |
+| `started_at` | datetime | Trial start (Freemius `created`) |
+| `trial_ends_at` | datetime | Trial expiration |
+| `with_payment_method` | tinyint(1) | Customer supplied a payment method |
+| `canceled_at` | datetime | Trial canceled |
+| `converted_at` | datetime | Trial converted to paid |
+| `environment` | varchar(20) | Freemius environment |
+| `metadata` | longtext | Raw API payload (JSON) |
+
+**Indexes:** plugin_id, trial_ends_at, started_at, converted_at, user_id
+
+### `wp_rl_fsbi_installs`
+Stores site installations reported by Freemius, focused on uninstalled sites used for churn analysis.
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `id` | bigint | Primary key |
+| `plugin_id` | bigint | Freemius plugin ID |
+| `install_id` | bigint | Freemius install ID (UNIQUE) |
+| `user_id` | bigint | Freemius user ID |
+| `license_id` | bigint | License in use |
+| `plan_id` | bigint | Plan in use |
+| `site_id` | varchar(64) | Site identifier |
+| `title` | varchar(255) | Site title |
+| `url` | varchar(255) | Site URL |
+| `version` | varchar(50) | Plugin version installed |
+| `is_active` | tinyint(1) | Install currently active |
+| `is_premium` | tinyint(1) | Premium plan active |
+| `is_uninstalled` | tinyint(1) | Site uninstalled the product |
+| `last_seen_at` | datetime | Last activity reported |
+| `environment` | varchar(20) | Freemius environment |
+| `metadata` | longtext | Raw API payload (JSON) |
+
+**Indexes:** plugin_id, is_uninstalled, user_id, plan_id
+
+### `wp_rl_fsbi_uninstalls`
+Stores the uninstall feedback Freemius collects (`reason_id` and free-text `reason_info`).
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `id` | bigint | Primary key |
+| `plugin_id` | bigint | Freemius plugin ID |
+| `install_id` | bigint | Install that was removed |
+| `uninstall_id` | bigint | Freemius uninstall record ID |
+| `site_id` | varchar(64) | Site identifier |
+| `reason_id` | bigint | Freemius reason code (`0` = not provided) |
+| `reason_label` | varchar(191) | Human-readable reason returned by Freemius (e.g. "No longer needed") |
+| `reason_info` | text | Free-text reason supplied by the customer |
+| `uninstalled_at` | datetime | Uninstall timestamp |
+| `metadata` | longtext | Raw API payload (JSON) |
+
+**Indexes:** plugin_id, reason_id, uninstalled_at, UNIQUE (plugin_id, install_id)
+
+### Metadata backfill
+
+When upgrading from a schema older than `1.2.0`, the plugin copies the fields listed above out of the existing `metadata` JSON blobs into the new columns. The backfill is resumable: it stores a row-ID cursor in `rl_fsbi_backfill_payments_cursor` / `rl_fsbi_backfill_subscriptions_cursor` and continues on the next request if PHP times out.
+
 ## Dashboard Pages
 
 ### Main Dashboard
@@ -241,6 +333,8 @@ Displays:
 - **Sales Activity Chart:** Current month daily purchases, renewals, trials, refunds, conversions
 - **Expected Renewals Chart:** Current month daily expected renewals (completed renewals + upcoming scheduled renewals by day, dual-axis for revenue amounts and subscription counts, with total/completed/upcoming badge counters)
 - **Revenue Trend Chart:** Daily/monthly gross revenue line chart
+- **Trial Funnel:** Trials started in the selected period, how many supplied a payment method, converted, or canceled, plus a source badge (live trial records vs. estimated from subscriptions)
+- **Churn Reasons:** Uninstall feedback grouped by reason for the last 12 months, most frequent first
 - **Currency Distribution Chart:** Pie chart showing revenue by currency
 - **Recent Payments Table:** DataTables-powered transaction history
 
@@ -279,9 +373,42 @@ The plugin supports syncing opted-in users (`is_marketing_allowed === true`) fro
 - **Authentication:** HTTP Basic Auth with API Key.
 - **Audience / Tags:** Discovers audiences and user interest tags, writes the `WEBSITE` merge field.
 
+### Kit Subscriber Limit & Pruning
+
+Kit plans are billed on the number of **active** subscribers. Freemius BI can keep the account under a cap without stopping the sync entirely.
+
+**Setting:** *Freemius BI → Settings → Newsletter → Kit → Subscriber Limit*
+- Enter a number (e.g. `10000`) to cap the account at that many active subscribers.
+- Leave empty or set `0` for unlimited.
+
+**How the limit is enforced.** Before a sync run, the plugin reads the live active-subscriber total from Kit. When the total is at or above the limit, the run **stops adding new subscribers** and reports how many were skipped:
+- Cron delta sync: the skip count is appended to the `rl_fsbi_newsletter_cron_status` option.
+- Batched opt-in sync: skipped contacts appear in the sync modal log.
+- Sample test run: skipped contacts are logged as warnings.
+
+Existing subscribers are still matched, updated, and tagged — only new additions are blocked. If the count request itself fails, the sync proceeds (the cap cannot be verified) and the limit is not enforced for that run.
+
+**Pruning.** The same section renders a *Kit subscriber quota* panel:
+
+1. **Refresh from Kit** — read-only. Re-reads the active total and the next 25 candidates live from Kit.
+2. **Unsubscribe oldest batch** — requires a confirmation dialog, then unsubscribes up to 25 subscribers. Repeat until you are under the limit.
+3. **Remove all over the limit** — requires a confirmation dialog, then drains everything above the limit in one run, 25 per request, updating the progress bar from Kit's own count after every chunk. **Stop** halts the run between chunks (the in-flight chunk always completes). Keep the tab open; if you close it the run stops and you can start it again.
+
+> **Unsubscribing is permanent.** Kit treats it the same as the subscriber clicking unsubscribe: the record and tags are kept, but the person stops receiving all email and must explicitly opt in again. The plugin never prunes automatically — it only runs when an administrator clicks a button.
+
+**Scope.** The *Prune Scope* setting decides who is eligible:
+
+- **Any active subscriber** (default) — the oldest active subscribers first, regardless of tags.
+- **Only subscribers tagged by this plugin** — restricted to the configured *Default Tag* plus any *plan tag* mappings, so subscribers imported into Kit from elsewhere are never touched. If no tags are configured the tool refuses to run.
+
+**Accuracy.** The panel sends the exact subscriber IDs it previewed and the server unsubscribes each ID exactly once, then reports Kit's own active total instead of `total - removed`. This matters because Kit's `/subscribers?status=active` list lags a few seconds and Kit accepts unsubscribing an already-cancelled contact — re-deriving "the oldest N" on every chunk used to re-process the same people while the UI still counted them as removed.
+
+**Batch size.** 25 per click, sent as five 5-subscriber requests so the progress bar reflects real work. Each action is deliberate; nothing runs automatically.
+
 ### Kit.com Manual CSV Export
 - **One-Click Instant Download:** Download the latest complete opted-in subscribers CSV file directly via the **📥** button on the dashboard Newsletter KPI widget or the modal footer.
 - **Server-Side Generation & Email Delivery:** Generates complete CSV exports in chunked batches directly on the server to prevent browser HTTP timeouts on large subscriber lists (e.g. 17,000+ scanned Freemius users). Upon completion, automatically emails the completed CSV file to the administrator (`the site admin email`) as an attachment and keeps it cached in `wp-content/uploads/fsbi-exports/` for instant one-click downloads.
+- **Export Storage Hardening:** Exports contain customer emails, so the `fsbi-exports/` directory is created with an `.htaccess` deny rule (Apache 2.4 and 2.2 syntax) plus an `index.php` silence file, files are named with a random 32-character token, and exports older than 24 hours are pruned automatically on the next generation. Delivery always goes through the nonce- and capability-protected `admin-ajax.php` handler; files are never linked directly. On Nginx, add an equivalent `location` deny rule for `wp-content/uploads/fsbi-exports/`.
 - **Kit.com Import Format:** Generates UTF-8 BOM CSV files fully compliant with [Kit Subscriber Import guidelines](https://help.kit.com/en/articles/2502555-how-to-import-a-subscriber-list) featuring column headers: `Email Address`, `First Name`, `Last Name`, `Tags`, `Website`, `Freemius User ID`, `Plugin`, `Opted In Date`.
 - **Automatic Checkpoint:** Generating the export automatically updates the sync timestamp checkpoint (`rl_fsbi_newsletter_last_sync_utc`), enabling subsequent daily syncs to process delta users only.
 
@@ -307,6 +434,9 @@ The plugin supports syncing opted-in users (`is_marketing_allowed === true`) fro
 | `/v1/developers/{id}/plugins/{pid}/subscriptions.json` | GET | Subscription records (paginated) |
 | `/v1/developers/{id}/plugins/{pid}/licenses.json` | GET | License activations (paginated) |
 | `/v1/developers/{id}/plugins/{pid}/plans.json` | GET | Pricing plan data |
+| `/v1/developers/{id}/plugins/{pid}/trials.json` | GET | Trial records (paginated) |
+| `/v1/developers/{id}/plugins/{pid}/installs.json?filter=uninstalled` | GET | Uninstalled site installs (paginated) |
+| `/v1/developers/{id}/plugins/{pid}/installs/{iid}/uninstall.json` | GET | Uninstall reason feedback |
 | `/v1/developers/{id}/plugins/{pid}/revenues.json` | GET | Time-series revenue data |
 | `/v1/developers/{id}/plugins/{pid}/users.json` | GET | Plugin users and marketing consent (paginated) |
 | `/v1/developers/{id}/plugins/{pid}/users/{uid}/installs.json` | GET | User install site origins (URL, title, version) |
@@ -351,16 +481,26 @@ Failed requests use exponential backoff:
 ## Business Logic Definitions
 
 ### New Purchase vs. Renewal
-A payment is classified as a **Renewal** if the database contains prior payments for the same subscription/user ID before the transaction date. Otherwise, it's a **First-Time Purchase**.
+A payment is classified as a **Renewal** when Freemius reports `is_renewal = true` on the payment. When that flag is absent, the `is_renewal` column is consulted, and only then does it fall back to the legacy heuristic (a payment with a subscription ID is treated as a renewal). Otherwise it is a **First-Time Purchase**.
 
 ### Refunds
 Payments where `gross < 0` or linked to a refund transaction ID are flagged as `is_refund = 1`.
 
 ### Trial Conversions
-Subscriptions where `trial_ends` is populated and subsequent successful payments occurred after trial end.
+Computed from the `rl_fsbi_trials` table: a trial is converted when Freemius reports `converted_at`, and canceled when `canceled_at` is set without a conversion. Before the trials endpoint has been synced, the dashboard falls back to the subscription-derived estimate and labels it as such.
+
+### Churn Reasons
+`rl_fsbi_installs` is synced with `filter=uninstalled`, and the uninstall feedback for each of those installs is fetched from the per-install uninstall endpoint. Reasons are grouped by `reason_id`; `0` means Freemius had no reason on record. The dashboard shows the `reason_label` returned by the API (falling back to `reason_info`, then to the numeric ID).
 
 ### Multi-Currency Segregation
-All financial metrics (gross, net, MRR) are computed separately per currency. Avoid summing mixed currencies.
+Per-currency buckets stay separate everywhere (`mrr_native_by_currency`, distribution charts) and are never added together as if they shared a currency. When one consolidated figure is needed — MRR and ARR — each bucket is converted to the reporting currency using the rate stored for that date and only then summed.
+
+### KPI definitions
+- **MRR** — every active subscription's renewal amount, monthlyised by billing cycle, converted to the reporting currency and summed.
+- **ARR** — MRR × 12.
+- **AOV** — net revenue for the period divided by all payments taken in it (new + renewal). Renders as `—` when the period has no payments, never `0.00`.
+- **Churn** — cancellations dated inside the selected period divided by the subscriber base that existed at the start of that period.
+- **Health score** — weighted sum of refund control (30), churn (25), trial conversion (25) and revenue momentum (20); the exact breakdown is shown in the KPI tooltip.
 
 ## WP-Cron Scheduling
 
@@ -426,6 +566,59 @@ Streams a CSV file containing 12-month or 3-year (36-month) rolling revenue brea
 - `plugin_id` (optional): Filter by plugin ID or `all`
 - `currency` (optional): Filter by currency or `all`
 - `end_date` (optional): YYYY-MM-DD format reference date
+
+### `wp_ajax_rl_fsbi_kit_prune_preview`
+Read-only preview of Kit quota status. Never changes subscriber state.
+
+**Parameters:**
+- `nonce` (required)
+- `preview_size` (optional): how many candidates to return, 1–500, defaults to 25. The drain uses 500 to avoid a round trip between every 25 removals.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "limit": 10000,
+    "total": 10997,
+    "excess": 997,
+    "scope": "all",
+    "batch_size": 25,
+    "preview_size": 25,
+    "candidate_count": 25,
+    "tag_count": 2,
+    "candidates": [
+      { "id": 123, "email": "d****@example.com", "created_at": "2008-04-11T09:12:00Z" }
+    ]
+  }
+}
+```
+Requires a configured Kit API key and a non-zero subscriber limit.
+
+### `wp_ajax_rl_fsbi_kit_prune_batch`
+Unsubscribes one bounded batch of subscribers. **Destructive and irreversible.**
+
+**Parameters:**
+- `nonce` (required)
+- `confirm` (required): must be exactly `yes`
+- `batch_size` (optional): 1–25, defaults to 25
+- `subscriber_ids` (optional): JSON array of Kit subscriber IDs to unsubscribe. **Always send this** — it is the list the preview returned. IDs are de-duplicated and capped at `batch_size`. When omitted the handler falls back to re-collecting the oldest eligible subscribers, which can re-process the same contacts while Kit's list catches up.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "done": false,
+    "removed": 25,
+    "failed": 0,
+    "total": 10972,
+    "excess": 972,
+    "errors": []
+  }
+}
+```
+Removes at most 25 subscribers per request, stops at the excess count, and reports per-subscriber failures without aborting the batch.
 
 ### `wp_ajax_rl_fsbi_get_marketing_optins`
 Asynchronously paginates through Freemius users (in batches of 100) to count opted-in users (`is_marketing_allowed === true`). Caches the final count in `rl_fsbi_optins_count_{plugin_id}` and updates the dashboard. Can be triggered manually using the refresh button on the Newsletter Opt-ins widget.
@@ -556,7 +749,9 @@ FSBI.getFilters()            // Get current filter values
 
 ## Security Considerations
 
-- **API Keys:** Stored in `wp_options` table. Protect your database!
+- **API Keys:** Stored in the `rl_fsbi_settings` option in `wp_options`. Protect your database!
+- **Masked Secret Fields:** The Freemius Secret Key, Mailchimp API Key, Kit API Key/Secret, Wise Token, and FreeCurrencyAPI Key render as password inputs and are never written into the page markup. Submitting the field blank keeps the stored value, so other settings can be saved without re-entering secrets.
+- **Export Isolation:** Generated opt-in CSVs live outside the plugin directory in `wp-content/uploads/fsbi-exports/`, protected by an `.htaccess` deny rule and a random 32-character filename token, with 24-hour retention.
 - **Nonces:** All AJAX requests require nonces
 - **Capability Checks:** Admin actions require `manage_options` capability
 - **Database Queries:** All queries use `$wpdb->prepare()` with placeholders
@@ -596,6 +791,88 @@ For issues and feature requests, please refer to your plugin documentation or co
 GPL-2.0+ - See LICENSE.txt for details
 
 ## Changelog
+
+### 1.3.8 (2026-11-06) — DB 1.2.4
+- **Customer emails now resolve for every licence holder.** New table `rl_fsbi_users` filled by a resumable background crawl (`rl_fsbi_user_sync`, every 5 minutes, 50 pages or 90 seconds per run). The cursor is persisted after every page, so a killed job resumes where it stopped. `/customers` joins this table locally — no Freemius call in any request.
+- Added `wp rl-fsbi sync-users --all` and a **Run user backfill now** button in Settings → Synchronization.
+- Added `GET /sync-status` and `GET /diagnostics`.
+- `license.activations` is now `null` instead of `0`: Freemius never exposes the current site count, only `activated` (ever). `optin_at` likewise documents as unavailable rather than guessing.
+- `/segments` gained `basis: "licence"`, an `active_other` bucket and a `reconcile` block; bucket sum now equals `COUNT(*)` on the licence table exactly.
+- `/customers` gained `basis: "customer"`; `updated_since` now compares the local row timestamp (bumped on every licence sync) so it behaves as an incremental feed.
+- Added `rl_fsbi_api_log` access log (no emails) with a 90-day cleanup cron.
+- **Safety fix after a production incident:** the two new tables are created by a guarded one-shot `CREATE TABLE IF NOT EXISTS`, **never** through the global `dbDelta` pass, and the backfill Settings panel no longer instantiates the sync class (that caused unbounded recursion and exhausted PHP memory on every request). Background jobs are wired through lazy callbacks so no settings manager is built on ordinary requests.
+- Hourly `rl_fsbi_rest_warm` cron rebuilds the dataset and segments so the first request of the day is served from cache. It **builds first and publishes second**: a failed rebuild leaves the previous cached copy in place and records the error in `/diagnostics` (`cache.last_warm_error`).
+
+### 1.3.7 (2026-11-06)
+- Added a read-only REST API under `rl-fsbi/v1`: `GET /customers`, `GET /segments`, `POST /sync`. See `README-API.md`.
+- All routes require `manage_options`; responses never include Freemius credentials, per-user keys or licence keys.
+- `/segments` reports `mrr_eur` through the same consolidated MRR calculation as the dashboard, so it can never regress to a single-currency bucket.
+- `sync_licenses()` and `convert_currency_amount()` are now public so the REST layer reuses them instead of duplicating logic.
+
+### 1.3.6 (2026-11-06) — DB 1.2.3
+- **Licence sync was storing every licence as `valid`.** The `/licenses.json` payload has no `status` key, so `$license['status'] ?? 'valid'` labelled all 1180 rows identically and made expiry segmentation impossible. Status is now derived: `expired` when `expiration` is in the past, `cancelled` when `is_cancelled` is set, otherwise `active`.
+- Licences now persist `activated`, `is_cancelled`, `pricing_id`, `fs_created_at` and `fs_updated_at`. `activated` and `pricing_id` were already in the payload but were thrown away, so win-back segments, the activation funnel and renewal cohorts had no data to work from.
+- Removed the bogus `sites_count` mapping (the payload has no such field; `quota` is the site allowance).
+- Verified licence pagination: Freemius ignores `page` and honours `offset`, and silently caps `count` at **50**. The offset loop in `sync_licenses()`/`save_license_batch()` therefore covers the whole set — 24 pages, 1179 unique licences, no duplicates.
+- Run **Sync** once after upgrading to repopulate licence statuses; the schema change alone does not rewrite existing rows.
+
+### 1.3.5 (2026-11-06)
+- Fixed: MRR/ARR discarded every non-reporting currency. `calculate_period_mrr()` returned only the bucket matching the reporting currency, so USD MRR silently disappeared when EUR was selected. All buckets are now converted and summed.
+- Fixed: AOV divided net revenue by first payments only, so a month containing renewals reported `0.00`. It now divides by new + renewal payments and returns `null` (rendered as `—`) when there are none.
+- Fixed: churn used the **current calendar month's** cancellations over the **closing** subscriber base, so a period with cancellations could still read `0.0%`. It is now cancellations inside the selected period over the base at the period start.
+- Fixed: the "vs previous period" delta printed `0.0%` whenever the previous window had no revenue; it now says `no revenue in previous period`.
+- Fixed: the MRR "as of" label used the period end date, which is in the future for whole-month views. It now shows the last successful sync, capped to now.
+- Fixed: the "Latest version" badge took the first entry from the Freemius tags list (an old release) and trusted a stale catalog before asking the API. It now prefers the API and picks the highest semantic version; the transient key was versioned so values cached by the old lookup are discarded immediately.
+
+### 1.3.4 (2026-11-06)
+- Added **Remove all over the limit**: drains every subscriber above the limit in one run, 25 per request, with live progress and a **Stop** button that halts between chunks
+- The drain fetches 500 candidates per preview round trip, so a 993-subscriber run needs 2 preview calls instead of 40
+- `wp_ajax_rl_fsbi_kit_prune_preview` accepts `preview_size` (1–500, default 25)
+- Progress text now reports `Removed N of <goal>` against the excess measured when the run started
+
+### 1.3.3 (2026-11-06)
+- Fixed: a 25-subscriber prune could report "Removed 25" while only a handful were actually unsubscribed. Each chunk re-derived "the oldest N" from Kit, whose active list lags a few seconds, so the same contacts were re-selected and Kit accepts unsubscribing an already-cancelled contact. The client now sends the exact previewed IDs and the server unsubscribes each ID once.
+- The batch endpoint now reports Kit's own active total instead of `total - removed`, so the panel cannot overstate progress
+- New setting **Prune Scope**: `any active subscriber` (default) or `only subscribers tagged by this plugin`. The old behaviour was tagged-only.
+- The quota panel gained a `Prune scope` row, an honest `Ready to remove (next batch)` label, and the preview button is now "Refresh from Kit"
+- Quota panel copy and confirm dialog wording follow the selected scope
+
+### 1.3.2 (2026-11-06)
+- Fixed: confirming "Yes, unsubscribe" did nothing because the options framework ships SweetAlert2 9.x, whose promise resolves with `{ value: true }`; the handler only checked `result.isConfirmed` (v10+). Both shapes are now accepted.
+
+### 1.3.1 (2026-11-06)
+- Added an admin notice on every Freemius BI screen when Kit is over the configured subscriber limit, with a direct link to the quota panel
+- The notice renders from a cached snapshot (6 hour TTL, 5 minute refresh lock, 8 second API timeout), so admin pages never block on the Kit API; the snapshot is refreshed by the preview and prune endpoints
+- Added an optional `$timeout` parameter to `RL_FSBI_Kit::request()` and `RL_FSBI_Kit::get_total_subscribers()`
+
+### 1.3.0 (2026-11-06)
+- Added an optional Kit subscriber limit (empty or 0 = unlimited) enforced in the cron delta sync, the batched opt-in sync, and the sample test run
+- Added a Kit subscriber quota panel with a read-only preview and manual, confirmed pruning of the oldest tagged subscribers
+- Pruning only ever touches subscribers carrying this plugin's Kit tags, is capped at 25 per click, and never runs automatically
+- Added `rl_fsbi_kit_prune_preview` and `rl_fsbi_kit_prune_batch` AJAX endpoints
+- Added `RL_FSBI_Kit::list_subscribers()` and `RL_FSBI_Kit::unsubscribe_subscriber()`
+
+### 1.2.2 (2026-11-06)
+- Uninstall feedback now stores the human-readable `reason_label` returned by Freemius and shows it in the Churn Reasons panel
+
+### 1.2.1 (2026-11-06)
+- Fixed: `dbDelta()` parsed `CREATE TABLE IF NOT EXISTS` as a table named `IF`, so schema upgrades silently did nothing while still stamping the database version. Statements now use plain `CREATE TABLE`, and the upgrade path verifies the resulting columns before recording a version.
+
+### 1.2.0 (2026-11-06)
+- Automatic schema upgrades: tables and columns are now applied on `plugins_loaded` when the database version increases, so plugin updates no longer require deactivation
+- Payments: `payment_type`, `is_renewal`, `gateway`, `gateway_fee`, `vat`, `coupon_id`, `plan_id`, `pricing_id`, `license_id`, `install_id`, `bound_payment_id`, and `refund_reason` are now stored as columns instead of only inside the metadata JSON
+- Subscriptions: `failed_payments`, `canceled_at`, `amount_per_cycle`, `renewal_amount`, `initial_amount`, `total_gross`, `tax_rate`, `pricing_id`, `license_id`, and `install_id` are now stored as columns
+- Resumable one-time backfill (from metadata) for both tables when upgrading existing data
+- New tables: `rl_fsbi_trials`, `rl_fsbi_installs`, `rl_fsbi_uninstalls`
+- New sync stages: trials, installs (uninstalled filter), and uninstall feedback; the uninstall stage uses a deterministic cursor so it always advances
+- Renewal classification now prefers the authoritative Freemius `is_renewal` flag
+- Dashboard: Trial Funnel panel with live/estimated source badge, and a Churn Reasons panel
+
+### 1.1.1 (2026-10-24)
+- Security: opt-in CSV exports now use random 32-character filename tokens, are pruned after 24 hours, and the export directory is blocked from direct web access
+- Security: API secrets (Freemius, Mailchimp, Kit, Wise, FreeCurrencyAPI) render as masked password fields and are no longer written into the page markup
+- Security: export downloads validate the token format and enforce directory containment; server paths are no longer exposed to the dashboard
+- Settings: submitting a blank secret field keeps the stored value
 
 ### 1.1.0 (2026-10-01)
 - Kit.com (Kit API V4) integration with subscriber sync and tag discovery

@@ -10,7 +10,7 @@
  * Plugin Name:       RL Freemius Business Intelligence
  * Plugin URI:        https://rosendolabs.com
  * Description:       Comprehensive Business Intelligence dashboard for Freemius plugin sales, renewals, MRR, and payouts.
- * Version:           1.1.0
+ * Version:           1.3.8
  * Author:            Rosendo Labs
  * Author URI:        https://rosendolabs.com
  * License:           GPL-2.0+
@@ -27,8 +27,8 @@ if ( ! defined( 'WPINC' ) ) {
  * Currently plugin version.
  * Start at version 1.0.0 and use SemVer - https://semver.org
  */
-define( 'RL_FSBI_VERSION', '1.1.0' );
-define( 'RL_FSBI_DB_VERSION', '1.0.0' );
+define( 'RL_FSBI_VERSION', '1.3.8' );
+define( 'RL_FSBI_DB_VERSION', '1.2.3' );
 define( 'RL_FSBI_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'RL_FSBI_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'RL_FSBI_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
@@ -51,6 +51,18 @@ function deactivate_rl_fsbi() {
 
 register_activation_hook( __FILE__, 'activate_rl_fsbi' );
 register_deactivation_hook( __FILE__, 'deactivate_rl_fsbi' );
+
+/**
+ * Apply pending database schema upgrades on regular plugin updates.
+ *
+ * Activation hooks do not run when the plugin files are replaced, so without
+ * this the new tables and columns would never reach existing installations.
+ */
+function rl_fsbi_maybe_upgrade_db() {
+	require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-activator.php';
+	RL_FSBI_Activator::maybe_upgrade();
+}
+add_action( 'plugins_loaded', 'rl_fsbi_maybe_upgrade_db' );
 
 /**
  * Load translations on init (WP 6.7+ requirement).

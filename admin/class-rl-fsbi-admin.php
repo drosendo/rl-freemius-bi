@@ -11,6 +11,16 @@ class RL_FSBI_Admin
 {
 
 	/**
+	 * Cached Kit quota position so the admin notice never blocks on the API.
+	 */
+	private const KIT_QUOTA_TRANSIENT = 'rl_fsbi_kit_quota_snapshot';
+
+	/**
+	 * Short lock preventing concurrent admin loads from all querying Kit.
+	 */
+	private const KIT_QUOTA_LOCK = 'rl_fsbi_kit_quota_lock';
+
+	/**
 	 * The ID of this plugin.
 	 *
 	 * @access   private
@@ -146,6 +156,7 @@ class RL_FSBI_Admin
 					'ajaxUrl'      => admin_url('admin-ajax.php'),
 					'nonce'        => wp_create_nonce('rl_fsbi_nonce'),
 					'descriptions' => $this->settings ? $this->settings->get_field_descriptions() : array(),
+					'kitQuotaEnabled' => '' !== trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', '')),
 				)
 			);
 			return;
@@ -182,7 +193,7 @@ class RL_FSBI_Admin
 			'pluginsCatalog'     => $this->get_plugins_catalog(),
 			'newsletterProvider' => (string) $this->settings->get_option('rl_fsbi_newsletter_provider', 'mailchimp'),
 			'lastNewsletterSync' => (string) get_option('rl_fsbi_newsletter_last_sync_utc', ''),
-			'latestExport'       => get_option('rl_fsbi_latest_optins_csv_export', array()),
+			'latestExport'       => $this->get_latest_export_for_ui(),
 			'adminEmail'         => (string) get_option('admin_email', ''),
 		));
 	}
@@ -717,6 +728,27 @@ class RL_FSBI_Admin
 	{
 		$this->refresh_latest_freemius_data();
 		$this->sync_daily_newsletter_optins_delta();
+		$this->maybe_run_daily_full_sync();
+	}
+
+	/**
+	 * Run the complete sync once per day.
+	 *
+	 * The hourly event only refreshes the newest payments, so trials, installs
+	 * and uninstall feedback would otherwise go stale until someone clicked
+	 * "Sync Now". The timestamp is written before work starts so a fatal error
+	 * cannot trigger a retry storm on every hourly run.
+	 */
+	private function maybe_run_daily_full_sync()
+	{
+		$last_full_sync = (int) get_option('rl_fsbi_last_full_sync_utc', 0);
+
+		if ($last_full_sync > 0 && (time() - $last_full_sync) < DAY_IN_SECONDS) {
+			return;
+		}
+
+		update_option('rl_fsbi_last_full_sync_utc', time(), false);
+		$this->sync_freemius_data();
 	}
 
 	/**
@@ -804,7 +836,14 @@ class RL_FSBI_Admin
 
 		$total_synced = 0;
 		$total_scanned = 0;
+		$kit_skipped   = 0;
+		$kit_remaining = -1;
 		$last_sync_time = strtotime($last_sync_utc);
+
+		if ('kit' === $provider && $kit) {
+			$kit_quota     = $this->get_kit_quota_state($kit);
+			$kit_remaining = $kit_quota['enforced'] ? (int) $kit_quota['remaining'] : -1;
+		}
 
 		foreach ($plugin_ids as $pid) {
 			$users = $api->retrieve_users($pid, array('count' => 50, 'offset' => 0));
@@ -862,9 +901,17 @@ class RL_FSBI_Admin
 						}
 					}
 					if ($assigned_tag_id > 0) {
+						if (0 === $kit_remaining) {
+							$kit_skipped++;
+							continue;
+						}
+
 						$res = $kit->upsert_subscriber($assigned_tag_id, $email, $fname, array(), $site_url);
 						if (! is_wp_error($res)) {
 							$total_synced++;
+							if ($kit_remaining > 0) {
+								$kit_remaining--;
+							}
 						}
 					}
 				} elseif ($mc) {
@@ -879,7 +926,11 @@ class RL_FSBI_Admin
 
 		$now_utc = gmdate('Y-m-d H:i:s');
 		update_option('rl_fsbi_newsletter_last_sync_utc', $now_utc);
-		update_option('rl_fsbi_newsletter_cron_status', sprintf('Daily sync completed at %s UTC: %d new opt-in(s) synced.', $now_utc, $total_synced));
+		$cron_status = sprintf('Daily sync completed at %s UTC: %d new opt-in(s) synced.', $now_utc, $total_synced);
+		if ($kit_skipped > 0) {
+			$cron_status .= sprintf(' %d skipped: Kit subscriber limit (%s) reached.', $kit_skipped, number_format_i18n($this->get_kit_subscriber_limit()));
+		}
+		update_option('rl_fsbi_newsletter_cron_status', $cron_status);
 
 		return array(
 			'success'      => true,
@@ -998,6 +1049,10 @@ class RL_FSBI_Admin
 			// Sync plans
 			$this->sync_plans($plugin_id, $api, $repo);
 
+			// Sync trials, uninstalled sites, and uninstall feedback
+			$this->sync_trials($plugin_id, $api, $repo);
+			$this->sync_installs($plugin_id, $api, $repo);
+
 			// Sync account balances/payout metadata
 			$this->sync_balance($plugin_id, $developer_id, $api, $repo);
 		}
@@ -1048,28 +1103,80 @@ class RL_FSBI_Admin
 					continue;
 				}
 
-				$data = array(
-					'plugin_id'        => $plugin_id,
-					'payment_id'       => (int) ($payment['id'] ?? 0),
-					'user_id'          => (int) ($payment['user_id'] ?? 0),
-					'subscription_id'  => isset($payment['subscription_id']) ? intval($payment['subscription_id']) : null,
-					'transaction_date' => $this->resolve_freemius_payment_transaction_date($payment),
-					'gross'            => (float) ($payment['gross'] ?? 0),
-					'net'              => (float) ($payment['net'] ?? 0),
-					'fee'              => (float) (isset($payment['fee']) ? $payment['fee'] : 0),
-					'currency'         => sanitize_text_field($payment['currency'] ?? 'USD'),
-					'payment_method'   => isset($payment['payment_method']) ? sanitize_text_field($payment['payment_method']) : null,
-					'status'           => sanitize_text_field($payment['status'] ?? 'completed'),
-					'country_code'     => isset($payment['country_code']) ? sanitize_text_field($payment['country_code']) : null,
-					'is_refund'        => (isset($payment['refund_id']) || (float) ($payment['gross'] ?? 0) < 0 || (float) ($payment['net'] ?? 0) < 0 || 'refunded' === strtolower((string) ($payment['status'] ?? ''))) ? 1 : 0,
-					'refund_id'        => isset($payment['refund_id']) ? intval($payment['refund_id']) : null,
-					'metadata'         => wp_json_encode($payment),
-				);
-
-				$repo->upsert_payment($data);
+				$repo->upsert_payment($this->build_payment_row($plugin_id, $payment));
 			}
 
 			$offset += $count;
+		}
+	}
+
+	/**
+	 * Sync trials with pagination.
+	 *
+	 * @param int                $plugin_id Plugin ID.
+	 * @param RL_FSBI_API        $api       API instance.
+	 * @param RL_FSBI_Repository $repo      Repository instance.
+	 * @return void
+	 */
+	private function sync_trials($plugin_id, $api, $repo)
+	{
+		$offset = 0;
+		$count  = 50;
+
+		while (true) {
+			$trials = $api->retrieve_trials($plugin_id, array(
+				'count'  => $count,
+				'offset' => $offset,
+			));
+
+			if (empty($trials)) {
+				break;
+			}
+
+			$this->save_trial_batch($plugin_id, $trials, $repo);
+			$offset += $count;
+		}
+	}
+
+	/**
+	 * Sync uninstalled sites and their uninstall feedback.
+	 *
+	 * Installs are filtered to uninstalled sites because they are the only ones
+	 * that carry churn signal, which keeps the call count bounded.
+	 *
+	 * @param int                $plugin_id Plugin ID.
+	 * @param RL_FSBI_API        $api       API instance.
+	 * @param RL_FSBI_Repository $repo      Repository instance.
+	 * @return void
+	 */
+	private function sync_installs($plugin_id, $api, $repo)
+	{
+		$offset = 0;
+		$count  = 50;
+
+		while (true) {
+			$installs = $api->retrieve_installs(
+				$plugin_id,
+				0,
+				array(
+					'count'  => $count,
+					'offset' => $offset,
+					'filter' => 'uninstalled',
+				)
+			);
+
+			if (empty($installs)) {
+				break;
+			}
+
+			$this->save_install_batch($plugin_id, $installs, $repo);
+			$offset += $count;
+		}
+
+		$pending = $repo->get_installs_missing_uninstall_reason($plugin_id, 100);
+
+		if (! empty($pending)) {
+			$this->sync_install_uninstalls($plugin_id, $api, $repo, $pending);
 		}
 	}
 
@@ -1100,22 +1207,7 @@ class RL_FSBI_Admin
 					continue;
 				}
 
-				$data = array(
-					'plugin_id'           => $plugin_id,
-					'subscription_id'     => (int) ($subscription['id'] ?? 0),
-					'user_id'             => (int) ($subscription['user_id'] ?? 0),
-					'plan_id'             => isset($subscription['plan_id']) ? (int) $subscription['plan_id'] : null,
-					'status'              => sanitize_text_field($subscription['status'] ?? 'active'),
-					'billing_cycle'       => isset($subscription['billing_cycle']) ? sanitize_text_field($subscription['billing_cycle']) : null,
-					'trial_ends'          => isset($subscription['trial_ends']) ? sanitize_text_field($subscription['trial_ends']) : null,
-					'next_renewal'        => isset($subscription['next_billing']) ? sanitize_text_field($subscription['next_billing']) : null,
-					'expires_at'          => isset($subscription['end_date']) ? sanitize_text_field($subscription['end_date']) : null,
-					'outstanding_balance' => (float) (isset($subscription['outstanding_balance']) ? $subscription['outstanding_balance'] : 0),
-					'currency'            => sanitize_text_field($subscription['currency'] ?? 'USD'),
-					'metadata'            => wp_json_encode($subscription),
-				);
-
-				$repo->upsert_subscription($data);
+				$repo->upsert_subscription($this->build_subscription_row($plugin_id, $subscription));
 			}
 
 			$offset += $count;
@@ -1129,7 +1221,7 @@ class RL_FSBI_Admin
 	 * @param RL_FSBI_API        $api API instance.
 	 * @param RL_FSBI_Repository $repo Repository instance.
 	 */
-	private function sync_licenses($plugin_id, $api, $repo)
+	public function sync_licenses($plugin_id, $api, $repo)
 	{
 		$offset = 0;
 		$count  = 50;
@@ -1149,19 +1241,7 @@ class RL_FSBI_Admin
 					continue;
 				}
 
-				$repo->upsert_license(
-					array(
-						'plugin_id'    => $plugin_id,
-						'license_id'   => (int) ($license['id'] ?? 0),
-						'user_id'      => (int) ($license['user_id'] ?? 0),
-						'plan_id'      => isset($license['plan_id']) ? (int) $license['plan_id'] : null,
-						'license_key'  => isset($license['secret_key']) ? sanitize_text_field($license['secret_key']) : null,
-						'status'       => sanitize_text_field($license['status'] ?? 'valid'),
-						'quota_sites'  => isset($license['quota']) ? (int) $license['quota'] : null,
-						'active_sites' => isset($license['sites_count']) ? (int) $license['sites_count'] : 0,
-						'expires_at'   => isset($license['expiration']) ? sanitize_text_field($license['expiration']) : null,
-					)
-				);
+				$repo->upsert_license($this->map_license_row($plugin_id, $license));
 			}
 
 			$offset += $count;
@@ -1250,6 +1330,8 @@ class RL_FSBI_Admin
 				'payments'      => 0,
 				'subscriptions' => 0,
 				'licenses'      => 0,
+				'trials'        => 0,
+				'installs'      => 0,
 			),
 			'batch_size'     => 50,
 			'processed'      => array(
@@ -1258,6 +1340,9 @@ class RL_FSBI_Admin
 				'licenses'      => 0,
 				'plans'         => 0,
 				'balances'      => 0,
+				'trials'        => 0,
+				'installs'      => 0,
+				'uninstalls'    => 0,
 			),
 			'processed_apps' => 0,
 			'progress_ticks' => 0,
@@ -1391,7 +1476,78 @@ class RL_FSBI_Admin
 
 				$saved_count = $this->save_plan_batch($plugin_id, $plans, $repo);
 				$state['processed']['plans'] = (int) ($state['processed']['plans'] ?? 0) + $saved_count;
-				$state['stage'] = 'balance';
+				$state['stage'] = 'trials';
+				$state['offsets']['trials'] = 0;
+				continue;
+			}
+
+			if ('trials' === $stage) {
+				$offset = isset($state['offsets']['trials']) ? (int) $state['offsets']['trials'] : 0;
+				$trials = $api->retrieve_trials($plugin_id, array('offset' => $offset, 'count' => $batch_size));
+				$api_calls++;
+				$state['progress_ticks']++;
+
+				if (empty($trials)) {
+					$state['stage'] = 'installs';
+					$state['offsets']['installs'] = 0;
+					continue;
+				}
+
+				$saved_count = $this->save_trial_batch($plugin_id, $trials, $repo);
+				$state['processed']['trials'] = (int) ($state['processed']['trials'] ?? 0) + $saved_count;
+				$state['offsets']['trials'] = $offset + $batch_size;
+				continue;
+			}
+
+			if ('installs' === $stage) {
+				$offset = isset($state['offsets']['installs']) ? (int) $state['offsets']['installs'] : 0;
+				$installs = $api->retrieve_installs(
+					$plugin_id,
+					0,
+					array(
+						'offset' => $offset,
+						'count'  => $batch_size,
+						'filter' => 'uninstalled',
+					)
+				);
+				$api_calls++;
+				$state['progress_ticks']++;
+
+				if (empty($installs)) {
+					$state['stage'] = 'uninstalls';
+					continue;
+				}
+
+				$saved_count = $this->save_install_batch($plugin_id, $installs, $repo);
+				$state['processed']['installs'] = (int) ($state['processed']['installs'] ?? 0) + $saved_count;
+				$state['offsets']['installs'] = $offset + $batch_size;
+				continue;
+			}
+
+			if ('uninstalls' === $stage) {
+				// Resolve the work list once per plugin so the stage always advances,
+				// even when a particular write fails.
+				if (! isset($state['pending_uninstalls']) || ! is_array($state['pending_uninstalls'])) {
+					$state['pending_uninstalls'] = $repo->get_installs_missing_uninstall_reason($plugin_id, 25);
+					$state['uninstall_index']    = 0;
+				}
+
+				$uninstall_index = (int) ($state['uninstall_index'] ?? 0);
+
+				if ($uninstall_index >= count($state['pending_uninstalls'])) {
+					$state['stage']              = 'balance';
+					$state['pending_uninstalls'] = array();
+					$state['uninstall_index']    = 0;
+					continue;
+				}
+
+				$install_id  = (int) $state['pending_uninstalls'][ $uninstall_index ];
+				$saved_count = $this->sync_install_uninstalls($plugin_id, $api, $repo, array( $install_id ));
+
+				$api_calls++;
+				$state['progress_ticks']++;
+				$state['uninstall_index'] = $uninstall_index + 1;
+				$state['processed']['uninstalls'] = (int) ($state['processed']['uninstalls'] ?? 0) + $saved_count;
 				continue;
 			}
 
@@ -1423,6 +1579,10 @@ class RL_FSBI_Admin
 				$state['offsets']['payments'] = 0;
 				$state['offsets']['subscriptions'] = 0;
 				$state['offsets']['licenses'] = 0;
+				$state['offsets']['trials'] = 0;
+				$state['offsets']['installs'] = 0;
+				$state['pending_uninstalls'] = array();
+				$state['uninstall_index'] = 0;
 				continue;
 			}
 
@@ -1435,7 +1595,7 @@ class RL_FSBI_Admin
 
 		$total_plugins = max(1, count($state['plugin_ids']));
 		$current_plugin = min($total_plugins, $state['plugin_cursor'] + 1);
-		$stage_order = array('payments', 'subscriptions', 'licenses', 'plans', 'balance');
+		$stage_order = array('payments', 'subscriptions', 'licenses', 'plans', 'trials', 'installs', 'uninstalls', 'balance');
 		$stage_index = array_search((string) $state['stage'], $stage_order, true);
 		$stage_index = false === $stage_index ? 0 : (int) $stage_index;
 
@@ -1586,25 +1746,7 @@ class RL_FSBI_Admin
 				continue;
 			}
 
-			$repo->upsert_payment(
-				array(
-					'plugin_id'        => $plugin_id,
-					'payment_id'       => (int) ($payment['id'] ?? 0),
-					'user_id'          => (int) ($payment['user_id'] ?? 0),
-					'subscription_id'  => isset($payment['subscription_id']) ? (int) $payment['subscription_id'] : null,
-					'transaction_date' => $this->resolve_freemius_payment_transaction_date($payment),
-					'gross'            => (float) ($payment['gross'] ?? 0),
-					'net'              => (float) ($payment['net'] ?? 0),
-					'fee'              => (float) ($payment['fee'] ?? 0),
-					'currency'         => sanitize_text_field($payment['currency'] ?? 'USD'),
-					'payment_method'   => isset($payment['payment_method']) ? sanitize_text_field($payment['payment_method']) : null,
-					'status'           => sanitize_text_field($payment['status'] ?? 'completed'),
-					'country_code'     => isset($payment['country_code']) ? sanitize_text_field($payment['country_code']) : null,
-					'is_refund'        => (isset($payment['refund_id']) || (float) ($payment['gross'] ?? 0) < 0 || (float) ($payment['net'] ?? 0) < 0 || 'refunded' === strtolower((string) ($payment['status'] ?? ''))) ? 1 : 0,
-					'refund_id'        => isset($payment['refund_id']) ? (int) $payment['refund_id'] : null,
-					'metadata'         => wp_json_encode($payment),
-				)
-			);
+			$repo->upsert_payment($this->build_payment_row($plugin_id, $payment));
 
 			$saved++;
 		}
@@ -1624,22 +1766,7 @@ class RL_FSBI_Admin
 				continue;
 			}
 
-			$repo->upsert_subscription(
-				array(
-					'plugin_id'           => $plugin_id,
-					'subscription_id'     => (int) ($subscription['id'] ?? 0),
-					'user_id'             => (int) ($subscription['user_id'] ?? 0),
-					'plan_id'             => isset($subscription['plan_id']) ? (int) $subscription['plan_id'] : null,
-					'status'              => sanitize_text_field($subscription['status'] ?? 'active'),
-					'billing_cycle'       => isset($subscription['billing_cycle']) ? sanitize_text_field($subscription['billing_cycle']) : null,
-					'trial_ends'          => isset($subscription['trial_ends']) ? sanitize_text_field($subscription['trial_ends']) : null,
-					'next_renewal'        => isset($subscription['next_billing']) ? sanitize_text_field($subscription['next_billing']) : null,
-					'expires_at'          => isset($subscription['end_date']) ? sanitize_text_field($subscription['end_date']) : null,
-					'outstanding_balance' => (float) ($subscription['outstanding_balance'] ?? 0),
-					'currency'            => sanitize_text_field($subscription['currency'] ?? 'USD'),
-					'metadata'            => wp_json_encode($subscription),
-				)
-			);
+			$repo->upsert_subscription($this->build_subscription_row($plugin_id, $subscription));
 
 			$saved++;
 		}
@@ -1659,24 +1786,59 @@ class RL_FSBI_Admin
 				continue;
 			}
 
-			$repo->upsert_license(
-				array(
-					'plugin_id'    => $plugin_id,
-					'license_id'   => (int) ($license['id'] ?? 0),
-					'user_id'      => (int) ($license['user_id'] ?? 0),
-					'plan_id'      => isset($license['plan_id']) ? (int) $license['plan_id'] : null,
-					'license_key'  => isset($license['secret_key']) ? sanitize_text_field($license['secret_key']) : null,
-					'status'       => sanitize_text_field($license['status'] ?? 'valid'),
-					'quota_sites'  => isset($license['quota']) ? (int) $license['quota'] : null,
-					'active_sites' => isset($license['sites_count']) ? (int) $license['sites_count'] : 0,
-					'expires_at'   => isset($license['expiration']) ? sanitize_text_field($license['expiration']) : null,
-				)
-			);
+			$repo->upsert_license($this->map_license_row($plugin_id, $license));
 
 			$saved++;
 		}
 
 		return $saved;
+	}
+
+	/**
+	 * Map one Freemius licence payload onto the local row.
+	 *
+	 * The licences endpoint returns no `status` key at all, so storing
+	 * `$license['status'] ?? 'valid'` labelled every licence "valid". Derive the
+	 * status from the fields the API actually returns.
+	 *
+	 * @param int   $plugin_id Plugin ID.
+	 * @param array $license   Licence payload.
+	 * @return array
+	 */
+	private function map_license_row($plugin_id, $license)
+	{
+		$expires_at = isset($license['expiration']) && '' !== (string) $license['expiration']
+			? sanitize_text_field((string) $license['expiration'])
+			: null;
+
+		$expires_ts = $expires_at ? strtotime($expires_at) : false;
+
+		if (false !== $expires_ts && $expires_ts < time()) {
+			$status = 'expired';
+		} elseif (! empty($license['is_cancelled'])) {
+			$status = 'cancelled';
+		} else {
+			$status = 'active';
+		}
+
+		return array(
+			'plugin_id'     => (int) $plugin_id,
+			'license_id'    => (int) ($license['id'] ?? 0),
+			'user_id'       => (int) ($license['user_id'] ?? 0),
+			'plan_id'       => isset($license['plan_id']) ? (int) $license['plan_id'] : null,
+			'pricing_id'    => isset($license['pricing_id']) ? (int) $license['pricing_id'] : null,
+			'license_key'   => isset($license['secret_key']) ? sanitize_text_field((string) $license['secret_key']) : null,
+			'status'        => $status,
+			'quota_sites'   => isset($license['quota']) ? (int) $license['quota'] : null,
+			'activated'     => ! empty($license['activated']) ? (int) $license['activated'] : 0,
+			'is_cancelled'  => ! empty($license['is_cancelled']) ? 1 : 0,
+			'expires_at'    => $expires_at,
+			'fs_created_at' => ! empty($license['created']) ? sanitize_text_field((string) $license['created']) : null,
+			'fs_updated_at' => ! empty($license['updated']) ? sanitize_text_field((string) $license['updated']) : null,
+			// Bumped on every sync so `updated_since` can be served from the local
+			// row timestamp, which is what the REST contract documents.
+			'updated_at'    => current_time('mysql'),
+		);
 	}
 
 	/**
@@ -1717,7 +1879,860 @@ class RL_FSBI_Admin
 	}
 
 	/**
-	 * Check if current page is plugin page.
+	 * Map a raw Freemius payment payload onto the payments table columns.
+	 *
+	 * Freemius returns far more than the dashboard used to persist, so the
+	 * extra keys are promoted to real columns instead of living only inside
+	 * the metadata blob.
+	 *
+	 * @param int   $plugin_id Plugin ID.
+	 * @param array $payment   Raw payment payload.
+	 * @return array
+	 */
+	private function build_payment_row($plugin_id, array $payment)
+	{
+		$status = strtolower((string) ($payment['status'] ?? ''));
+		$is_refund = isset($payment['refund_id'])
+			|| (float) ($payment['gross'] ?? 0) < 0
+			|| (float) ($payment['net'] ?? 0) < 0
+			|| 'refunded' === $status;
+
+		return array(
+			'plugin_id'        => (int) $plugin_id,
+			'payment_id'       => (int) ($payment['id'] ?? 0),
+			'user_id'          => (int) ($payment['user_id'] ?? 0),
+			'subscription_id'  => isset($payment['subscription_id']) ? (int) $payment['subscription_id'] : null,
+			'transaction_date' => $this->resolve_freemius_payment_transaction_date($payment),
+			'gross'            => (float) ($payment['gross'] ?? 0),
+			'net'              => (float) ($payment['net'] ?? 0),
+			'fee'              => (float) ($payment['fee'] ?? 0),
+			'currency'         => sanitize_text_field($payment['currency'] ?? 'USD'),
+			'payment_method'   => isset($payment['payment_method']) ? sanitize_text_field($payment['payment_method']) : null,
+			'status'           => '' !== $status ? sanitize_text_field($status) : 'completed',
+			'country_code'     => isset($payment['country_code']) ? sanitize_text_field($payment['country_code']) : null,
+			'is_refund'        => $is_refund ? 1 : 0,
+			'refund_id'        => isset($payment['refund_id']) ? (int) $payment['refund_id'] : null,
+			'metadata'         => wp_json_encode($payment),
+			'payment_type'     => isset($payment['type']) && '' !== (string) $payment['type'] ? sanitize_text_field((string) $payment['type']) : null,
+			'is_renewal'       => ! empty($payment['is_renewal']) ? 1 : 0,
+			'gateway'          => isset($payment['gateway']) ? sanitize_text_field((string) $payment['gateway']) : null,
+			'gateway_fee'      => isset($payment['gateway_fee']) ? (float) $payment['gateway_fee'] : null,
+			'vat'              => isset($payment['vat']) ? (float) $payment['vat'] : null,
+			'coupon_id'        => isset($payment['coupon_id']) ? (int) $payment['coupon_id'] : null,
+			'plan_id'          => isset($payment['plan_id']) ? (int) $payment['plan_id'] : null,
+			'pricing_id'       => isset($payment['pricing_id']) ? (int) $payment['pricing_id'] : null,
+			'license_id'       => isset($payment['license_id']) ? (int) $payment['license_id'] : null,
+			'install_id'       => isset($payment['install_id']) ? (int) $payment['install_id'] : null,
+			'bound_payment_id' => isset($payment['bound_payment_id']) ? (int) $payment['bound_payment_id'] : null,
+			'refund_reason'    => isset($payment['refund_reason']) ? sanitize_text_field((string) $payment['refund_reason']) : null,
+		);
+	}
+
+	/**
+	 * Map a raw Freemius subscription payload onto the subscriptions columns.
+	 *
+	 * @param int   $plugin_id    Plugin ID.
+	 * @param array $subscription Raw subscription payload.
+	 * @return array
+	 */
+	private function build_subscription_row($plugin_id, array $subscription)
+	{
+		return array(
+			'plugin_id'           => (int) $plugin_id,
+			'subscription_id'     => (int) ($subscription['id'] ?? 0),
+			'user_id'             => (int) ($subscription['user_id'] ?? 0),
+			'plan_id'             => isset($subscription['plan_id']) ? (int) $subscription['plan_id'] : null,
+			'status'              => sanitize_text_field($subscription['status'] ?? 'active'),
+			'billing_cycle'       => isset($subscription['billing_cycle']) ? sanitize_text_field($subscription['billing_cycle']) : null,
+			'trial_ends'          => isset($subscription['trial_ends']) ? $this->format_api_datetime($subscription['trial_ends']) : null,
+			'next_renewal'        => isset($subscription['next_billing']) ? $this->format_api_datetime($subscription['next_billing']) : (isset($subscription['next_payment']) ? $this->format_api_datetime($subscription['next_payment']) : null),
+			'expires_at'          => isset($subscription['end_date']) ? $this->format_api_datetime($subscription['end_date']) : null,
+			'outstanding_balance' => (float) ($subscription['outstanding_balance'] ?? 0),
+			'currency'            => sanitize_text_field($subscription['currency'] ?? 'USD'),
+			'metadata'            => wp_json_encode($subscription),
+			'failed_payments'     => isset($subscription['failed_payments']) ? (int) $subscription['failed_payments'] : 0,
+			'canceled_at'         => ! empty($subscription['canceled_at']) ? $this->format_api_datetime($subscription['canceled_at']) : null,
+			'amount_per_cycle'    => isset($subscription['amount_per_cycle']) ? (float) $subscription['amount_per_cycle'] : null,
+			'renewal_amount'      => isset($subscription['renewal_amount']) ? (float) $subscription['renewal_amount'] : null,
+			'initial_amount'      => isset($subscription['initial_amount']) ? (float) $subscription['initial_amount'] : null,
+			'total_gross'         => isset($subscription['total_gross']) ? (float) $subscription['total_gross'] : null,
+			'tax_rate'            => isset($subscription['tax_rate']) ? (float) $subscription['tax_rate'] : null,
+			'pricing_id'          => isset($subscription['pricing_id']) ? (int) $subscription['pricing_id'] : null,
+			'license_id'          => isset($subscription['license_id']) ? (int) $subscription['license_id'] : null,
+			'install_id'          => isset($subscription['install_id']) ? (int) $subscription['install_id'] : null,
+		);
+	}
+
+	/**
+	 * Normalize an API timestamp into a MySQL DATETIME string.
+	 *
+	 * @param mixed $value Raw API value.
+	 * @return string|null
+	 */
+	private function format_api_datetime($value)
+	{
+		if (empty($value)) {
+			return null;
+		}
+
+		$timestamp = $this->normalize_freemius_date_timestamp($value);
+
+		if (false === $timestamp || null === $timestamp) {
+			$timestamp = strtotime((string) $value);
+		}
+
+		return false === $timestamp ? null : gmdate('Y-m-d H:i:s', (int) $timestamp);
+	}
+
+	/**
+	 * Save a trials API page.
+	 *
+	 * @param int                $plugin_id Plugin ID.
+	 * @param array              $trials    Trial records.
+	 * @param RL_FSBI_Repository $repo      Repository.
+	 * @return int
+	 */
+	private function save_trial_batch($plugin_id, $trials, $repo)
+	{
+		$saved = 0;
+
+		if (! is_array($trials)) {
+			return 0;
+		}
+
+		foreach ($trials as $trial) {
+			if (! is_array($trial)) {
+				continue;
+			}
+
+			$trial_id = (int) ($trial['id'] ?? 0);
+			if ($trial_id <= 0) {
+				continue;
+			}
+
+			$repo->upsert_trial(
+				array(
+					'plugin_id'           => (int) $plugin_id,
+					'trial_id'            => $trial_id,
+					'user_id'             => (int) ($trial['user_id'] ?? 0),
+					'payment_id'          => isset($trial['payment_id']) ? (int) $trial['payment_id'] : null,
+					'subscription_id'     => isset($trial['subscription_id']) ? (int) $trial['subscription_id'] : null,
+					'license_id'          => isset($trial['license_id']) ? (int) $trial['license_id'] : null,
+					'started_at'          => ! empty($trial['created']) ? $this->format_api_datetime($trial['created']) : null,
+					'trial_ends_at'       => ! empty($trial['trial_ends_at']) ? $this->format_api_datetime($trial['trial_ends_at']) : null,
+					'with_payment_method' => ! empty($trial['with_payment_method']) ? 1 : 0,
+					'canceled_at'         => ! empty($trial['canceled_at']) ? $this->format_api_datetime($trial['canceled_at']) : null,
+					'converted_at'        => ! empty($trial['converted_at']) ? $this->format_api_datetime($trial['converted_at']) : null,
+					'environment'         => isset($trial['environment']) ? sanitize_text_field((string) $trial['environment']) : null,
+					'metadata'            => wp_json_encode($trial),
+				)
+			);
+
+			$saved++;
+		}
+
+		return $saved;
+	}
+
+	/**
+	 * Save an installs API page.
+	 *
+	 * @param int                $plugin_id Plugin ID.
+	 * @param array              $installs  Install records.
+	 * @param RL_FSBI_Repository $repo      Repository.
+	 * @return int
+	 */
+	private function save_install_batch($plugin_id, $installs, $repo)
+	{
+		$saved = 0;
+
+		if (! is_array($installs)) {
+			return 0;
+		}
+
+		foreach ($installs as $install) {
+			if (! is_array($install)) {
+				continue;
+			}
+
+			$install_id = (int) ($install['id'] ?? 0);
+			if ($install_id <= 0) {
+				continue;
+			}
+
+			$repo->upsert_install(
+				array(
+					'plugin_id'      => (int) $plugin_id,
+					'install_id'     => $install_id,
+					'user_id'        => (int) ($install['user_id'] ?? 0),
+					'license_id'     => isset($install['license_id']) ? (int) $install['license_id'] : null,
+					'plan_id'        => isset($install['plan_id']) ? (int) $install['plan_id'] : null,
+					'site_id'        => isset($install['site_id']) ? sanitize_text_field((string) $install['site_id']) : null,
+					'title'          => isset($install['title']) ? sanitize_text_field((string) $install['title']) : null,
+					'url'            => isset($install['url']) ? esc_url_raw((string) $install['url']) : null,
+					'version'        => isset($install['version']) ? sanitize_text_field((string) $install['version']) : null,
+					'is_active'      => ! empty($install['is_active']) ? 1 : 0,
+					'is_premium'     => ! empty($install['is_premium']) ? 1 : 0,
+					'is_uninstalled' => ! empty($install['is_uninstalled']) ? 1 : 0,
+					'last_seen_at'   => ! empty($install['last_seen_at']) ? $this->format_api_datetime($install['last_seen_at']) : null,
+					'environment'    => isset($install['environment']) ? sanitize_text_field((string) $install['environment']) : null,
+					'metadata'       => wp_json_encode($install),
+				)
+			);
+
+			$saved++;
+		}
+
+		return $saved;
+	}
+
+	/**
+	 * Fetch and store uninstall feedback for installs that are still missing it.
+	 *
+	 * An empty result is stored as reason 0 so the same install is not
+	 * requested again on every batch.
+	 *
+	 * @param int                $plugin_id   Plugin ID.
+	 * @param RL_FSBI_API        $api         API client.
+	 * @param RL_FSBI_Repository $repo        Repository.
+	 * @param int[]              $install_ids Install IDs to resolve.
+	 * @return int
+	 */
+	private function sync_install_uninstalls($plugin_id, $api, $repo, array $install_ids)
+	{
+		$saved = 0;
+
+		foreach ($install_ids as $install_id) {
+			$details = $api->retrieve_install_uninstall($plugin_id, $install_id);
+
+			if (isset($details['uninstall']) && is_array($details['uninstall'])) {
+				$details = $details['uninstall'];
+			}
+
+			$repo->upsert_uninstall(
+				array(
+					'plugin_id'      => (int) $plugin_id,
+					'install_id'     => (int) $install_id,
+					'uninstall_id'   => isset($details['id']) ? (int) $details['id'] : 0,
+					'site_id'        => isset($details['site_id']) ? sanitize_text_field((string) $details['site_id']) : null,
+					'reason_id'      => isset($details['reason_id']) ? (int) $details['reason_id'] : 0,
+					'reason_label'   => isset($details['reason']) && is_string($details['reason']) ? sanitize_text_field($details['reason']) : null,
+					'reason_info'    => isset($details['reason_info']) ? sanitize_textarea_field((string) $details['reason_info']) : null,
+					'uninstalled_at' => ! empty($details['created']) ? $this->format_api_datetime($details['created']) : null,
+					'metadata'       => is_array($details) ? wp_json_encode($details) : null,
+				)
+			);
+
+			$saved++;
+		}
+
+		return $saved;
+	}
+
+	/**
+	 * Configured Kit subscriber limit. 0 means unlimited.
+	 *
+	 * @return int
+	 */
+	private function get_kit_subscriber_limit()
+	{
+		$raw = trim((string) $this->settings->get_option('rl_fsbi_kit_subscriber_limit', ''));
+
+		if ('' === $raw) {
+			return 0;
+		}
+
+		return max(0, (int) $raw);
+	}
+
+	/**
+	 * Which subscribers the prune tool may remove.
+	 *
+	 * @return string 'all' or 'tagged'.
+	 */
+	private function get_kit_prune_scope()
+	{
+		$scope = trim((string) $this->settings->get_option('rl_fsbi_kit_prune_scope', 'all'));
+
+		return 'tagged' === $scope ? 'tagged' : 'all';
+	}
+
+	/**
+	 * Subscriber IDs the client asked to remove in this chunk.
+	 *
+	 * @return int[] Unique, positive IDs in the order supplied.
+	 */
+	private function parse_requested_kit_ids()
+	{
+		if (! isset($_POST['subscriber_ids'])) {
+			return array();
+		}
+
+		$raw = wp_unslash($_POST['subscriber_ids']);
+		$ids = is_array($raw) ? $raw : json_decode((string) $raw, true);
+
+		if (! is_array($ids)) {
+			return array();
+		}
+
+		$clean = array();
+
+		foreach ($ids as $id) {
+			$id = (int) $id;
+
+			if ($id > 0) {
+				$clean[$id] = $id;
+			}
+		}
+
+		return array_values($clean);
+	}
+
+	/**
+	 * Current quota position against the configured Kit limit.
+	 *
+	 * @param RL_FSBI_Kit $kit Kit client.
+	 * @return array{limit:int,total:int,remaining:int,enforced:bool}
+	 */
+	private function get_kit_quota_state($kit)
+	{
+		$limit = $this->get_kit_subscriber_limit();
+
+		if ($limit <= 0) {
+			return array(
+				'limit'     => 0,
+				'total'     => 0,
+				'remaining' => -1,
+				'enforced'  => false,
+			);
+		}
+
+		$total = (int) $kit->get_total_subscribers();
+
+		return array(
+			'limit'     => $limit,
+			'total'     => $total,
+			'remaining' => max(0, $limit - $total),
+			'enforced'  => true,
+		);
+	}
+
+	/**
+	 * Cached quota position used by the admin notice.
+	 *
+	 * @param bool $allow_refresh Query Kit when the cache is empty.
+	 * @return array{limit:int,total:int,checked_at:int}|null
+	 */
+	private function get_kit_quota_snapshot($allow_refresh = true)
+	{
+		$cached = get_transient(self::KIT_QUOTA_TRANSIENT);
+
+		if (is_array($cached) && isset($cached['limit'], $cached['total'])) {
+			return $cached;
+		}
+
+		if (! $allow_refresh) {
+			return null;
+		}
+
+		$limit   = $this->get_kit_subscriber_limit();
+		$kit_key = trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', ''));
+
+		if ($limit <= 0 || '' === $kit_key) {
+			return null;
+		}
+
+		if (false !== get_transient(self::KIT_QUOTA_LOCK)) {
+			return null;
+		}
+
+		set_transient(self::KIT_QUOTA_LOCK, 1, 5 * MINUTE_IN_SECONDS);
+
+		// Short timeout: a slow Kit API must not stall the admin page.
+		$kit   = new RL_FSBI_Kit($kit_key);
+		$total = (int) $kit->get_total_subscribers(8);
+
+		delete_transient(self::KIT_QUOTA_LOCK);
+
+		if ($total <= 0) {
+			return null;
+		}
+
+		return $this->store_kit_quota_snapshot($limit, $total);
+	}
+
+	/**
+	 * Persist the quota position so later page loads render without an API call.
+	 *
+	 * @param int $limit Configured subscriber limit.
+	 * @param int $total Active subscribers in Kit.
+	 * @return array{limit:int,total:int,checked_at:int}
+	 */
+	private function store_kit_quota_snapshot($limit, $total)
+	{
+		$snapshot = array(
+			'limit'      => max(0, (int) $limit),
+			'total'      => max(0, (int) $total),
+			'checked_at' => time(),
+		);
+
+		set_transient(self::KIT_QUOTA_TRANSIENT, $snapshot, 6 * HOUR_IN_SECONDS);
+
+		return $snapshot;
+	}
+
+	/**
+	 * Warn on every Freemius BI screen when Kit is over the configured limit.
+	 */
+	public function render_kit_quota_notice()
+	{
+		if (! current_user_can('manage_options') || ! $this->is_plugin_page()) {
+			return;
+		}
+
+		$tab = isset($_GET['tab']) ? sanitize_text_field(wp_unslash($_GET['tab'])) : '';
+		if ('newsletter_settings' === $tab) {
+			return;
+		}
+
+		$snapshot = $this->get_kit_quota_snapshot();
+		if (! is_array($snapshot)) {
+			return;
+		}
+
+		$limit  = $this->get_kit_subscriber_limit();
+		$total  = (int) $snapshot['total'];
+		$excess = max(0, $total - $limit);
+
+		if ($limit <= 0 || $excess <= 0) {
+			return;
+		}
+
+		$settings_url = admin_url('admin.php?page=' . $this->plugin_name . '-settings&tab=newsletter_settings#kit_config');
+
+		printf(
+			'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s <a href="%3$s">%4$s</a></p></div>',
+			esc_html__('Kit subscriber quota:', 'rl-freemius-bi'),
+			esc_html(
+				sprintf(
+					/* translators: 1: excess count, 2: active subscriber total, 3: configured limit */
+					__('%1$s subscriber(s) over the %3$s limit (%2$s active in Kit). New subscribers are no longer pushed until you prune.', 'rl-freemius-bi'),
+					number_format_i18n($excess),
+					number_format_i18n($total),
+					number_format_i18n($limit)
+				)
+			),
+			esc_url($settings_url),
+			esc_html__('Review and prune now', 'rl-freemius-bi')
+		);
+	}
+
+	/**
+	 * Remaining subscriber capacity, or -1 when no limit is configured.
+	 *
+	 * @param RL_FSBI_Kit $kit Kit client.
+	 * @return int
+	 */
+	private function resolve_kit_remaining($kit)
+	{
+		$quota = $this->get_kit_quota_state($kit);
+
+		return $quota['enforced'] ? (int) $quota['remaining'] : -1;
+	}
+
+	/**
+	 * Kit tag IDs this plugin assigns to subscribers.
+	 *
+	 * @return int[]
+	 */
+	private function get_kit_prune_tag_ids()
+	{
+		$tag_ids    = array();
+		$kit_tags   = $this->settings->get_kit_tags();
+		$candidates = array( trim((string) $this->settings->get_option('rl_fsbi_kit_default_tag', 'Freemius Opt-in')) );
+
+		// Plan tag mappings are stored per plan ID (rl_fsbi_kit_plan_tag_{plan_id}),
+		// so read them from the settings array rather than by tag ID.
+		foreach ( (array) $this->settings->get_all_settings() as $setting_key => $setting_value ) {
+			if (0 !== strpos((string) $setting_key, 'rl_fsbi_kit_plan_tag_')) {
+				continue;
+			}
+
+			$mapped = trim((string) $setting_value);
+			if ('' !== $mapped) {
+				$candidates[] = $mapped;
+			}
+		}
+
+		foreach ( $candidates as $candidate ) {
+			if ( '' === $candidate ) {
+				continue;
+			}
+
+			if ( is_numeric( $candidate ) ) {
+				$tag_ids[] = (int) $candidate;
+				continue;
+			}
+
+			foreach ( (array) $kit_tags as $tag_id => $tag_name ) {
+				if ( strcasecmp( (string) $tag_name, $candidate ) === 0 ) {
+					$tag_ids[] = (int) $tag_id;
+					break;
+				}
+			}
+		}
+
+		return array_values( array_unique( array_filter( $tag_ids ) ) );
+	}
+
+	/**
+	 * Whether a Kit subscriber payload carries one of the given tags.
+	 *
+	 * @param array $subscriber Subscriber row from the Kit API.
+	 * @param int[] $tag_ids    Eligible tag IDs.
+	 * @return bool
+	 */
+	private function is_kit_subscriber_tagged($subscriber, $tag_ids)
+	{
+		if (empty($tag_ids) || ! is_array($subscriber) || empty($subscriber['tags']) || ! is_array($subscriber['tags'])) {
+			return false;
+		}
+
+		foreach ($subscriber['tags'] as $tag) {
+			$id = is_array($tag) ? (int) ($tag['id'] ?? 0) : (int) $tag;
+			if (in_array($id, $tag_ids, true)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Collect the oldest active subscribers that carry this plugin's tags.
+	 *
+	 * Pages through Kit ordered by creation date ascending and stops as soon as
+	 * enough candidates are found, so the work stays bounded.
+	 *
+	 * @param RL_FSBI_Kit $kit     Kit client.
+	 * @param int         $wanted  How many candidates to return.
+	 * @param int[]       $tag_ids Eligible tag IDs.
+	 * @param int         $scanned Out: number of subscribers inspected.
+	 * @return array{0:array,1:string} Candidates and an error message ('' on success).
+	 */
+	private function collect_oldest_kit_subscribers($kit, $wanted, $tag_ids, &$scanned = 0)
+	{
+		$scanned = 0;
+		$wanted  = max(1, (int) $wanted);
+		$scope   = $this->get_kit_prune_scope();
+
+		if ('tagged' === $scope && empty($tag_ids)) {
+			return array(array(), esc_html__('No Kit tags are configured for this plugin, so no subscriber was treated as removable. Switch the prune scope to "Any active subscriber" or configure the tags first.', 'rl-freemius-bi'));
+		}
+
+		$found    = array();
+		$cursor   = '';
+		$max_pages = 10;
+
+		for ($page = 0; $page < $max_pages; $page++) {
+			$query = array(
+				'per_page'   => 500,
+				'status'     => 'active',
+				'sort_field' => 'created_at',
+				'sort_order' => 'asc',
+				'include'    => 'tags',
+			);
+
+			if ('' !== $cursor) {
+				$query['after'] = $cursor;
+			}
+
+			$result = $kit->list_subscribers($query);
+
+			if ('' !== (string) $result['error']) {
+				return array(array(), $result['error']);
+			}
+
+			foreach ($result['subscribers'] as $subscriber) {
+				$scanned++;
+
+				if ('tagged' === $scope && ! $this->is_kit_subscriber_tagged($subscriber, $tag_ids)) {
+					continue;
+				}
+
+				$found[] = array(
+					'id'         => (int) ($subscriber['id'] ?? 0),
+					'email'      => (string) ($subscriber['email_address'] ?? ''),
+					'created_at' => (string) ($subscriber['created_at'] ?? ''),
+				);
+
+				if (count($found) >= $wanted) {
+					return array($found, '');
+				}
+			}
+
+			if (empty($result['pagination']['has_next_page']) || empty($result['pagination']['end_cursor'])) {
+				break;
+			}
+
+			$cursor = (string) $result['pagination']['end_cursor'];
+		}
+
+		return array($found, '');
+	}
+
+	/**
+	 * Preview how many subscribers are over the limit and who would go first.
+	 */
+	public function handle_kit_prune_preview_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		$kit_key = trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', ''));
+		if ('' === $kit_key) {
+			wp_send_json_error(esc_html__('Kit API key is not configured in Settings.', 'rl-freemius-bi'));
+		}
+
+		$limit  = $this->get_kit_subscriber_limit();
+		$kit    = new RL_FSBI_Kit($kit_key);
+		$total  = (int) $kit->get_total_subscribers();
+		$excess = $limit > 0 ? max(0, $total - $limit) : 0;
+		$batch  = 25;
+
+		// The drain loop asks for a larger candidate list so it does not need a
+		// round trip between every 25 removals.
+		$requested_size = isset($_POST['preview_size']) ? (int) $_POST['preview_size'] : $batch;
+		$preview_size   = min(max(1, $requested_size), 500);
+
+		if ($total > 0) {
+			$this->store_kit_quota_snapshot($limit, $total);
+		}
+
+		$tag_ids = $this->get_kit_prune_tag_ids();
+		$scanned = 0;
+		list($candidates, $error) = $this->collect_oldest_kit_subscribers($kit, $preview_size, $tag_ids, $scanned);
+
+		if ('' !== $error) {
+			wp_send_json_error($error);
+		}
+
+		$list = array();
+		foreach ($candidates as $candidate) {
+			$list[] = array(
+				'id'         => (int) $candidate['id'],
+				'email'      => $this->mask_email_for_display($candidate['email']),
+				'created_at' => $candidate['created_at'],
+			);
+		}
+
+		wp_send_json_success(
+			array(
+				'limit'          => $limit,
+				'total'          => $total,
+				'excess'         => $excess,
+				'scope'          => $this->get_kit_prune_scope(),
+				'batch_size'     => $batch,
+				'preview_size'   => $preview_size,
+				'candidate_count'=> count($list),
+				'tag_count'      => count($tag_ids),
+				'scanned'        => $scanned,
+				'candidates'     => $list,
+				'message'        => $limit <= 0
+					? esc_html__('No limit configured, so nothing needs removing. Set a limit to see how many are over it.', 'rl-freemius-bi')
+					: ( $excess > 0
+						? sprintf(
+							/* translators: 1: excess count, 2: subscriber limit */
+							esc_html__('%1$s subscriber(s) over the %2$s limit.', 'rl-freemius-bi'),
+							number_format_i18n($excess),
+							number_format_i18n($limit)
+						)
+						: esc_html__('You are within the limit. Nothing needs removing.', 'rl-freemius-bi') ),
+			)
+		);
+	}
+
+	/**
+	 * Unsubscribe one batch of the oldest tagged subscribers.
+	 *
+	 * Requires an explicit confirmation flag; it never runs unattended.
+	 */
+	public function handle_kit_prune_batch_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		$confirm = isset($_POST['confirm']) ? sanitize_text_field(wp_unslash($_POST['confirm'])) : '';
+		if ('yes' !== $confirm) {
+			wp_send_json_error(esc_html__('Confirmation missing. No subscriber was changed.', 'rl-freemius-bi'));
+		}
+
+		$kit_key = trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', ''));
+		if ('' === $kit_key) {
+			wp_send_json_error(esc_html__('Kit API key is not configured in Settings.', 'rl-freemius-bi'));
+		}
+
+		$limit = $this->get_kit_subscriber_limit();
+		if ($limit <= 0) {
+			wp_send_json_error(esc_html__('No subscriber limit is configured, so nothing is pruned.', 'rl-freemius-bi'));
+		}
+
+		$kit   = new RL_FSBI_Kit($kit_key);
+		$total = (int) $kit->get_total_subscribers();
+		$excess = max(0, $total - $limit);
+
+		if ($excess <= 0) {
+			wp_send_json_success(
+				array(
+					'done'      => true,
+					'removed'   => 0,
+					'failed'    => 0,
+					'total'     => $total,
+					'excess'    => 0,
+					'message'   => esc_html__('You are within the limit. Nothing was removed.', 'rl-freemius-bi'),
+				)
+			);
+		}
+
+		// Small batches keep each request short; the UI drives the progress bar.
+		$requested_batch = isset($_POST['batch_size']) ? (int) $_POST['batch_size'] : 25;
+		$batch   = min(max(1, $requested_batch), 25, $excess);
+		$scanned = 0;
+		$candidates = array();
+
+		// The client sends the exact IDs it previewed. Re-deriving "the oldest N"
+		// on every chunk re-selects the same people while Kit's list catches up,
+		// so a 25-item run could touch only a handful of subscribers.
+		$requested_ids = $this->parse_requested_kit_ids();
+
+		if (! empty($requested_ids)) {
+			foreach (array_slice($requested_ids, 0, $batch) as $requested_id) {
+				$candidates[] = array(
+					'id'         => (int) $requested_id,
+					'email'      => '',
+					'created_at' => '',
+				);
+			}
+		} else {
+			$tag_ids = $this->get_kit_prune_tag_ids();
+			list($candidates, $error) = $this->collect_oldest_kit_subscribers($kit, $batch, $tag_ids, $scanned);
+
+			if ('' !== $error) {
+				wp_send_json_error($error);
+			}
+		}
+
+		$removed = 0;
+		$failed  = 0;
+		$errors  = array();
+
+		foreach ($candidates as $candidate) {
+			$result = $kit->unsubscribe_subscriber($candidate['id']);
+
+			if (is_wp_error($result)) {
+				$failed++;
+				$label    = '' !== (string) $candidate['email']
+					? $this->mask_email_for_display($candidate['email'])
+					: '#' . (int) $candidate['id'];
+				$errors[] = $label . ': ' . $result->get_error_message();
+				continue;
+			}
+
+			$removed++;
+		}
+
+		// Read Kit's own count instead of computing "total - removed": the derived
+		// figure hides duplicates and lagging deletes, which is how a 25-item run
+		// reported 25 removed while only a few subscribers actually changed.
+		$remaining_total = (int) $kit->get_total_subscribers();
+
+		if ($remaining_total <= 0) {
+			$remaining_total = max(0, $total - $removed);
+		}
+
+		$this->store_kit_quota_snapshot($limit, $remaining_total);
+
+		wp_send_json_success(
+			array(
+				'done'    => ($remaining_total <= $limit) || (0 === $removed && 0 === $failed),
+				'removed' => $removed,
+				'failed'  => $failed,
+				'total'   => $remaining_total,
+				'limit'   => $limit,
+				'excess'  => max(0, $remaining_total - $limit),
+				'errors'  => $errors,
+				'message' => sprintf(
+					/* translators: 1: removed count, 2: remaining excess */
+					esc_html__('Removed %1$s subscriber(s). %2$s still over the limit.', 'rl-freemius-bi'),
+					number_format_i18n($removed),
+					number_format_i18n(max(0, $remaining_total - $limit))
+				),
+			)
+		);
+	}
+
+	/**
+	 * Mask an email for display so the audit output does not print full addresses.
+	 *
+	 * @param string $email Email address.
+	 * @return string
+	 */
+	private function mask_email_for_display($email)
+	{
+		$email = (string) $email;
+		$at    = strpos($email, '@');
+
+		if (false === $at || $at < 1) {
+			return '***';
+		}
+
+		$local  = substr($email, 0, $at);
+		$domain = substr($email, $at);
+
+		$visible = substr($local, 0, 1);
+
+		return $visible . str_repeat('*', max(1, strlen($local) - 1)) . $domain;
+	}
+
+	/**
+	 * Manual "run user backfill now" action from the Settings panel.
+	 */
+	public function handle_user_backfill_action()
+	{
+		if (! current_user_can('manage_options')) {
+			wp_die(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		check_admin_referer('rl_fsbi_user_backfill');
+
+		$sync   = new RL_FSBI_User_Sync();
+		$result = $sync->run_batch();
+
+		set_transient(
+			'rl_fsbi_backfill_notice',
+			sprintf(
+				/* translators: 1: pages fetched, 2: user rows written */
+				esc_html__('Fetched %1$d page(s) and wrote %2$d user row(s).', 'rl-freemius-bi'),
+				(int) $result['pages'],
+				(int) $result['users']
+			),
+			60
+		);
+
+		$redirect = wp_get_referer();
+
+		wp_safe_redirect($redirect ? $redirect : admin_url('admin.php?page=rl-freemius-bi-settings'));
+		exit;
+	}
+
+	/**
+	 * Whether the current admin page belongs to this plugin.
 	 *
 	 * @return bool True if on plugin admin page.
 	 */
@@ -1832,40 +2847,65 @@ class RL_FSBI_Admin
 			return '';
 		}
 
-		$transient_key = 'rl_fsbi_plugin_ver_' . $plugin_id;
+		// Key is versioned: bumping it discards values cached by older, buggy
+		// lookups (which could pin an outdated release for 12 hours).
+		$transient_key = 'rl_fsbi_plugin_ver_v2_' . $plugin_id;
 		$cached = get_transient($transient_key);
 		if (false !== $cached && '' !== (string) $cached) {
 			return (string) $cached;
 		}
 
 		$catalog = $this->settings->get_option('rl_fsbi_plugins_catalog', array());
+		$catalog_version = '';
 		if (is_array($catalog) && ! empty($catalog[(string) $plugin_id]['version'])) {
-			$version = (string) $catalog[(string) $plugin_id]['version'];
-			set_transient($transient_key, $version, 12 * HOUR_IN_SECONDS);
-			return $version;
+			$catalog_version = sanitize_text_field((string) $catalog[(string) $plugin_id]['version']);
 		}
 
 		$developer_id = $this->settings->get_option('rl_fsbi_developer_id');
 		$public_key   = $this->settings->get_option('rl_fsbi_public_key');
 		$secret_key   = $this->settings->get_option('rl_fsbi_secret_key');
 
+		// Ask Freemius first: the stored catalog only refreshes on this path, so
+		// trusting it up front kept an old release on screen indefinitely.
 		if ($developer_id && $public_key && $secret_key) {
-			$api = new RL_FSBI_API($developer_id, $public_key, $secret_key);
+			$api  = new RL_FSBI_API($developer_id, $public_key, $secret_key);
 			$tags = $api->retrieve_plugin_tags($plugin_id);
+
 			if (! empty($tags) && is_array($tags)) {
-				$first_tag = reset($tags);
-				$version = is_array($first_tag) ? ($first_tag['version'] ?? '') : ($first_tag->version ?? '');
-				if (! empty($version)) {
-					$version = sanitize_text_field((string) $version);
+				// Tags arrive in arbitrary order; pick the highest semantic
+				// version instead of the first entry in the list.
+				$version = '';
+				foreach ($tags as $tag) {
+					$candidate = is_array($tag) ? ($tag['version'] ?? '') : ($tag->version ?? '');
+
+					if (! is_scalar($candidate)) {
+						continue;
+					}
+
+					$candidate = trim((string) $candidate);
+
+					if ('' !== $candidate && ('' === $version || version_compare($candidate, $version, '>'))) {
+						$version = $candidate;
+					}
+				}
+
+				if ('' !== $version) {
+					$version = sanitize_text_field($version);
 					set_transient($transient_key, $version, 12 * HOUR_IN_SECONDS);
 
 					if (is_array($catalog) && isset($catalog[(string) $plugin_id])) {
 						$catalog[(string) $plugin_id]['version'] = $version;
 						$this->settings->update_option('rl_fsbi_plugins_catalog', $catalog);
 					}
+
 					return $version;
 				}
 			}
+		}
+
+		if ('' !== $catalog_version) {
+			set_transient($transient_key, $catalog_version, 12 * HOUR_IN_SECONDS);
+			return $catalog_version;
 		}
 
 		// Fallback: check installed plugin files if slug matches
@@ -2190,6 +3230,10 @@ class RL_FSBI_Admin
 			},
 			$payments
 		);
+
+		$data['trial_funnel']  = $this->resolve_trial_funnel($repo, $plugin_id, $start_date, $end_date, $data);
+		$data['churn_reasons'] = $repo->get_churn_reasons($plugin_id, $this->resolve_churn_window_start($end_date));
+		$data['uninstalls']    = $repo->count_uninstalls($plugin_id, $start_date, $end_date);
 
 		$plugin_title = '';
 		$plugin_version = '';
@@ -2854,6 +3898,8 @@ class RL_FSBI_Admin
 		$synced  = 0;
 		$skipped = 0;
 		$errors  = 0;
+		$kit_skipped   = 0;
+		$kit_remaining = $kit ? $this->resolve_kit_remaining($kit) : -1;
 
 		foreach ($sampled_users as $sample_item) {
 			$user       = $sample_item['user'];
@@ -2970,6 +4016,9 @@ class RL_FSBI_Admin
 				if ($assigned_tag_id <= 0) {
 					$errors++;
 					$add_log('error', ' -> Cannot sync: no valid Kit tag ID available. Create at least one tag in Kit.com first.');
+				} elseif ($kit_remaining === 0) {
+					$kit_skipped++;
+					$add_log('warning', ' -> Skipped: Kit subscriber limit reached. Increase the limit in Settings or prune subscribers.');
 				} else {
 					$res = $kit->upsert_subscriber($assigned_tag_id, $email, $fname, array(), $site_url);
 					if (is_wp_error($res)) {
@@ -2977,6 +4026,9 @@ class RL_FSBI_Admin
 						$add_log('error', sprintf(' -> Kit API Error: %s', $res->get_error_message()));
 					} else {
 						$synced++;
+						if ($kit_remaining > 0) {
+							$kit_remaining--;
+						}
 						$add_log('info', sprintf(' -> [SUCCESS] Upserted to Kit.com with tag "%s" (ID: %d)%s.', 
 							$assigned_tag_label, 
 							$assigned_tag_id,
@@ -3076,6 +4128,9 @@ class RL_FSBI_Admin
 		$delta_only    = ! empty($_POST['delta_only']);
 		$last_sync_utc = (string) get_option('rl_fsbi_newsletter_last_sync_utc', '');
 		$last_sync_ts  = ! empty($last_sync_utc) ? strtotime($last_sync_utc) : 0;
+
+		$kit_limit_skipped = 0;
+		$kit_remaining     = ('kit' === $provider && $kit) ? $this->resolve_kit_remaining($kit) : -1;
 
 		$plugins_to_check = array();
 		$catalog = $this->settings->get_option('rl_fsbi_plugins_catalog', array());
@@ -3255,13 +4310,19 @@ class RL_FSBI_Admin
 						}
 					}
 
-					if ($assigned_tag_id > 0) {
+					if ($assigned_tag_id > 0 && 0 === $kit_remaining) {
+						$kit_limit_skipped++;
+						$batch_logs[] = sprintf('[%s] ⏭ %s: Skipped %s — Kit subscriber limit reached (%s).', current_time('H:i:s'), $current_plugin_title, $email, number_format_i18n($this->get_kit_subscriber_limit()));
+					} elseif ($assigned_tag_id > 0) {
 						$res = $kit->upsert_subscriber($assigned_tag_id, $email, $fname, array(), $site_url);
 						if (is_wp_error($res)) {
 							$errors_count++;
 							$batch_logs[] = sprintf('[%s] ⚠ %s: Error syncing %s to Kit: %s', current_time('H:i:s'), $current_plugin_title, $email, $res->get_error_message());
 						} else {
 							$synced_count++;
+							if ($kit_remaining > 0) {
+								$kit_remaining--;
+							}
 							$tag_label = $kit_tags[$assigned_tag_id] ?? ('Tag #' . $assigned_tag_id);
 							$batch_logs[] = sprintf('[%s] ✓ %s: Synced %s (%s) to Kit [Tag: %s]', current_time('H:i:s'), $current_plugin_title, $email, $fname ?: 'Contact', $tag_label);
 						}
@@ -3364,8 +4425,10 @@ class RL_FSBI_Admin
 				'audience_member_count' => $member_count,
 				'done'                  => $done,
 				'logs'                  => $batch_logs,
+				'kit_limit_skipped'     => $kit_limit_skipped,
 				'message'               => $done
 					? sprintf(esc_html__('Sync complete: %d contacts synced to %s (Total: %d).', 'rl-freemius-bi'), $synced_count, $provider_name, $member_count)
+						. ( $kit_limit_skipped > 0 ? ' ' . sprintf(esc_html__('%d skipped: Kit subscriber limit (%s) reached.', 'rl-freemius-bi'), $kit_limit_skipped, number_format_i18n($this->get_kit_subscriber_limit())) : '' )
 					: sprintf(esc_html__('Finished %s. Moving to next plugin...', 'rl-freemius-bi'), $current_plugin_title),
 			));
 		}
@@ -3379,9 +4442,11 @@ class RL_FSBI_Admin
 			'plugin_index'         => $plugin_index,
 			'total_plugins'        => $total_plugins,
 			'current_plugin_title' => $current_plugin_title,
+			'kit_limit_skipped'    => $kit_limit_skipped,
 			'done'                 => false,
 			'logs'                 => $batch_logs,
-			'message'              => sprintf(esc_html__('Scanning %s... %d users scanned (%d opt-ins, %d synced).', 'rl-freemius-bi'), $current_plugin_title, $scanned_count, $optins_count, $synced_count),
+			'message'              => sprintf(esc_html__('Scanning %s... %d users scanned (%d opt-ins, %d synced).', 'rl-freemius-bi'), $current_plugin_title, $scanned_count, $optins_count, $synced_count)
+				. ( $kit_limit_skipped > 0 ? ' ' . sprintf(esc_html__('%d skipped: Kit subscriber limit reached.', 'rl-freemius-bi'), $kit_limit_skipped ) : '' ),
 		));
 	}
 
@@ -3769,11 +4834,11 @@ class RL_FSBI_Admin
 		$scanned_count = isset($_POST['scanned_count']) ? max(0, (int) $_POST['scanned_count']) : 0;
 		$optins_count  = isset($_POST['optins_count']) ? max(0, (int) $_POST['optins_count']) : 0;
 		$plugin_index  = isset($_POST['plugin_index']) ? max(0, (int) $_POST['plugin_index']) : 0;
-		$file_token    = isset($_POST['file_token']) ? sanitize_file_name(wp_unslash($_POST['file_token'])) : '';
+		$file_token    = isset($_POST['file_token']) ? sanitize_text_field(wp_unslash($_POST['file_token'])) : '';
 		$email_admin   = ! empty($_POST['email_admin']);
 
-		if (empty($file_token)) {
-			$file_token = 'fsbi_optins_' . gmdate('Ymd_His');
+		if (! preg_match('/^[A-Za-z0-9]{32}$/', $file_token)) {
+			$file_token = wp_generate_password(32, false, false);
 		}
 
 		$catalog = $this->settings->get_option('rl_fsbi_plugins_catalog', array());
@@ -3788,14 +4853,14 @@ class RL_FSBI_Admin
 
 		$upload_dir = wp_upload_dir();
 		$export_dir = $upload_dir['basedir'] . '/fsbi-exports';
-		if (! file_exists($export_dir)) {
-			wp_mkdir_p($export_dir);
-		}
+		$this->prepare_export_directory($export_dir);
 
 		$file_path = $export_dir . '/' . $file_token . '.csv';
 
 		// On first batch, initialize file with UTF-8 BOM and headers
 		if (0 === $offset && 0 === $plugin_index) {
+			$this->prune_export_directory($export_dir);
+
 			$fp_init = fopen($file_path, 'w');
 			if ($fp_init) {
 				fprintf($fp_init, chr(0xEF) . chr(0xBB) . chr(0xBF));
@@ -4002,17 +5067,22 @@ class RL_FSBI_Admin
 			wp_die(esc_html__('Unauthorized', 'rl-freemius-bi'), 403);
 		}
 
-		$token = isset($_GET['token']) ? sanitize_file_name(wp_unslash($_GET['token'])) : '';
-		if (empty($token)) {
+		$token = isset($_GET['token']) ? sanitize_text_field(wp_unslash($_GET['token'])) : '';
+		if (! preg_match('/^[A-Za-z0-9]{32}$/', $token)) {
 			wp_die(esc_html__('Invalid download token.', 'rl-freemius-bi'), 400);
 		}
 
 		$upload_dir = wp_upload_dir();
-		$file_path  = $upload_dir['basedir'] . '/fsbi-exports/' . $token . '.csv';
+		$export_dir = $upload_dir['basedir'] . '/fsbi-exports';
+		$file_path  = $export_dir . '/' . $token . '.csv';
+		$real_dir   = realpath($export_dir);
+		$real_file  = realpath($file_path);
 
-		if (! file_exists($file_path)) {
+		if (false === $real_dir || false === $real_file || 0 !== strpos($real_file, $real_dir . DIRECTORY_SEPARATOR)) {
 			wp_die(esc_html__('Export file not found or expired.', 'rl-freemius-bi'), 404);
 		}
+
+		$file_path = $real_file;
 
 		$filename = sprintf('freemius-optins-kit-%s.csv', gmdate('Y-m-d'));
 
@@ -4025,6 +5095,84 @@ class RL_FSBI_Admin
 
 		readfile($file_path);
 		exit;
+	}
+
+	/**
+	 * Expose the latest generated export to the dashboard without server paths.
+	 *
+	 * Legacy tokens created before the random-token change are dropped so the UI
+	 * offers a fresh generation instead of a download that can no longer be served.
+	 *
+	 * @return array
+	 */
+	private function get_latest_export_for_ui()
+	{
+		$export = get_option('rl_fsbi_latest_optins_csv_export', array());
+
+		if (! is_array($export) || empty($export['token']) || ! preg_match('/^[A-Za-z0-9]{32}$/', (string) $export['token'])) {
+			return array();
+		}
+
+		unset($export['path']);
+
+		return $export;
+	}
+
+	/**
+	 * Create the export directory and deny direct web access to generated files.
+	 *
+	 * Exports contain customer email addresses, so the directory is blocked on
+	 * Apache and listed-silenced on every other server.
+	 *
+	 * @param string $export_dir Absolute export directory path.
+	 */
+	private function prepare_export_directory($export_dir)
+	{
+		if (! is_dir($export_dir)) {
+			wp_mkdir_p($export_dir);
+		}
+
+		if (! is_dir($export_dir)) {
+			return;
+		}
+
+		$htaccess_path = $export_dir . '/.htaccess';
+		if (! file_exists($htaccess_path)) {
+			$rules = "<IfModule mod_authz_core.c>\n\tRequire all denied\n</IfModule>\n"
+				. "<IfModule !mod_authz_core.c>\n\tOrder deny,allow\n\tDeny from all\n</IfModule>\n";
+
+			file_put_contents($htaccess_path, $rules);
+		}
+
+		$index_path = $export_dir . '/index.php';
+		if (! file_exists($index_path)) {
+			file_put_contents($index_path, "<?php\n// Silence is golden.\n");
+		}
+	}
+
+	/**
+	 * Remove generated exports older than one day.
+	 *
+	 * @param string $export_dir Absolute export directory path.
+	 */
+	private function prune_export_directory($export_dir)
+	{
+		if (! is_dir($export_dir)) {
+			return;
+		}
+
+		$files = glob($export_dir . '/*.csv');
+		if (! is_array($files)) {
+			return;
+		}
+
+		$cutoff = time() - DAY_IN_SECONDS;
+
+		foreach ($files as $file) {
+			if (is_file($file) && filemtime($file) < $cutoff) {
+				@unlink($file);
+			}
+		}
 	}
 
 	/**
@@ -4074,6 +5222,87 @@ class RL_FSBI_Admin
 	}
 
 	/**
+	 * Trial funnel figures, preferring the dedicated trials table.
+	 *
+	 * Falls back to the subscription-derived counts already in the payload when
+	 * the trials endpoint has not been synced yet, so the panel never regresses
+	 * to zero for existing installations.
+	 *
+	 * @param RL_FSBI_Repository $repo       Repository.
+	 * @param int                $plugin_id  Plugin scope.
+	 * @param string             $start_date Period start.
+	 * @param string             $end_date   Period end.
+	 * @param array              $data       Dashboard payload built so far.
+	 * @return array
+	 */
+	private function resolve_trial_funnel($repo, $plugin_id, $start_date, $end_date, array $data)
+	{
+		$funnel = $repo->get_trial_funnel($plugin_id, $start_date, $end_date);
+
+		if ((int) $funnel['started'] > 0) {
+			$funnel['source'] = 'trials';
+			return $funnel;
+		}
+
+		return array(
+			'started'             => (int) ($data['trial_conversion']['total_trials'] ?? 0),
+			'with_payment_method' => 0,
+			'converted'           => (int) ($data['trial_conversion']['converted'] ?? 0),
+			'canceled'            => 0,
+			'rate'                => (float) ($data['trial_conversion']['rate'] ?? 0),
+			'source'              => 'subscriptions',
+		);
+	}
+
+	/**
+	 * Start date for the churn-reason window: the 12 months before the period end.
+	 *
+	 * @param string $end_date Period end (YYYY-MM-DD).
+	 * @return string
+	 */
+	private function resolve_churn_window_start($end_date)
+	{
+		$timestamp = strtotime($end_date . ' -12 months');
+
+		return false === $timestamp ? gmdate('Y-m-d', strtotime('-12 months')) : gmdate('Y-m-d', $timestamp);
+	}
+
+	/**
+	 * When the dashboard data actually reflects: the last successful sync,
+	 * never the (possibly future) end of the selected period.
+	 *
+	 * @param string $end_date Period end (YYYY-MM-DD).
+	 * @return string
+	 */
+	private function resolve_data_as_of($end_date)
+	{
+		$now       = gmdate('Y-m-d H:i:s');
+		$last_sync = trim((string) $this->settings->get_option('rl_fsbi_last_sync_at_utc', ''));
+
+		if ('' === $last_sync || false === strtotime($last_sync)) {
+			return $now;
+		}
+
+		return strtotime($last_sync) > strtotime($now) ? $now : $last_sync;
+	}
+
+	/**
+	 * Consolidated MRR in EUR, reusing the dashboard calculation.
+	 *
+	 * Exposed so the REST layer cannot drift from the dashboard and cannot
+	 * regress into "report only the EUR bucket".
+	 *
+	 * @return float
+	 */
+	public function rest_mrr_eur()
+	{
+		$subscriptions = $this->get_subscriptions_for_dashboard(0, null);
+		$snapshot      = $this->calculate_period_mrr($subscriptions, gmdate('Y-m-d'), 'EUR');
+
+		return (float) $snapshot['converted'];
+	}
+
+	/**
 	 * Build complete analytics payload for v2 dashboard.
 	 */
 	private function build_dashboard_payload($payments, $annual_payments, $subscriptions, $balances, $start_date, $end_date, $gross_revenue, $net_revenue, $active_subscriptions, $previous_net, $currency)
@@ -4087,6 +5316,7 @@ class RL_FSBI_Admin
 			$default_currency = strtoupper((string) $this->conversion_currency);
 		}
 		$report_currency = $currency ? strtoupper((string) $currency) : $default_currency;
+		$data_as_of      = $this->resolve_data_as_of($end_date);
 
 		$purchase_count = 0;
 		$refund_count = 0;
@@ -4136,7 +5366,7 @@ class RL_FSBI_Admin
 		$total_refundable = max(1, $purchase_count + $refund_count);
 		$refund_rate = ($refund_count / $total_refundable) * 100;
 
-		$subscription_stats = $this->calculate_subscription_stats($subscriptions, $end_date);
+		$subscription_stats = $this->calculate_subscription_stats($subscriptions, $end_date, $start_date);
 		$mrr_snapshot = $this->calculate_period_mrr($subscriptions, $end_date, $report_currency);
 		$mrr_by_currency = $mrr_snapshot['native'];
 
@@ -4159,7 +5389,12 @@ class RL_FSBI_Admin
 		$churn_rate = (float) $subscription_stats['churn_rate'];
 		$mrr = (float) $mrr_snapshot['converted'];
 		$arr = $mrr * 12;
-		$aov = $purchase_count > 0 ? ($net_revenue / $purchase_count) : 0;
+
+		// AOV spreads revenue over every payment taken in the period (new and
+		// renewal). Dividing by first payments alone produced 0.00 whenever a
+		// period only had renewals.
+		$payment_total = $purchase_count + $renewal_count;
+		$aov = $payment_total > 0 ? ($net_revenue / $payment_total) : null;
 		$trial_rate = $trial_count > 0 ? ($converted_trials / $trial_count) * 100 : 0;
 
 		$health_score = min(
@@ -4216,8 +5451,8 @@ class RL_FSBI_Admin
 				'mrr_native_by_currency' => $mrr_snapshot['native'],
 				'mrr_converted'       => round($mrr_snapshot['converted'], 2),
 				'arr_converted'       => round($arr, 2),
-				'metric_as_of'        => $end_date,
-				'aov'                 => round($aov, 2),
+				'metric_as_of'        => $data_as_of,
+				'aov'                 => null === $aov ? null : round($aov, 2),
 				'refund_rate'         => round($refund_rate, 2),
 				'churn_rate'          => round($churn_rate, 2),
 				'health_score'        => round($health_score, 0),
@@ -4263,7 +5498,7 @@ class RL_FSBI_Admin
 				'mrr_native_by_currency' => $mrr_snapshot['native'],
 				'mrr_converted'          => round($mrr_snapshot['converted'], 2),
 				'arr_converted'          => round($arr, 2),
-				'as_of'                  => $end_date,
+				'as_of'                  => $data_as_of,
 				'conversion_currency'    => $report_currency,
 			),
 		);
@@ -4326,9 +5561,13 @@ class RL_FSBI_Admin
 			$native[$currency] += $renewal_amount / $months;
 		}
 
-		// Legacy FSBI displays the native MRR bucket for the selected currency.
-		// Cross-currency conversion is reserved for payout/revenue aggregation.
-		$converted = isset($native[$report_currency]) ? (float) $native[$report_currency] : 0.0;
+		// Consolidate every currency bucket into the reporting currency. Keeping
+		// only the report-currency bucket silently dropped the others, so USD MRR
+		// vanished whenever EUR was the reporting currency.
+		$converted = 0.0;
+		foreach ($native as $bucket_currency => $bucket_amount) {
+			$converted += $this->convert_currency_amount((float) $bucket_amount, (string) $bucket_currency, (string) $report_currency, $as_of_date);
+		}
 
 		ksort($native);
 		return array(
@@ -4480,7 +5719,7 @@ class RL_FSBI_Admin
 	 * @param array $subscriptions Subscription rows.
 	 * @return array
 	 */
-	private function calculate_subscription_stats($subscriptions, $as_of_date = null)
+	private function calculate_subscription_stats($subscriptions, $as_of_date = null, $period_start = null)
 	{
 		$active = 0;
 		$monthly = 0;
@@ -4530,12 +5769,50 @@ class RL_FSBI_Admin
 
 		$churn_rate = $active > 0 ? round(($canceled_this_month / $active) * 100, 1) : 0;
 
+		// Churn is measured against the base that existed at the START of the
+		// selected period, using cancellations that happened INSIDE it. The
+		// previous formula divided the current calendar month's cancellations by
+		// the closing base, so a period with one cancellation still read 0,0%.
+		$churn_base          = 0;
+		$churn_cancellations = 0;
+		$period_start_stamp  = $period_start ? strtotime($period_start . ' 00:00:00') : false;
+
+		if (false !== $period_start_stamp) {
+			foreach ($subscriptions as $subscription) {
+				$created_at = ! empty($subscription->created_at) ? strtotime((string) $subscription->created_at) : false;
+				$expires_at = ! empty($subscription->expires_at) ? strtotime((string) $subscription->expires_at) : false;
+				$meta       = json_decode((string) ($subscription->metadata ?? ''), true);
+				$status     = strtolower((string) ($subscription->status ?? ''));
+
+				$cancel_stamp = is_array($meta) && ! empty($meta['canceled_at']) ? strtotime((string) $meta['canceled_at']) : false;
+				if (false === $cancel_stamp && in_array($status, array('cancelled', 'canceled'), true) && ! empty($subscription->updated_at)) {
+					$cancel_stamp = strtotime((string) $subscription->updated_at);
+				}
+
+				$existed_at_start = (false === $created_at || $created_at <= $period_start_stamp)
+					&& (false === $expires_at || $expires_at >= $period_start_stamp)
+					&& (false === $cancel_stamp || $cancel_stamp > $period_start_stamp);
+
+				if ($existed_at_start) {
+					$churn_base++;
+				}
+
+				if (false !== $cancel_stamp && $cancel_stamp >= $period_start_stamp && $cancel_stamp <= $as_of_timestamp) {
+					$churn_cancellations++;
+				}
+			}
+
+			$churn_rate = $churn_base > 0 ? round(($churn_cancellations / $churn_base) * 100, 2) : 0.0;
+		}
+
 		return array(
 			'active' => $active,
 			'monthly' => $monthly,
 			'annual' => $annual,
 			'canceled_this_month' => $canceled_this_month,
 			'churn_rate' => $churn_rate,
+			'churn_base' => $churn_base,
+			'churn_cancellations' => $churn_cancellations,
 		);
 	}
 
@@ -5391,6 +6668,10 @@ class RL_FSBI_Admin
 			return (bool) $meta['is_renewal'];
 		}
 
+		if (isset($payment->is_renewal) && 1 === (int) $payment->is_renewal) {
+			return true;
+		}
+
 		return ! empty($payment->subscription_id);
 	}
 
@@ -5484,7 +6765,7 @@ class RL_FSBI_Admin
 	 * @param string|null $date_time       Optional transaction datetime.
 	 * @return float Converted amount rounded to 2 decimals.
 	 */
-	private function convert_currency_amount($amount, $source_currency, $target_currency, $date_time = null)
+	public function convert_currency_amount($amount, $source_currency, $target_currency, $date_time = null)
 	{
 		$amount = (float) $amount;
 		$source_currency = strtoupper((string) $source_currency);

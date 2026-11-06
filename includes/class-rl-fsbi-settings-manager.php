@@ -43,6 +43,7 @@ class RL_FSBI_Settings_Manager {
 
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/main.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/fields/class-rl-fsbi-field-checkbox-list.php';
+		require_once RL_FSBI_PLUGIN_DIR . 'includes/fields/class-rl-fsbi-field-password.php';
 
 		$this->framework = new RL_Options_Framework(
 			array(
@@ -66,14 +67,16 @@ class RL_FSBI_Settings_Manager {
 			function ( $fw ) {
 				if ( $fw instanceof RL_Options_Framework ) {
 					$fw->register_field_renderer( new RL_FSBI_Field_Checkbox_List() );
+					$fw->register_field_renderer( new RL_FSBI_Field_Password() );
 				}
 			}
 		);
 
 		$this->framework->init();
 
-		// Register custom field renderer for checkbox list after init so field_registry is initialized
+		// Register custom field renderers after init so field_registry is initialized
 		$this->framework->register_field_renderer( new RL_FSBI_Field_Checkbox_List() );
+		$this->framework->register_field_renderer( new RL_FSBI_Field_Password() );
 
 		$this->add_tabs();
 		$this->add_sections();
@@ -352,9 +355,10 @@ class RL_FSBI_Settings_Manager {
 			'freemius_api',
 			array(
 				'id'                => 'rl_fsbi_secret_key',
-				'type'              => 'text',
+				'type'              => 'password',
+				'preserve_option' => 'rl_fsbi_settings',
 				'label'             => esc_html__( 'Secret API Key', 'rl-freemius-bi' ),
-				'desc'              => esc_html__( 'Your Freemius Secret API Key (starts with sk_). Used to cryptographically sign API requests with HMAC-SHA256. Case-sensitive.', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Your Freemius Secret API Key (starts with sk_). Used to cryptographically sign API requests with HMAC-SHA256. Case-sensitive. Leave blank to keep the stored key.', 'rl-freemius-bi' ),
 				'placeholder'       => 'sk_xxxxxxxxxxxxxxxxxxxx',
 				'required'          => true,
 				'sanitize_callback' => array( $this, 'sanitize_freemius_key' ),
@@ -453,7 +457,8 @@ class RL_FSBI_Settings_Manager {
 			'currency_config',
 			array(
 				'id'          => 'rl_fsbi_freecurrencyapi_key',
-				'type'        => 'text',
+				'type'        => 'password',
+				'preserve_option' => 'rl_fsbi_settings',
 				'label'       => esc_html__( 'FreeCurrencyAPI Key', 'rl-freemius-bi' ),
 				'desc'        => esc_html__( 'Your API Key from freecurrencyapi.com. Sign up for free to get 5,000 monthly conversion requests. Rates are automatically cached for 24 hours to conserve quota.', 'rl-freemius-bi' ),
 				'placeholder' => 'fca_live_...',
@@ -472,9 +477,10 @@ class RL_FSBI_Settings_Manager {
 			'currency_config',
 			array(
 				'id'                => 'rl_fsbi_transferwise_token',
-				'type'              => 'text',
+				'type'              => 'password',
+				'preserve_option' => 'rl_fsbi_settings',
 				'label'             => esc_html__( 'Wise API Token', 'rl-freemius-bi' ),
-				'desc'              => esc_html__( 'Your personal read-only API token from wise.com (TransferWise). Used to fetch historical mid-market exchange rates matching payout cycles.', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Your personal read-only API token from wise.com (TransferWise). Used to fetch historical mid-market exchange rates matching payout cycles. Leave blank to keep the stored token.', 'rl-freemius-bi' ),
 				'sanitize_callback' => array( $this, 'sanitize_freemius_key' ),
 				'conditions'        => array(
 					array(
@@ -543,6 +549,16 @@ class RL_FSBI_Settings_Manager {
 			)
 		);
 
+		$this->framework->add_field(
+			'sync_settings',
+			'sync_config',
+			array(
+				'id'   => 'rl_fsbi_user_backfill_panel',
+				'type' => 'html',
+				'html' => $this->get_user_backfill_panel_html(),
+			)
+		);
+
 		// --- Tab: Newsletter ---
 		$this->framework->add_field(
 			'newsletter_settings',
@@ -566,9 +582,10 @@ class RL_FSBI_Settings_Manager {
 			'mailchimp_config',
 			array(
 				'id'                => 'rl_fsbi_mailchimp_api_key',
-				'type'              => 'text',
+				'type'              => 'password',
+				'preserve_option' => 'rl_fsbi_settings',
 				'label'             => esc_html__( 'Mailchimp API Key', 'rl-freemius-bi' ),
-				'desc'              => esc_html__( 'Your Mailchimp API key (e.g., xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-usX). Once saved, available audiences will populate in the dropdown below.', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Your Mailchimp API key (e.g., xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-usX). Once saved, available audiences will populate in the dropdown below. Leave blank to keep the stored key.', 'rl-freemius-bi' ),
 				'placeholder'       => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-usX',
 				'sanitize_callback' => 'sanitize_text_field',
 				'conditions'        => array(
@@ -722,9 +739,10 @@ class RL_FSBI_Settings_Manager {
 			'kit_config',
 			array(
 				'id'                => 'rl_fsbi_kit_api_key',
-				'type'              => 'text',
+				'type'              => 'password',
+				'preserve_option' => 'rl_fsbi_settings',
 				'label'             => esc_html__( 'Kit V4 API Key', 'rl-freemius-bi' ),
-				'desc'              => esc_html__( 'Your Kit API V4 Key. Located in Kit under Settings > Developer > V4 API Keys. (Passed via X-Kit-Api-Key header).', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Your Kit API V4 Key. Located in Kit under Settings > Developer > V4 API Keys. (Passed via X-Kit-Api-Key header). Leave blank to keep the stored key.', 'rl-freemius-bi' ),
 				'placeholder'       => 'kit_xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
 				'sanitize_callback' => 'sanitize_text_field',
 				'conditions'        => array(
@@ -742,9 +760,10 @@ class RL_FSBI_Settings_Manager {
 			'kit_config',
 			array(
 				'id'                => 'rl_fsbi_kit_api_secret',
-				'type'              => 'text',
+				'type'              => 'password',
+				'preserve_option' => 'rl_fsbi_settings',
 				'label'             => esc_html__( 'Kit API Secret (Legacy / Optional)', 'rl-freemius-bi' ),
-				'desc'              => esc_html__( 'Optional. In Kit API v4, your V4 API Key authenticates all operations (subscribers, tags, custom fields) directly.', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Optional. In Kit API v4, your V4 API Key authenticates all operations (subscribers, tags, custom fields) directly. Leave blank to keep the stored value.', 'rl-freemius-bi' ),
 				'placeholder'       => '',
 				'sanitize_callback' => 'sanitize_text_field',
 				'conditions'        => array(
@@ -754,6 +773,61 @@ class RL_FSBI_Settings_Manager {
 						'value'    => 'kit',
 					),
 				),
+			)
+		);
+
+		$this->framework->add_field(
+			'newsletter_settings',
+			'kit_config',
+			array(
+				'id'                => 'rl_fsbi_kit_subscriber_limit',
+				'type'              => 'number',
+				'label'             => esc_html__( 'Subscriber Limit', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Maximum number of active Kit subscribers to keep. Leave empty or set 0 for unlimited. Once the limit is reached, syncing stops adding new subscribers and reports how many were skipped; existing subscribers are still updated and tagged.', 'rl-freemius-bi' ),
+				'placeholder'       => esc_html__( 'e.g. 10000 - leave empty for unlimited', 'rl-freemius-bi' ),
+				'min'               => 0,
+				'step'              => 1,
+				'sanitize_callback' => array( $this, 'sanitize_subscriber_limit' ),
+				'conditions'        => array(
+					array(
+						'field'    => 'rl_fsbi_newsletter_provider',
+						'operator' => 'equals',
+						'value'    => 'kit',
+					),
+				),
+			)
+		);
+
+		$this->framework->add_field(
+			'newsletter_settings',
+			'kit_config',
+			array(
+				'id'                => 'rl_fsbi_kit_prune_scope',
+				'type'              => 'select',
+				'label'             => esc_html__( 'Prune Scope', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Which subscribers the quota tool is allowed to remove. "Any active subscriber" removes the oldest active subscribers regardless of tags. "Only tagged" restricts removal to subscribers carrying the Kit tags this plugin assigns.', 'rl-freemius-bi' ),
+				'options'           => array(
+					'all'    => esc_html__( 'Any active subscriber (oldest first)', 'rl-freemius-bi' ),
+					'tagged' => esc_html__( 'Only subscribers tagged by this plugin', 'rl-freemius-bi' ),
+				),
+				'default'           => 'all',
+				'conditions'        => array(
+					array(
+						'field'    => 'rl_fsbi_newsletter_provider',
+						'operator' => 'equals',
+						'value'    => 'kit',
+					),
+				),
+			)
+		);
+
+		$this->framework->add_field(
+			'newsletter_settings',
+			'kit_config',
+			array(
+				'id'   => 'rl_fsbi_kit_quota_panel',
+				'type' => 'html',
+				'html' => $this->get_kit_quota_panel_html(),
 			)
 		);
 
@@ -1105,7 +1179,200 @@ class RL_FSBI_Settings_Manager {
 	}
 
 	/**
+	 * Sanitize the subscriber limit. An empty value means unlimited.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return string
+	 */
+	public function sanitize_subscriber_limit( $value ): string {
+		$value = trim( preg_replace( '/[^0-9]/', '', (string) $value ) );
+
+		if ( '' === $value ) {
+			return '';
+		}
+
+		return (string) max( 0, (int) $value );
+	}
+
+	/**
+	 * Render the read-only Kit quota panel with the manual prune controls.
+	 *
+	 * The panel is inert markup; the buttons are wired in rl-fsbi-settings.js
+	 * and every action is re-checked server-side.
+	 *
+	 * @return string
+	 */
+	/**
+	 * Settings panel for the Freemius user (email) backfill.
+	 *
+	 * @return string
+	 */
+	private function get_user_backfill_panel_html(): string {
+		// Never instantiate RL_FSBI_User_Sync here: its constructor builds a
+		// settings manager, which re-registers these fields and re-renders this
+		// panel — unbounded recursion that exhausts memory on every request.
+		global $wpdb;
+
+		$table      = $wpdb->prefix . 'rl_fsbi_users';
+		$has_table  = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		$total      = $has_table ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ) : 0;
+		$with_email = $has_table ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE email IS NOT NULL AND email <> ''" ) : 0;
+		$last_run   = (string) get_option( 'rl_fsbi_user_sync_last_run', '' );
+		$state      = ( '' !== $last_run && ( time() - strtotime( $last_run ) ) < 10 * MINUTE_IN_SECONDS ) ? 'running' : 'idle';
+		$status     = array(
+			'total_known' => $total,
+			'with_email'  => $with_email,
+			'state'       => $state,
+		);
+
+		$notice = get_transient( 'rl_fsbi_backfill_notice' );
+		if ( $notice ) {
+			delete_transient( 'rl_fsbi_backfill_notice' );
+		}
+
+		ob_start();
+		?>
+		<div class="rl-fsbi-user-backfill" style="background:#fff;border:1px solid #c3c4c7;border-radius:6px;padding:16px 18px;max-width:860px">
+			<h3 style="margin:0 0 6px;font-size:14px"><?php echo esc_html__( 'Customer emails (background sync)', 'rl-freemius-bi' ); ?></h3>
+			<p class="description" style="margin:0 0 10px">
+				<?php echo esc_html__( 'Freemius exposes emails 50 users at a time, so they are crawled in the background every 5 minutes. Use this button to push it along now.', 'rl-freemius-bi' ); ?>
+			</p>
+
+			<?php if ( $notice ) : ?>
+				<div class="notice notice-success inline" style="margin:0 0 10px"><p><?php echo esc_html( (string) $notice ); ?></p></div>
+			<?php endif; ?>
+
+			<p style="margin:0 0 10px;font-size:13px;color:#50575e">
+				<?php
+				printf(
+					/* translators: 1: users stored, 2: users with email, 3: state */
+					esc_html__( 'Stored: %1$s user(s) — %2$s with an email. State: %3$s.', 'rl-freemius-bi' ),
+					esc_html( number_format_i18n( $status['total_known'] ) ),
+					esc_html( number_format_i18n( $status['with_email'] ) ),
+					esc_html( $status['state'] )
+				);
+				?>
+			</p>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<input type="hidden" name="action" value="rl_fsbi_user_backfill" />
+				<?php wp_nonce_field( 'rl_fsbi_user_backfill' ); ?>
+				<button type="submit" class="button"><?php echo esc_html__( 'Run user backfill now', 'rl-freemius-bi' ); ?></button>
+			</form>
+		</div>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	private function get_kit_quota_panel_html(): string {
+		$limit = trim( (string) $this->get_option( 'rl_fsbi_kit_subscriber_limit', '' ) );
+		$limit = '' === $limit ? 0 : max( 0, (int) $limit );
+
+		$limit_label = $limit > 0
+			? number_format_i18n( $limit )
+			: esc_html__( 'Unlimited', 'rl-freemius-bi' );
+
+		$scope = trim( (string) $this->get_option( 'rl_fsbi_kit_prune_scope', 'all' ) );
+		$scope = 'tagged' === $scope ? 'tagged' : 'all';
+
+		$scope_label = 'tagged' === $scope
+			? esc_html__( 'Only subscribers tagged by this plugin', 'rl-freemius-bi' )
+			: esc_html__( 'Any active subscriber (oldest first)', 'rl-freemius-bi' );
+
+		$warning_text = 'tagged' === $scope
+			? esc_html__( "Kit treats it the same as the person clicking unsubscribe: they stop receiving all email and must explicitly opt in again. Only subscribers carrying this plugin's Kit tags are eligible.", 'rl-freemius-bi' )
+			: esc_html__( 'Kit treats it the same as the person clicking unsubscribe: they stop receiving all email and must explicitly opt in again. Any active subscriber is eligible, oldest first.', 'rl-freemius-bi' );
+
+		ob_start();
+		?>
+		<div class="rl-fsbi-kit-quota" data-limit="<?php echo esc_attr( (string) $limit ); ?>">
+			<style>
+				.rl-fsbi-kit-quota{background:#fff;border:1px solid #c3c4c7;border-radius:6px;padding:16px 18px;max-width:860px;margin:4px 0 8px}
+				.rl-fsbi-kit-quota-title{margin:0 0 6px;font-size:14px;line-height:1.4}
+				.rl-fsbi-kit-quota-grid{display:grid;grid-template-columns:1fr auto;margin:12px 0;border-top:1px solid #f0f0f1}
+				.rl-fsbi-kit-quota-row{display:contents}
+				.rl-fsbi-kit-quota-row>span,.rl-fsbi-kit-quota-row>strong{padding:9px 2px;border-bottom:1px solid #f0f0f1;font-size:13px}
+				.rl-fsbi-kit-quota-row>span{color:#50575e}
+				.rl-fsbi-kit-quota-row>strong{text-align:right;color:#1d2327;font-variant-numeric:tabular-nums}
+				.rl-fsbi-kit-quota-actions{display:flex;align-items:center;gap:10px;margin:14px 0 4px}
+				.rl-fsbi-kit-quota-actions [hidden]{display:none!important}
+				.rl-fsbi-kit-quota-actions .spinner{margin:0;float:none}
+				.rl-fsbi-kit-quota-progress{margin:14px 0 4px}
+				.rl-fsbi-kit-quota-progress-track{height:10px;background:#f0f0f1;border-radius:999px;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.07)}
+				.rl-fsbi-kit-quota-progress-fill{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#2271b1,#72aee6);transition:width .35s ease}
+				.rl-fsbi-kit-quota-progress-text{margin-top:6px;font-size:12px;color:#50575e}
+				.rl-fsbi-kit-quota-warning{margin:14px 0 0;padding:10px 12px;border-left:4px solid #d63638;background:#fcf0f1;font-size:12px;line-height:1.5;color:#1d2327}
+				.rl-fsbi-kit-quota-output{margin:10px 0 0;font-size:13px;min-height:1px}
+				.rl-fsbi-kit-quota-list{margin:10px 0 0;padding-left:18px;max-height:260px;overflow:auto;font-size:12px;color:#50575e}
+				.rl-fsbi-kit-quota-list li{padding:2px 0}
+			</style>
+
+			<h3 class="rl-fsbi-kit-quota-title"><?php echo esc_html__( 'Kit subscriber quota', 'rl-freemius-bi' ); ?></h3>
+			<p class="description" style="margin:0">
+				<?php echo esc_html__( 'Kit plans are billed on active subscribers. Preview how far you are over the limit before removing anyone.', 'rl-freemius-bi' ); ?>
+			</p>
+
+			<div class="rl-fsbi-kit-quota-grid">
+				<div class="rl-fsbi-kit-quota-row">
+					<span><?php echo esc_html__( 'Configured limit', 'rl-freemius-bi' ); ?></span>
+					<strong id="rl-fsbi-kit-quota-limit"><?php echo esc_html( (string) $limit_label ); ?></strong>
+				</div>
+				<div class="rl-fsbi-kit-quota-row">
+					<span><?php echo esc_html__( 'Active subscribers in Kit', 'rl-freemius-bi' ); ?></span>
+					<strong id="rl-fsbi-kit-quota-total">&mdash;</strong>
+				</div>
+				<div class="rl-fsbi-kit-quota-row">
+					<span><?php echo esc_html__( 'Over the limit by', 'rl-freemius-bi' ); ?></span>
+					<strong id="rl-fsbi-kit-quota-excess">&mdash;</strong>
+				</div>
+				<div class="rl-fsbi-kit-quota-row">
+					<span><?php echo esc_html__( 'Prune scope', 'rl-freemius-bi' ); ?></span>
+					<strong id="rl-fsbi-kit-quota-scope"><?php echo esc_html( (string) $scope_label ); ?></strong>
+				</div>
+				<div class="rl-fsbi-kit-quota-row">
+					<span><?php echo esc_html__( 'Ready to remove (next batch)', 'rl-freemius-bi' ); ?></span>
+					<strong id="rl-fsbi-kit-quota-candidates">&mdash;</strong>
+				</div>
+			</div>
+
+			<div class="rl-fsbi-kit-quota-actions">
+				<button type="button" class="button" id="rl-fsbi-kit-quota-preview">
+					<?php echo esc_html__( 'Refresh from Kit', 'rl-freemius-bi' ); ?>
+				</button>
+				<button type="button" class="button" id="rl-fsbi-kit-quota-prune" disabled="disabled">
+					<?php echo esc_html__( 'Unsubscribe oldest batch', 'rl-freemius-bi' ); ?>
+				</button>
+				<button type="button" class="button" id="rl-fsbi-kit-quota-drain" disabled="disabled">
+					<?php echo esc_html__( 'Remove all over the limit', 'rl-freemius-bi' ); ?>
+				</button>
+				<button type="button" class="button" id="rl-fsbi-kit-quota-stop" hidden>
+					<?php echo esc_html__( 'Stop', 'rl-freemius-bi' ); ?>
+				</button>
+				<span class="spinner rl-fsbi-kit-quota-spinner"></span>
+			</div>
+
+			<div class="rl-fsbi-kit-quota-progress" id="rl-fsbi-kit-quota-progress" hidden>
+				<div class="rl-fsbi-kit-quota-progress-track">
+					<span class="rl-fsbi-kit-quota-progress-fill" id="rl-fsbi-kit-quota-progress-fill"></span>
+				</div>
+				<div class="rl-fsbi-kit-quota-progress-text" id="rl-fsbi-kit-quota-progress-text" aria-live="polite"></div>
+			</div>
+
+			<div class="rl-fsbi-kit-quota-warning" id="rl-fsbi-kit-quota-warning" role="alert" hidden>
+				<strong><?php echo esc_html__( 'Unsubscribing is permanent.', 'rl-freemius-bi' ); ?></strong>
+				<?php echo esc_html( (string) $warning_text ); ?>
+			</div>
+
+			<div class="rl-fsbi-kit-quota-output" id="rl-fsbi-kit-quota-output" role="status" aria-live="polite"></div>
+			<ol class="rl-fsbi-kit-quota-list" id="rl-fsbi-kit-quota-list"></ol>
+		</div>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
 	 * Sanitize developer ID.
+
 	 *
 	 * @param mixed $value Raw value.
 	 * @return string
@@ -1391,6 +1658,7 @@ class RL_FSBI_Settings_Manager {
 		if ( $this->framework ) {
 			$this->framework->init();
 			$this->framework->register_field_renderer( new RL_FSBI_Field_Checkbox_List() );
+			$this->framework->register_field_renderer( new RL_FSBI_Field_Password() );
 		}
 	}
 
