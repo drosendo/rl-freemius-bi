@@ -58,6 +58,11 @@ class RL_FSBI_User_Sync
 	const PAGE_SIZE = 50;
 
 	/**
+	 * Users written per INSERT during the CSV import.
+	 */
+	const CSV_CHUNK = 500;
+
+	/**
 	 * Pages per cron run. A ceiling, not a target — the time budget below is
 	 * what actually protects the PHP workers on a busy host, and a slow API
 	 * stops the loop well before this many pages.
@@ -301,6 +306,193 @@ class RL_FSBI_User_Sync
 		$state['offset'] = 0;
 
 		return $state;
+	}
+
+	/**
+	 * Full backfill, preferring the CSV export over the paged crawl.
+	 *
+	 * The export covers a plugin in one response, so a backfill that took about
+	 * an hour of cron finishes in seconds. The paged crawl stays as the fallback
+	 * whenever the export is unavailable.
+	 *
+	 * Only ever call this from WP-CLI: both paths are far too slow for a request.
+	 *
+	 * @param bool $prefer_csv Set false to force the paged crawl.
+	 * @return array Aggregate result.
+	 */
+	public function backfill($prefer_csv = true)
+	{
+		if ($prefer_csv) {
+			$rows   = 0;
+			$saved  = 0;
+			$errors = array();
+
+			foreach ($this->plugin_ids() as $plugin_id) {
+				$result = $this->backfill_from_csv($plugin_id);
+
+				if (is_wp_error($result)) {
+					$errors[] = $result->get_error_message();
+					continue;
+				}
+
+				$rows  += $result['rows'];
+				$saved += $result['saved'];
+			}
+
+			if ($saved > 0) {
+				return array('via' => 'csv', 'rows' => $rows, 'users' => $saved, 'errors' => $errors);
+			}
+		}
+
+		$result        = $this->backfill_all();
+		$result['via'] = 'crawl';
+
+		return $result;
+	}
+
+	/**
+	 * Import one plugin's whole user list from the CSV export.
+	 *
+	 * Streamed through a temp handle so a 1.5MB export never has to exist as an
+	 * array of 17,000 rows at once.
+	 *
+	 * @param int $plugin_id Plugin ID.
+	 * @return array|WP_Error {rows, saved}
+	 */
+	public function backfill_from_csv($plugin_id)
+	{
+		$api = $this->api();
+
+		if (! $api) {
+			update_option(self::OPT_ERROR, 'Freemius credentials are not configured.');
+			return new WP_Error('rl_fsbi_no_api', 'Freemius credentials are not configured.');
+		}
+
+		$body = $api->retrieve_users_csv((int) $plugin_id);
+
+		if (is_wp_error($body)) {
+			update_option(self::OPT_ERROR, $body->get_error_message());
+			return $body;
+		}
+
+		$handle = fopen('php://temp', 'r+');
+		fwrite($handle, $body);
+		rewind($handle);
+
+		$header = fgetcsv($handle, 0, ',', '"', '\\');
+
+		if (! is_array($header) || ! in_array('id', array_map('strtolower', $header), true)) {
+			fclose($handle);
+			return new WP_Error('rl_fsbi_csv_header', 'The CSV export has no id column.');
+		}
+
+		$header = array_map(function ($name) {
+			return strtolower(trim((string) $name));
+		}, $header);
+		$width = count($header);
+
+		$chunk = array();
+		$rows  = 0;
+		$saved = 0;
+
+		while (($line = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
+			if (array(null) === $line) {
+				continue;
+			}
+
+			$row = array_combine($header, array_pad(array_slice($line, 0, $width), $width, ''));
+
+			if (false === $row) {
+				continue;
+			}
+
+			$rows++;
+			$chunk[] = $row;
+
+			if (count($chunk) >= self::CSV_CHUNK) {
+				$saved += $this->upsert_users_bulk((int) $plugin_id, $chunk);
+				$chunk  = array();
+			}
+		}
+
+		if (! empty($chunk)) {
+			$saved += $this->upsert_users_bulk((int) $plugin_id, $chunk);
+		}
+
+		fclose($handle);
+
+		if ($rows > 0) {
+			// The export covers the plugin end to end, so the paged cursor has
+			// nothing left to reach in this cycle.
+			$this->save_state(array('plugin_index' => 0, 'offset' => 0));
+			update_option(self::OPT_CYCLE_DONE, time());
+			update_option(self::OPT_LAST_RUN, gmdate('Y-m-d H:i:s'));
+			delete_option(self::OPT_ERROR);
+		}
+
+		return array('rows' => $rows, 'saved' => $saved);
+	}
+
+	/**
+	 * Write a chunk of users in one statement.
+	 *
+	 * A REPLACE per row means one round-trip per user; against a remote database
+	 * that is minutes, not seconds.
+	 *
+	 * @param int   $plugin_id Plugin ID.
+	 * @param array $rows      Chunk of CSV rows.
+	 * @return int Rows written.
+	 */
+	private function upsert_users_bulk($plugin_id, array $rows)
+	{
+		global $wpdb;
+
+		$table  = $wpdb->prefix . 'rl_fsbi_users';
+		$values = array();
+		$count  = 0;
+
+		foreach ($rows as $row) {
+			$user_id = (int) ($row['id'] ?? 0);
+
+			if ($user_id <= 0) {
+				continue;
+			}
+
+			$email = isset($row['email']) ? sanitize_email((string) $row['email']) : '';
+
+			$email_sql   = '' === $email ? 'NULL' : $wpdb->prepare('%s', strtolower($email));
+			$created_sql = ! empty($row['created']) ? $wpdb->prepare('%s', (string) $row['created']) : 'NULL';
+			$first_sql   = $wpdb->prepare('%s', sanitize_text_field((string) ($row['first'] ?? '')));
+
+			$values[] = sprintf(
+				'(%d, %d, %s, %s, %d, %s)',
+				$user_id,
+				(int) $plugin_id,
+				$email_sql,
+				$first_sql,
+				! empty($row['is_marketing_allowed']) ? 1 : 0,
+				$created_sql
+			);
+
+			$count++;
+		}
+
+		if (empty($values)) {
+			return 0;
+		}
+
+		$wpdb->query(
+			"INSERT INTO {$table} (user_id, plugin_id, email, first_name, is_marketing_allowed, fs_created_at) VALUES "
+			. implode(', ', $values)
+			. ' ON DUPLICATE KEY UPDATE'
+			. ' plugin_id = VALUES(plugin_id),'
+			. ' email = VALUES(email),'
+			. ' first_name = VALUES(first_name),'
+			. ' is_marketing_allowed = VALUES(is_marketing_allowed),'
+			. ' fs_created_at = COALESCE(VALUES(fs_created_at), fs_created_at)'
+		);
+
+		return $count;
 	}
 
 	/**

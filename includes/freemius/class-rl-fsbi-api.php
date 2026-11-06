@@ -831,6 +831,62 @@ class RL_FSBI_API
 	}
 
 	/**
+	 * Download every user of a plugin as a single CSV document.
+	 *
+	 * The JSON list endpoint caps `count` at 50, so a full pass costs hundreds of
+	 * requests. This export returns the same users in one response, which is what
+	 * makes a complete backfill practical. It is deliberately kept out of web
+	 * requests: the download takes seconds.
+	 *
+	 * @param int   $plugin_id Plugin ID.
+	 * @param array $query     Optional filters (filter, search, email).
+	 * @return string|WP_Error Raw CSV body.
+	 */
+	public function retrieve_users_csv($plugin_id, $query = array())
+	{
+		$this->log('retrieve_users_csv() called', array('plugin_id' => $plugin_id));
+
+		$base_url = $this->use_sandbox ? self::SANDBOX_API_URL : self::PRODUCTION_API_URL;
+		$path     = "/v1/developers/{$this->developer_id}/plugins/{$plugin_id}/users.csv";
+
+		$url = $base_url . $path;
+		if (! empty($query)) {
+			$url = add_query_arg($query, $url);
+		}
+
+		$date = gmdate('D, d M Y H:i:s +0000');
+		$auth = $this->build_auth_header('GET', '', '', $date, parse_url($url, PHP_URL_PATH));
+
+		$response = $this->execute_with_retry($url, array(
+			'method'  => 'GET',
+			'timeout' => 120,
+			'headers' => array(
+				'Authorization' => $auth,
+				'Date'          => $date,
+			),
+		));
+
+		if (is_wp_error($response)) {
+			$this->log('retrieve_users_csv() network error', array('error' => $response->get_error_message()));
+			return $response;
+		}
+
+		$code = (int) wp_remote_retrieve_response_code($response);
+		if ($code < 200 || $code >= 300) {
+			$this->log('retrieve_users_csv() bad status', array('code' => $code));
+			return new WP_Error(
+				'rl_fsbi_users_csv',
+				sprintf('users.csv returned HTTP %d.', $code)
+			);
+		}
+
+		$body = (string) wp_remote_retrieve_body($response);
+		$this->log('retrieve_users_csv() completed', array('bytes' => strlen($body)));
+
+		return $body;
+	}
+
+	/**
 	 * Retrieve installs (sites) for a user or plugin.
 	 *
 	 * @param int   $plugin_id Plugin ID.

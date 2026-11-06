@@ -18,6 +18,9 @@ class RL_FSBI_CLI
 	 * [--all]
 	 * : Keep running until the whole user list has been covered.
 	 *
+	 * [--no-csv]
+	 * : Skip the CSV export and page through the JSON list instead.
+	 *
 	 * [--pages=<n>]
 	 * : Pages to fetch when --all is not used. Default 50.
 	 *
@@ -25,6 +28,7 @@ class RL_FSBI_CLI
 	 *
 	 *     wp rl-fsbi sync-users --all
 	 *     wp rl-fsbi sync-users --pages=10
+	 *     wp rl-fsbi sync-users --all --no-csv
 	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Associative arguments.
@@ -34,7 +38,23 @@ class RL_FSBI_CLI
 		$sync = new RL_FSBI_User_Sync();
 
 		if (! empty($assoc_args['all'])) {
-			$result = $sync->backfill_all();
+			$result = $sync->backfill(empty($assoc_args['no-csv']));
+
+			if ('csv' === $result['via']) {
+				\WP_CLI::success(
+					sprintf(
+						'Backfill finished from the CSV export: %d row(s) read, %d written in a single pass.',
+						$result['rows'],
+						$result['users']
+					)
+				);
+
+				foreach ($result['errors'] as $error) {
+					\WP_CLI::warning($error);
+				}
+
+				return;
+			}
 
 			\WP_CLI::success(
 				sprintf(

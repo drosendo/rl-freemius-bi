@@ -832,6 +832,12 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.12 (2026-11-06)
+- **`wp rl-fsbi sync-users --all` now finishes in seconds instead of an hour.** Freemius exposes a CSV export (`/v1/developers/{id}/plugins/{id}/users.csv`) that returns every user in one 1.5MB response, so the backfill reads 17,084 rows in a single request rather than 342 paged ones. Measured 17,084 rows written in 3.8s.
+- The import streams through a temp handle in 500-row chunks; the write path moved from one `REPLACE` per user to 35 multi-row `INSERT ... ON DUPLICATE KEY UPDATE` statements.
+- Deliberately CLI-only. Cron and the Settings button keep the resumable paged crawl, because the download takes seconds and does not belong in a web request. `--no-csv` forces the paged path; the command falls back to it automatically if the export is unavailable.
+- The incremental crawl is unchanged, so nothing about `/customers`, `/sync-status` or the cron contract moved.
+
 ### 1.3.11 (2026-11-06)
 - **User crawl is ~45% faster per run.** The page ceiling went from 20 to 30, so runs now use the 25-second budget that was already there instead of stopping early (measured: 1,450 users per run, up from 1,000, still 25.3s).
 - Corrected the documented crawl limits. The docs claimed "50 pages or 90 seconds"; the code has always run 20 pages in a 25-second budget. `README-API.md` now states the real values and explains why page size cannot be raised.

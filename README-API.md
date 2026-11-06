@@ -178,7 +178,29 @@ time budget is the real guard: a slow API stops the loop well before 30 pages.
 When a plugin's user list is exhausted the cursor moves to the next plugin; at
 the end of the list the cycle is marked complete and the cursor resets to 0.
 
-Manual backfill: `wp rl-fsbi sync-users --all`.
+### Manual backfill
+
+```
+wp rl-fsbi sync-users --all          # CSV export, one pass, ~4s
+wp rl-fsbi sync-users --all --no-csv # paged crawl, ~55 min
+```
+
+The backfill prefers the **CSV export** (`/v1/developers/{id}/plugins/{id}/users.csv`),
+which returns every user in a single 1.5MB response — 17,084 rows in one request,
+against 342 requests through the JSON list. It is imported through a temp stream
+in chunks of 500 rows per `INSERT`, so memory stays flat and the write is 35
+statements instead of 17,084 round-trips. Measured end to end on the local
+mirror: **17,084 rows written in 3.8s**.
+
+This path is **CLI-only**. The download alone takes several seconds, so it is
+never used from a web request or from cron — cron keeps the resumable paged
+crawl described above, and the Settings backfill button keeps its bounded crawl.
+If the export is unavailable the command falls back to the paged crawl on its
+own, and `--no-csv` forces that path deliberately.
+
+The export does not carry an `updated` column, so an imported row keeps any
+`fs_updated_at` it already had; `updated_at` is still refreshed by the database
+on every write, which is what `updated_since` reads.
 
 ## `GET /diagnostics`
 
