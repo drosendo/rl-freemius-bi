@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.3.10  
+**Version:** 1.3.28  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -10,6 +10,12 @@
 RL Freemius Business Intelligence (FSBI) is a comprehensive WordPress plugin that provides an enterprise-grade Business Intelligence dashboard for tracking plugin sales, revenue, subscriptions, renewals, MRR, trial conversions, license usage, and net payouts across all Freemius-hosted plugins.
 
 The plugin integrates directly with the Freemius REST API using HMAC-SHA256 authentication and provides real-time data synchronization, interactive dashboards with currency filtering, KPI tracking, trend analysis, and detailed transaction reports.
+
+## Screenshot
+
+![RL Freemius BI dashboard](assets/dashboard.png)
+
+*The per-plugin dashboard with demo data: revenue and payout cards, portfolio performance, MRR/ARR, churn reasons split by customer type, and the trial funnel.*
 
 ## Features
 
@@ -831,6 +837,10 @@ gh release create v1.3.11 /tmp/rl-freemius-bi-1.3.11.zip --target master --notes
 bumping `Version:` means no site will ever see it.
 
 ## Changelog
+
+### 1.3.28 (2026-11-06)
+- Added a dashboard screenshot to the README so the repository shows what the plugin looks like. Captured from the demo plugin's sample data, with the WordPress admin chrome cropped out; the image is excluded from the release archive via `.gitattributes` so the installable zip stays lean.
+- Corrected the version stamp in the README header, which had been left at 1.3.10.
 
 ### 1.3.27 (2026-11-06)
 - Release lookups are cached for **five minutes** instead of an hour. The Atom feed costs no API quota, so there is nothing to conserve, and the longer cache only widened the window in which a freshly published release stayed invisible. Updated on production end to end: with 1.3.25 installed, the Plugins screen now shows *"You have version 1.3.25 installed. Update to 1.3.26."*
