@@ -832,6 +832,9 @@ bumping `Version:` means no site will ever see it.
 
 ## Changelog
 
+### 1.3.25 (2026-11-06)
+- Republished the update-channel fix, which 1.3.24 carried only partially. Release assets are cached at GitHub's CDN edge, so replacing a release under the same tag kept serving the **previous** file: the download URL for v1.3.24 returned 301,478 bytes while the new build was 301,823. Never reuse a version number — publish a patch instead.
+
 ### 1.3.24 (2026-11-06)
 - **Release lookups no longer depend on the GitHub API quota.** `api.github.com` allows 60 anonymous requests per hour **per IP**, and a shared host shares that address with every other site on the machine, so the quota can be spent by traffic that has nothing to do with this plugin. The lookup now reads the public `releases.atom` feed (no quota), derives the download URL from the tag, verifies it with a HEAD request, and falls back to the `/releases/latest` redirect, the tag archive, or the API. The feed is used first because the redirect is cached at GitHub's CDN: minutes after publishing, `/releases/latest` still pointed at the previous tag while the feed already listed the new one.
 - **A failed lookup is no longer silent.** The outcome is stored and shown as a warning on the Plugins and Updates screens: *"No release could be read from GitHub (…). Last attempt 5 minutes ago. The plugin is unchanged; this only affects update detection."* Previously the only symptom was an update row that never appeared, which looks identical to being up to date.
