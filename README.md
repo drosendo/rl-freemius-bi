@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.3.29  
+**Version:** 1.3.30  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -837,6 +837,9 @@ gh release create v1.3.11 /tmp/rl-freemius-bi-1.3.11.zip --target master --notes
 bumping `Version:` means no site will ever see it.
 
 ## Changelog
+
+### 1.3.30 (2026-11-10)
+- **An autofilled email can no longer become a bogus Developer ID.** A vendor reported that the backfill failed after signing up, and that the browser had filled the Developer ID field with their email address. The field was a plain text input with no autocomplete hints, and the sanitizer kept only the digits — so `john1985@gmail.com` was saved as `1985`, a perfectly valid id belonging to someone else. Every request then authenticated as the wrong account, and the failure described the API rather than the field. The sanitizer now rejects non-numeric input and keeps the previous value, the backfill error names the missing or non-numeric credential, a notice on the plugin screens says the value was not saved, and the credential fields carry `autocomplete="off"` with a numeric keypad on mobile.
 
 ### 1.3.29 (2026-11-06)
 - Removed a personal email address from the README. The export section described the recipient as a hardcoded address when the code actually uses the site's `admin_email`, so the line was both a disclosure and inaccurate on a public repository.

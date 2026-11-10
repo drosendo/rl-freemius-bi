@@ -1113,3 +1113,46 @@
 })(jQuery);
 
 
+
+/**
+ * Stop browsers autofilling the Freemius credential fields.
+ *
+ * The Developer ID is a bare text input, so autofill happily drops an email
+ * into it. Server-side validation now refuses that, but the field should not
+ * invite the mistake in the first place.
+ */
+(function () {
+	'use strict';
+
+	function credentialField(name) {
+		return document.getElementById('rl_options_' + name) ||
+			document.querySelector('[name="rl_options[' + name + ']"]') ||
+			document.getElementById(name);
+	}
+
+	function hardenCredentialFields() {
+		var developerId = credentialField('rl_fsbi_developer_id');
+
+		if (developerId) {
+			developerId.setAttribute('autocomplete', 'off');
+			developerId.setAttribute('inputmode', 'numeric');
+			developerId.setAttribute('pattern', '[0-9]*');
+			developerId.setAttribute('spellcheck', 'false');
+		}
+
+		['rl_fsbi_public_key', 'rl_fsbi_secret_key'].forEach(function (name) {
+			var el = credentialField(name);
+
+			if (el) {
+				el.setAttribute('autocomplete', 'new-password');
+				el.setAttribute('spellcheck', 'false');
+			}
+		});
+	}
+
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', hardenCredentialFields);
+	} else {
+		hardenCredentialFields();
+	}
+})();

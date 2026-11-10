@@ -1507,7 +1507,26 @@ class RL_FSBI_Settings_Manager {
 	 * @return string
 	 */
 	public function sanitize_developer_id( $value ): string {
-		return preg_replace( '/[^0-9]/', '', (string) $value );
+		$raw = trim( sanitize_text_field( (string) $value ) );
+
+		if ( '' === $raw ) {
+			delete_option( 'rl_fsbi_developer_id_invalid' );
+
+			return '';
+		}
+
+		// Never coerce. Stripping the non-digits turned an autofilled address such
+		// as john1985@gmail.com into "1985", which saved cleanly and then failed
+		// every API call against a stranger's developer id.
+		if ( ! ctype_digit( $raw ) ) {
+			update_option( 'rl_fsbi_developer_id_invalid', 1, false );
+
+			return (string) $this->get_option( 'rl_fsbi_developer_id', '' );
+		}
+
+		delete_option( 'rl_fsbi_developer_id_invalid' );
+
+		return $raw;
 	}
 
 	/**

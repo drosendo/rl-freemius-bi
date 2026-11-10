@@ -236,7 +236,7 @@ class RL_FSBI_User_Sync
 		$api = $this->api();
 
 		if (! $api) {
-			update_option(self::OPT_ERROR, 'Freemius credentials are not configured.');
+			update_option(self::OPT_ERROR, $this->credentials_error());
 			return array('pages' => 0, 'users' => 0, 'offset' => 0, 'plugin_index' => 0, 'done' => false);
 		}
 
@@ -409,7 +409,7 @@ class RL_FSBI_User_Sync
 		$api = $this->api();
 
 		if (! $api) {
-			update_option(self::OPT_ERROR, 'Freemius credentials are not configured.');
+			update_option(self::OPT_ERROR, $this->credentials_error());
 			return new WP_Error('rl_fsbi_no_api', 'Freemius credentials are not configured.');
 		}
 
@@ -662,6 +662,36 @@ class RL_FSBI_User_Sync
 		}
 
 		return $ids;
+	}
+
+	/**
+	 * Explain which credential is missing, rather than blaming the API.
+	 *
+	 * @return string
+	 */
+	private function credentials_error()
+	{
+		$developer_id = (string) $this->settings->get_option('rl_fsbi_developer_id');
+		$public_key   = (string) $this->settings->get_option('rl_fsbi_public_key');
+		$secret_key   = (string) $this->settings->get_option('rl_fsbi_secret_key');
+
+		if ('' === trim($developer_id) || 0 === (int) $developer_id) {
+			return 'The Freemius Developer ID is missing or not a number. Set it under Settings - API credentials.';
+		}
+
+		$missing = array();
+		if ('' === trim($public_key)) {
+			$missing[] = 'public key';
+		}
+		if ('' === trim($secret_key)) {
+			$missing[] = 'secret key';
+		}
+
+		if (! empty($missing)) {
+			return 'Freemius credentials are incomplete: missing ' . implode(' and ', $missing) . '.';
+		}
+
+		return 'Freemius credentials are not configured.';
 	}
 
 	/**

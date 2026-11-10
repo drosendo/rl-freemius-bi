@@ -2290,6 +2290,32 @@ class RL_FSBI_Admin
 	/**
 	 * Warn on every Freemius BI screen when Kit is over the configured limit.
 	 */
+	/**
+	 * Warn when a non-numeric Developer ID was rejected on save.
+	 *
+	 * Stripping the digits out of an autofilled email used to save something
+	 * plausible-looking and then fail silently on every API call, so the value
+	 * is now refused and the reason is stated here.
+	 *
+	 * @return void
+	 */
+	public function render_credential_notice()
+	{
+		if (! current_user_can('manage_options') || ! $this->is_plugin_page()) {
+			return;
+		}
+
+		if (! get_option('rl_fsbi_developer_id_invalid')) {
+			return;
+		}
+
+		printf(
+			'<div class="notice notice-warning is-dismissible"><p><strong>%s</strong> %s</p></div>',
+			esc_html__('Developer ID not saved.', 'rl-freemius-bi'),
+			esc_html__('The Freemius Developer ID must be numbers only, so the previous value was kept. Check the field for an autofilled email address.', 'rl-freemius-bi')
+		);
+	}
+
 	public function render_kit_quota_notice()
 	{
 		if (! current_user_can('manage_options') || ! $this->is_plugin_page()) {
