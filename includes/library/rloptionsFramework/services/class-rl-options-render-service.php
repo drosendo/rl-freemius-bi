@@ -6,7 +6,7 @@
  * Encapsulates all admin page rendering logic separated from the main framework orchestration.
  * This service handles page layout, tabs, sections, fields, and tooltips.
  *
- * @package RL_FSBI_Options_Framework
+ * @package RL_Options_Framework
  */
 
 if (!defined('ABSPATH')) {
@@ -17,12 +17,12 @@ if (!defined('ABSPATH')) {
  * Render service for the options framework.
  * Delegates core framework logic through dependency injection.
  */
-class RL_FSBI_Options_Render_Service
+class RL_Options_Render_Service
 {
 	/**
 	 * Framework instance reference.
 	 *
-	 * @var RL_FSBI_Options_Framework
+	 * @var RL_Options_Framework
 	 */
 	private $framework;
 
@@ -36,9 +36,9 @@ class RL_FSBI_Options_Render_Service
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_FSBI_Options_Framework $framework Framework instance.
+	 * @param RL_Options_Framework $framework Framework instance.
 	 */
-	public function __construct(RL_FSBI_Options_Framework $framework)
+	public function __construct(RL_Options_Framework $framework)
 	{
 		$this->framework = $framework;
 	}
@@ -73,10 +73,10 @@ class RL_FSBI_Options_Render_Service
 
 			<?php if (empty($tabs)): ?>
 				<div class="notice notice-warning">
-					<p><?php esc_html_e('No settings tabs have been registered yet.', RL_FSBI_Options_Framework::text_domain()); ?></p>
+					<p><?php esc_html_e('No settings tabs have been registered yet.', RL_Options_Framework::text_domain()); ?></p>
 					<p><?php 
 						/* translators: %s: filter name */
-						printf(esc_html__('Use the %s filter to add settings tabs.', RL_FSBI_Options_Framework::text_domain()), '<code>' . esc_html($this->framework->config['option_name'] . '_framework_tabs') . '</code>'); 
+						printf(esc_html__('Use the %s filter to add settings tabs.', RL_Options_Framework::text_domain()), '<code>' . esc_html($this->framework->config['option_name'] . '_framework_tabs') . '</code>'); 
 					?></p>
 					</p>
 				</div>
@@ -148,7 +148,7 @@ class RL_FSBI_Options_Render_Service
 
 				<div class="rl-submit-bar">
 					<button type="submit" class="button button-primary">
-						<?php esc_html_e('Save changes', RL_FSBI_Options_Framework::text_domain()); ?>
+						<?php esc_html_e('Save changes', RL_Options_Framework::text_domain()); ?>
 					</button>
 				</div>
 			</form>
@@ -272,7 +272,7 @@ class RL_FSBI_Options_Render_Service
 	private function render_section_inner(array $section, array $options): void
 	{
 		if (empty($section['fields'])) {
-			echo '<p class="description">' . esc_html__('No settings available for this section yet.', RL_FSBI_Options_Framework::text_domain()) . '</p>';
+			echo '<p class="description">' . esc_html__('No settings available for this section yet.', RL_Options_Framework::text_domain()) . '</p>';
 			return;
 		}
 
@@ -608,7 +608,7 @@ class RL_FSBI_Options_Render_Service
 			return $html;
 		}
 
-		RL_FSBI_Logger::warn(
+		RL_Logger::warn(
 			'Field output contains a <form> tag. Nested forms close the settings form and break saving; the tag was stripped.',
 			[
 				'field' => (string) ($field['id'] ?? ''),

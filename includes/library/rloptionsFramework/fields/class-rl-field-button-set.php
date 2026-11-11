@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Segmented button group (single or multi select).
  */
-class RL_FSBI_Field_Button_Set implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Button_Set implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{
@@ -75,7 +75,7 @@ class RL_FSBI_Field_Button_Set implements RL_FSBI_Field_Interface, RL_FSBI_Field
 			if (!in_array((string) $item, $allowed, true)) {
 				$error = sprintf(
 					/* translators: %s: field label */
-					__('%s has an invalid option selected.', RL_FSBI_Options_Framework::text_domain()),
+					__('%s has an invalid option selected.', RL_Options_Framework::text_domain()),
 					$context['field_label'] ?? 'Field'
 				);
 				return false;

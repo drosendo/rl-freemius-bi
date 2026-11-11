@@ -10,7 +10,7 @@
  * - url: text with URL validation
  * - nif: text with Portuguese NIF validation
  *
- * @package RL_FSBI_Options_Framework
+ * @package RL_Options_Framework
  * @version 2.4.0
  */
 
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 	return;
 }
 
-class RL_FSBI_Field_Types
+class RL_Field_Types
 {
 	/**
 	 * Get field type definition for a typed alias

@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) {
 	return;
 }
 
-interface RL_FSBI_Field_Interface
+interface RL_Field_Interface
 {
 	/**
 	 * Render field control markup.

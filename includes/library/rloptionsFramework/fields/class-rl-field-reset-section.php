@@ -3,7 +3,7 @@
 /**
  * RL Options Field - Reset Section
  *
- * @package RL_FSBI_Options_Framework
+ * @package RL_Options_Framework
  */
 
 if (!defined('ABSPATH')) {
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 /**
  * Reset Section field type.
  */
-class RL_FSBI_Field_Reset_Section implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Reset_Section implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	/**
 	 * Get field type identifier.
@@ -28,10 +28,10 @@ class RL_FSBI_Field_Reset_Section implements RL_FSBI_Field_Interface, RL_FSBI_Fi
 	 */
 	public function render(array $field, $value, array $context = []): void
 	{
-		$label = $field['button_label'] ?? __('Reset Section Settings', RL_FSBI_Options_Framework::text_domain());
-		$confirm_msg = $field['confirm_message'] ?? __('Are you sure you want to reset all settings in this section to their defaults? This cannot be undone.', RL_FSBI_Options_Framework::text_domain());
+		$label = $field['button_label'] ?? __('Reset Section Settings', RL_Options_Framework::text_domain());
+		$confirm_msg = $field['confirm_message'] ?? __('Are you sure you want to reset all settings in this section to their defaults? This cannot be undone.', RL_Options_Framework::text_domain());
 
-		$framework = $context['framework'] ?? RL_FSBI_Options_Framework::instance();
+		$framework = $context['framework'] ?? RL_Options_Framework::instance();
 		$reset_input_name = $framework->get_config('form_field_prefix') . '_reset_section';
 
 		$tab_id = $field['__tab_id'] ?? '';

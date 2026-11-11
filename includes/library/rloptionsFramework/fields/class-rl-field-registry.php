@@ -5,19 +5,19 @@ if (!defined('ABSPATH')) {
 	return;
 }
 
-class RL_FSBI_Field_Registry
+class RL_Field_Registry
 {
 	/**
-	 * @var array<string,RL_FSBI_Field_Interface>
+	 * @var array<string,RL_Field_Interface>
 	 */
 	private array $renderers = [];
 
-	public function register(RL_FSBI_Field_Interface $renderer): void
+	public function register(RL_Field_Interface $renderer): void
 	{
 		$this->renderers[$renderer->type()] = $renderer;
 	}
 
-	public function get(string $type): ?RL_FSBI_Field_Interface
+	public function get(string $type): ?RL_Field_Interface
 	{
 		return $this->renderers[$type] ?? null;
 	}

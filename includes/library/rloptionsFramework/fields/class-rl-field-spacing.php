@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Spacing field: same payload as dimensions, with its own type slug for clarity.
  */
-class RL_FSBI_Field_Spacing extends RL_FSBI_Field_Dimensions
+class RL_Field_Spacing extends RL_Field_Dimensions
 {
 	public function type(): string
 	{

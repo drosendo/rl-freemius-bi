@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Rich text editor backed by wp_editor().
  */
-class RL_FSBI_Field_Editor implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Editor implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{

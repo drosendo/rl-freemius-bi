@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Visual divider with an optional heading and description.
  */
-class RL_FSBI_Field_Divider implements RL_FSBI_Field_Interface
+class RL_Field_Divider implements RL_Field_Interface
 {
 	public function type(): string
 	{

@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Raw output field: `callback` (callable) or `html` (trusted markup).
  */
-class RL_FSBI_Field_Raw implements RL_FSBI_Field_Interface
+class RL_Field_Raw implements RL_Field_Interface
 {
 	public function type(): string
 	{

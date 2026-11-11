@@ -8,28 +8,28 @@
  * - Export and import
  * - Reset to schema defaults
  *
- * @package RL_FSBI_Options_Framework
+ * @package RL_Options_Framework
  * @since 2.1.0
  */
 
 /**
  * Storage service for RL Options Framework.
  */
-class RL_FSBI_Options_Storage_Service {
+class RL_Options_Storage_Service {
 
 	/**
 	 * Framework instance.
 	 *
-	 * @var RL_FSBI_Options_Framework
+	 * @var RL_Options_Framework
 	 */
 	private $framework;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_FSBI_Options_Framework $framework Framework instance.
+	 * @param RL_Options_Framework $framework Framework instance.
 	 */
-	public function __construct( RL_FSBI_Options_Framework $framework ) {
+	public function __construct( RL_Options_Framework $framework ) {
 		$this->framework = $framework;
 	}
 
@@ -105,14 +105,14 @@ class RL_FSBI_Options_Storage_Service {
 		if ( json_last_error() !== JSON_ERROR_NONE ) {
 			return new WP_Error(
 				'invalid_json',
-				__( 'Invalid JSON format.', RL_FSBI_Options_Framework::text_domain() )
+				__( 'Invalid JSON format.', RL_Options_Framework::text_domain() )
 			);
 		}
 
 		if ( ! isset( $data['settings'] ) || ! is_array( $data['settings'] ) ) {
 			return new WP_Error(
 				'invalid_format',
-				__( 'Invalid settings format.', RL_FSBI_Options_Framework::text_domain() )
+				__( 'Invalid settings format.', RL_Options_Framework::text_domain() )
 			);
 		}
 
@@ -128,7 +128,7 @@ class RL_FSBI_Options_Storage_Service {
 		if ( empty( $input ) && ! empty( $raw_settings ) ) {
 			return new WP_Error(
 				'invalid_settings_payload',
-				__( 'Imported settings do not contain any recognized framework fields.', RL_FSBI_Options_Framework::text_domain() )
+				__( 'Imported settings do not contain any recognized framework fields.', RL_Options_Framework::text_domain() )
 			);
 		}
 
@@ -153,7 +153,7 @@ class RL_FSBI_Options_Storage_Service {
 					? $error
 					: sprintf(
 						/* translators: %s: field label */
-						__( 'Invalid value for %s.', RL_FSBI_Options_Framework::text_domain() ),
+						__( 'Invalid value for %s.', RL_Options_Framework::text_domain() ),
 						$this->framework->get_field_label( $field )
 					);
 				continue;

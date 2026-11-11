@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) {
 	return;
 }
 
-class RL_FSBI_Field_Number implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Number implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{
@@ -76,7 +76,7 @@ class RL_FSBI_Field_Number implements RL_FSBI_Field_Interface, RL_FSBI_Field_Pro
 		if (!is_numeric($value)) {
 			$error = sprintf(
 				/* translators: %s: field label */
-				__('%s must be a valid number.', RL_FSBI_Options_Framework::text_domain()),
+				__('%s must be a valid number.', RL_Options_Framework::text_domain()),
 				$field_label
 			);
 			return false;
@@ -85,7 +85,7 @@ class RL_FSBI_Field_Number implements RL_FSBI_Field_Interface, RL_FSBI_Field_Pro
 		if (isset($field['min']) && $value < $field['min']) {
 			$error = sprintf(
 				/* translators: 1: field label, 2: min value */
-				__('%1$s must be at least %2$s.', RL_FSBI_Options_Framework::text_domain()),
+				__('%1$s must be at least %2$s.', RL_Options_Framework::text_domain()),
 				$field_label,
 				$field['min']
 			);
@@ -95,7 +95,7 @@ class RL_FSBI_Field_Number implements RL_FSBI_Field_Interface, RL_FSBI_Field_Pro
 		if (isset($field['max']) && $value > $field['max']) {
 			$error = sprintf(
 				/* translators: 1: field label, 2: max value */
-				__('%1$s must be no more than %2$s.', RL_FSBI_Options_Framework::text_domain()),
+				__('%1$s must be no more than %2$s.', RL_Options_Framework::text_domain()),
 				$field_label,
 				$field['max']
 			);

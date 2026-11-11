@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Multi-image gallery storing an ordered list of attachment IDs.
  */
-class RL_FSBI_Field_Gallery implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Gallery implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{
@@ -35,13 +35,13 @@ class RL_FSBI_Field_Gallery implements RL_FSBI_Field_Interface, RL_FSBI_Field_Pr
 				'<span class="rl-gallery-item" data-id="%1$d">%2$s<button type="button" class="rl-gallery-remove" aria-label="%3$s">&times;</button></span>',
 				(int) $attachment_id,
 				$thumb ? $thumb : '<span class="rl-gallery-placeholder">#' . (int) $attachment_id . '</span>', // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-				esc_attr__('Remove image', RL_FSBI_Options_Framework::text_domain())
+				esc_attr__('Remove image', RL_Options_Framework::text_domain())
 			);
 		}
 
 		printf(
 			'</div><button type="button" class="button rl-gallery-add">%s</button></div>',
-			esc_html__('Add images', RL_FSBI_Options_Framework::text_domain())
+			esc_html__('Add images', RL_Options_Framework::text_domain())
 		);
 	}
 

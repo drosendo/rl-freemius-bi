@@ -9,28 +9,28 @@
  * - AJAX field options resolution (async option providers)
  * - AJAX field validation (inline validation checks)
  *
- * @package RL_FSBI_Options_Framework
+ * @package RL_Options_Framework
  * @since 2.1.0
  */
 
 /**
  * Admin handler service for RL Options Framework.
  */
-class RL_FSBI_Options_Admin_Handler {
+class RL_Options_Admin_Handler {
 
 	/**
 	 * Framework instance.
 	 *
-	 * @var RL_FSBI_Options_Framework
+	 * @var RL_Options_Framework
 	 */
 	private $framework;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_FSBI_Options_Framework $framework Framework instance.
+	 * @param RL_Options_Framework $framework Framework instance.
 	 */
-	public function __construct( RL_FSBI_Options_Framework $framework ) {
+	public function __construct( RL_Options_Framework $framework ) {
 		$this->framework = $framework;
 	}
 
@@ -41,20 +41,20 @@ class RL_FSBI_Options_Admin_Handler {
 	 * fires hooks, and redirects with status.
 	 */
 	public function handle_save(): void {
-		RL_FSBI_Logger::debug( '========== SAVE HANDLER START ==========' );
+		RL_Logger::debug( '========== SAVE HANDLER START ==========' );
 
 		if ( ! current_user_can( $this->framework->get_config( 'capability' ) ) ) {
-			RL_FSBI_Logger::error( 'User does not have required capability.', [ 'capability' => $this->framework->get_config( 'capability' ) ] );
-			wp_die( esc_html__( 'You are not allowed to manage these settings.', RL_FSBI_Options_Framework::text_domain() ) );
+			RL_Logger::error( 'User does not have required capability.', [ 'capability' => $this->framework->get_config( 'capability' ) ] );
+			wp_die( esc_html__( 'You are not allowed to manage these settings.', RL_Options_Framework::text_domain() ) );
 		}
 
 		$nonce_action = $this->framework->get_config( 'page_slug' ) . '_save_options';
 		$nonce_field  = $this->framework->get_config( 'form_field_prefix' ) . '_nonce';
 		check_admin_referer( $nonce_action, $nonce_field );
-		RL_FSBI_Logger::debug( 'Nonce verified successfully.' );
+		RL_Logger::debug( 'Nonce verified successfully.' );
 
 		$fields_map = $this->framework->get_fields_index();
-		RL_FSBI_Logger::debug( 'Total fields registered: ' . count( $fields_map ) );
+		RL_Logger::debug( 'Total fields registered: ' . count( $fields_map ) );
 
 		// Check for reset section payload
 		$reset_section_input_name = $this->framework->get_config( 'form_field_prefix' ) . '_reset_section';
@@ -83,21 +83,21 @@ class RL_FSBI_Options_Admin_Handler {
 		}
 
 		$input = isset( $_POST[ $this->framework->get_config( 'form_field_prefix' ) ] ) ? wp_unslash( $_POST[ $this->framework->get_config( 'form_field_prefix' ) ] ) : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		RL_FSBI_Logger::debug( 'Form field prefix: ' . $this->framework->get_config( 'form_field_prefix' ) );
+		RL_Logger::debug( 'Form field prefix: ' . $this->framework->get_config( 'form_field_prefix' ) );
 
 		if ( ! is_array( $input ) ) {
-			RL_FSBI_Logger::warn( 'Input is not an array; defaulting to empty array.' );
+			RL_Logger::warn( 'Input is not an array; defaulting to empty array.' );
 			$input = [];
 		}
 		$this->framework->set_validation_context( $input );
 
-		RL_FSBI_Logger::debug( 'Submitted field count: ' . count( $input ) );
+		RL_Logger::debug( 'Submitted field count: ' . count( $input ) );
 
 		$saved = get_option( $this->framework->get_config( 'option_name' ), [] );
 		if ( ! is_array( $saved ) ) {
 			$saved = [];
 		}
-		RL_FSBI_Logger::debug( 'Existing saved fields: ' . count( $saved ) );
+		RL_Logger::debug( 'Existing saved fields: ' . count( $saved ) );
 
 		$validation_errors = [];
 		$field_errors      = [];
@@ -122,7 +122,7 @@ class RL_FSBI_Options_Admin_Handler {
 					'section_id'  => $field['__section_id'] ?? '',
 					'message'     => $error,
 				];
-				RL_FSBI_Logger::warn( 'Validation failed for field.', [ 'field_id' => $field_id, 'error' => $error ] );
+				RL_Logger::warn( 'Validation failed for field.', [ 'field_id' => $field_id, 'error' => $error ] );
 				continue;
 			}
 
@@ -134,7 +134,7 @@ class RL_FSBI_Options_Admin_Handler {
 		// If validation errors, redirect with error message.
 		if ( ! empty( $validation_errors ) ) {
 			$error_message = implode( ' ', array_values( $validation_errors ) );
-			RL_FSBI_Logger::warn( 'Validation errors found.', [ 'message' => $error_message ] );
+			RL_Logger::warn( 'Validation errors found.', [ 'message' => $error_message ] );
 			$message_param = $this->framework->get_config( 'form_field_prefix' ) . '_message';
 			$error_param   = $this->framework->get_config( 'form_field_prefix' ) . '_error';
 			wp_safe_redirect(
@@ -151,14 +151,14 @@ class RL_FSBI_Options_Admin_Handler {
 		}
 
 		$update_result = update_option( $this->framework->get_config( 'option_name' ), $saved );
-		RL_FSBI_Logger::info( 'update_option result: ' . ( $update_result ? 'SUCCESS' : 'FAILED (or unchanged)' ) );
-		RL_FSBI_Logger::info( 'Total fields saved: ' . count( $saved ) );
+		RL_Logger::info( 'update_option result: ' . ( $update_result ? 'SUCCESS' : 'FAILED (or unchanged)' ) );
+		RL_Logger::info( 'Total fields saved: ' . count( $saved ) );
 
 		// Fire generic post-save hooks for host integrations.
 		do_action( $this->framework->get_config( 'option_name' ) . '_settings_saved', $saved ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound
 		do_action( 'rl_options_framework_settings_saved', $saved, $this->framework->get_config(), $this->framework ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 
-		RL_FSBI_Logger::debug( '========== SAVE HANDLER END ==========' );
+		RL_Logger::debug( '========== SAVE HANDLER END ==========' );
 
 		$message_param = $this->framework->get_config( 'form_field_prefix' ) . '_message';
 		wp_safe_redirect(
@@ -180,8 +180,8 @@ class RL_FSBI_Options_Admin_Handler {
 	 * fires hooks, and returns JSON response.
 	 */
 	public function handle_ajax_save(): void {
-		RL_FSBI_Logger::debug( '========== AJAX SAVE HANDLER CALLED ==========' );
-		RL_FSBI_Logger::debug( 'Expected nonce action: ' . $this->framework->get_config( 'ajax_action' ) . '_nonce' );
+		RL_Logger::debug( '========== AJAX SAVE HANDLER CALLED ==========' );
+		RL_Logger::debug( 'Expected nonce action: ' . $this->framework->get_config( 'ajax_action' ) . '_nonce' );
 
 		// Verify nonce (accept AJAX nonce and fallback to form nonce).
 		$ajax_nonce_action = $this->framework->get_config( 'ajax_action' ) . '_nonce';
@@ -194,13 +194,13 @@ class RL_FSBI_Options_Admin_Handler {
 		$ajax_nonce_valid = ! empty( $ajax_nonce ) && wp_verify_nonce( $ajax_nonce, $ajax_nonce_action );
 		$form_nonce_valid = ! empty( $form_nonce ) && wp_verify_nonce( $form_nonce, $form_nonce_action );
 
-		RL_FSBI_Logger::debug( 'AJAX nonce valid: ' . ( $ajax_nonce_valid ? 'yes' : 'no' ) );
-		RL_FSBI_Logger::debug( 'Form nonce valid: ' . ( $form_nonce_valid ? 'yes' : 'no' ) );
+		RL_Logger::debug( 'AJAX nonce valid: ' . ( $ajax_nonce_valid ? 'yes' : 'no' ) );
+		RL_Logger::debug( 'Form nonce valid: ' . ( $form_nonce_valid ? 'yes' : 'no' ) );
 
 		if ( ! $ajax_nonce_valid && ! $form_nonce_valid ) {
 			wp_send_json_error(
 				[
-					'message' => __( 'Security check failed. Please refresh the page and try again.', RL_FSBI_Options_Framework::text_domain() ),
+					'message' => __( 'Security check failed. Please refresh the page and try again.', RL_Options_Framework::text_domain() ),
 				],
 				403
 			);
@@ -210,15 +210,15 @@ class RL_FSBI_Options_Admin_Handler {
 		if ( ! current_user_can( $this->framework->get_config( 'capability' ) ) ) {
 			wp_send_json_error(
 				[
-					'message' => __( 'You are not allowed to manage these settings.', RL_FSBI_Options_Framework::text_domain() ),
+					'message' => __( 'You are not allowed to manage these settings.', RL_Options_Framework::text_domain() ),
 				]
 			);
 		}
 
-		RL_FSBI_Logger::debug( '========== AJAX SAVE START ==========' );
+		RL_Logger::debug( '========== AJAX SAVE START ==========' );
 
 		$fields_map = $this->framework->get_fields_index();
-		RL_FSBI_Logger::debug( 'Total fields registered: ' . count( $fields_map ) );
+		RL_Logger::debug( 'Total fields registered: ' . count( $fields_map ) );
 
 		// Check for import payload first
 		$import_input_name = $this->framework->get_config( 'form_field_prefix' ) . '_import_json';
@@ -243,7 +243,7 @@ class RL_FSBI_Options_Admin_Handler {
 
 			wp_send_json_success(
 				[
-					'message' => __( 'Settings imported successfully. The page will reload.', RL_FSBI_Options_Framework::text_domain() ),
+					'message' => __( 'Settings imported successfully. The page will reload.', RL_Options_Framework::text_domain() ),
 					'imported' => true,
 				]
 			);
@@ -260,7 +260,7 @@ class RL_FSBI_Options_Admin_Handler {
 
 			wp_send_json_success(
 				[
-					'message' => __( 'Settings reset successfully. The page will reload.', RL_FSBI_Options_Framework::text_domain() ),
+					'message' => __( 'Settings reset successfully. The page will reload.', RL_Options_Framework::text_domain() ),
 					'imported' => true, // We can reuse the `imported` flag to trigger the page reload in JS
 				]
 			);
@@ -280,7 +280,7 @@ class RL_FSBI_Options_Admin_Handler {
 
 				wp_send_json_success(
 					[
-						'message' => __( 'Section settings reset successfully. The page will reload.', RL_FSBI_Options_Framework::text_domain() ),
+						'message' => __( 'Section settings reset successfully. The page will reload.', RL_Options_Framework::text_domain() ),
 						'imported' => true, // Reusing `imported` flag to trigger page reload
 					]
 				);
@@ -288,10 +288,10 @@ class RL_FSBI_Options_Admin_Handler {
 		}
 
 		$input = isset( $_POST[ $this->framework->get_config( 'form_field_prefix' ) ] ) ? wp_unslash( $_POST[ $this->framework->get_config( 'form_field_prefix' ) ] ) : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		RL_FSBI_Logger::debug( 'Submitted field count: ' . count( $input ) );
+		RL_Logger::debug( 'Submitted field count: ' . count( $input ) );
 
 		if ( ! is_array( $input ) ) {
-			RL_FSBI_Logger::warn( 'Input is not an array.' );
+			RL_Logger::warn( 'Input is not an array.' );
 			$input = [];
 		}
 		$this->framework->set_validation_context( $input );
@@ -324,7 +324,7 @@ class RL_FSBI_Options_Admin_Handler {
 					'section_id'  => $field['__section_id'] ?? '',
 					'message'     => $error,
 				];
-				RL_FSBI_Logger::warn( 'AJAX validation failed for field.', [ 'field_id' => $field_id, 'error' => $error ] );
+				RL_Logger::warn( 'AJAX validation failed for field.', [ 'field_id' => $field_id, 'error' => $error ] );
 				continue;
 			}
 
@@ -335,7 +335,7 @@ class RL_FSBI_Options_Admin_Handler {
 
 		// If validation errors, return error.
 		if ( ! empty( $validation_errors ) ) {
-			RL_FSBI_Logger::warn( 'AJAX validation errors.', $validation_errors );
+			RL_Logger::warn( 'AJAX validation errors.', $validation_errors );
 			wp_send_json_error(
 				[
 					'message'       => implode( ' ', array_values( $validation_errors ) ),
@@ -346,18 +346,18 @@ class RL_FSBI_Options_Admin_Handler {
 		}
 
 		$update_result = update_option( $this->framework->get_config( 'option_name' ), $saved );
-		RL_FSBI_Logger::info( 'AJAX update_option result: ' . ( $update_result ? 'SUCCESS' : 'FAILED (or unchanged)' ) );
-		RL_FSBI_Logger::info( 'Total fields saved: ' . count( $saved ) );
+		RL_Logger::info( 'AJAX update_option result: ' . ( $update_result ? 'SUCCESS' : 'FAILED (or unchanged)' ) );
+		RL_Logger::info( 'Total fields saved: ' . count( $saved ) );
 
 		// Fire generic post-save hooks for host integrations.
 		do_action( $this->framework->get_config( 'option_name' ) . '_settings_saved', $saved ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound
 		do_action( 'rl_options_framework_settings_saved', $saved, $this->framework->get_config(), $this->framework ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 
-		RL_FSBI_Logger::debug( '========== AJAX SAVE END ==========' );
+		RL_Logger::debug( '========== AJAX SAVE END ==========' );
 
 		wp_send_json_success(
 			[
-				'message' => __( 'Settings saved successfully.', RL_FSBI_Options_Framework::text_domain() ),
+				'message' => __( 'Settings saved successfully.', RL_Options_Framework::text_domain() ),
 				'saved'   => count( $saved ),
 			]
 		);
@@ -373,14 +373,14 @@ class RL_FSBI_Options_Admin_Handler {
 		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
 		if ( empty( $nonce ) || ! wp_verify_nonce( $nonce, $this->framework->get_config( 'ajax_action' ) . '_nonce' ) ) {
 			wp_send_json_error(
-				[ 'message' => __( 'Security check failed.', RL_FSBI_Options_Framework::text_domain() ) ],
+				[ 'message' => __( 'Security check failed.', RL_Options_Framework::text_domain() ) ],
 				403
 			);
 		}
 
 		if ( ! current_user_can( $this->framework->get_config( 'capability' ) ) ) {
 			wp_send_json_error(
-				[ 'message' => __( 'You are not allowed to perform this action.', RL_FSBI_Options_Framework::text_domain() ) ],
+				[ 'message' => __( 'You are not allowed to perform this action.', RL_Options_Framework::text_domain() ) ],
 				403
 			);
 		}
@@ -394,7 +394,7 @@ class RL_FSBI_Options_Admin_Handler {
 		$fields_map = $this->framework->get_fields_index();
 		if ( $field_id === '' || empty( $fields_map[ $field_id ] ) ) {
 			wp_send_json_error(
-				[ 'message' => __( 'Unknown field.', RL_FSBI_Options_Framework::text_domain() ) ],
+				[ 'message' => __( 'Unknown field.', RL_Options_Framework::text_domain() ) ],
 				400
 			);
 		}
@@ -420,14 +420,14 @@ class RL_FSBI_Options_Admin_Handler {
 		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
 		if ( empty( $nonce ) || ! wp_verify_nonce( $nonce, $this->framework->get_config( 'ajax_action' ) . '_nonce' ) ) {
 			wp_send_json_error(
-				[ 'message' => __( 'Security check failed.', RL_FSBI_Options_Framework::text_domain() ) ],
+				[ 'message' => __( 'Security check failed.', RL_Options_Framework::text_domain() ) ],
 				403
 			);
 		}
 
 		if ( ! current_user_can( $this->framework->get_config( 'capability' ) ) ) {
 			wp_send_json_error(
-				[ 'message' => __( 'You are not allowed to perform this action.', RL_FSBI_Options_Framework::text_domain() ) ],
+				[ 'message' => __( 'You are not allowed to perform this action.', RL_Options_Framework::text_domain() ) ],
 				403
 			);
 		}
@@ -441,7 +441,7 @@ class RL_FSBI_Options_Admin_Handler {
 		$fields_map = $this->framework->get_fields_index();
 		if ( $field_id === '' || empty( $fields_map[ $field_id ] ) ) {
 			wp_send_json_error(
-				[ 'message' => __( 'Unknown field.', RL_FSBI_Options_Framework::text_domain() ) ],
+				[ 'message' => __( 'Unknown field.', RL_Options_Framework::text_domain() ) ],
 				400
 			);
 		}

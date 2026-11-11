@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Linear / radial gradient builder with a live CSS preview.
  */
-class RL_FSBI_Field_Color_Gradient extends RL_FSBI_Field_Composite
+class RL_Field_Color_Gradient extends RL_Field_Composite
 {
 	public function type(): string
 	{
@@ -18,16 +18,16 @@ class RL_FSBI_Field_Color_Gradient extends RL_FSBI_Field_Composite
 	protected function sub_fields(): array
 	{
 		return [
-			'from'  => [ 'type' => 'color', 'label' => __('From', RL_FSBI_Options_Framework::text_domain()), 'default' => '#2271b1' ],
-			'to'    => [ 'type' => 'color', 'label' => __('To', RL_FSBI_Options_Framework::text_domain()), 'default' => '#135e96' ],
-			'angle' => [ 'type' => 'number', 'label' => __('Angle', RL_FSBI_Options_Framework::text_domain()), 'default' => 180, 'min' => 0, 'max' => 360, 'range' => true ],
+			'from'  => [ 'type' => 'color', 'label' => __('From', RL_Options_Framework::text_domain()), 'default' => '#2271b1' ],
+			'to'    => [ 'type' => 'color', 'label' => __('To', RL_Options_Framework::text_domain()), 'default' => '#135e96' ],
+			'angle' => [ 'type' => 'number', 'label' => __('Angle', RL_Options_Framework::text_domain()), 'default' => 180, 'min' => 0, 'max' => 360, 'range' => true ],
 			'type'  => [
 				'type'    => 'select',
-				'label'   => __('Type', RL_FSBI_Options_Framework::text_domain()),
+				'label'   => __('Type', RL_Options_Framework::text_domain()),
 				'default' => 'linear',
 				'options' => [
-					'linear' => __('Linear', RL_FSBI_Options_Framework::text_domain()),
-					'radial' => __('Radial', RL_FSBI_Options_Framework::text_domain()),
+					'linear' => __('Linear', RL_Options_Framework::text_domain()),
+					'radial' => __('Radial', RL_Options_Framework::text_domain()),
 				],
 			],
 		];

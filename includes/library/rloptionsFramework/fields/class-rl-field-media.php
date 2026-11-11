@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Single media picker (image, video, audio or any file) storing the attachment URL.
  */
-class RL_FSBI_Field_Media implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Media implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{
@@ -33,13 +33,13 @@ class RL_FSBI_Field_Media implements RL_FSBI_Field_Interface, RL_FSBI_Field_Proc
 			' <button type="button" class="button rl-pick-media" data-input-id="%1$s" data-media-type="%2$s">%3$s</button>',
 			esc_attr($input_id),
 			esc_attr($media_type),
-			esc_html__('Select media', RL_FSBI_Options_Framework::text_domain())
+			esc_html__('Select media', RL_Options_Framework::text_domain())
 		);
 		printf(
 			' <button type="button" class="button rl-clear-media" data-input-id="%1$s"%2$s>%3$s</button>',
 			esc_attr($input_id),
 			'' === $value ? ' style="display:none;"' : '',
-			esc_html__('Remove', RL_FSBI_Options_Framework::text_domain())
+			esc_html__('Remove', RL_Options_Framework::text_domain())
 		);
 		printf('<div class="rl-media-preview">%s</div>', '' === $value ? '' : $this->preview($value, $media_type));
 		echo '</div>';

@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) {
 	return;
 }
 
-class RL_FSBI_Field_Text implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Text implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{
@@ -44,7 +44,7 @@ class RL_FSBI_Field_Text implements RL_FSBI_Field_Interface, RL_FSBI_Field_Proce
 		if (null !== $value && !is_scalar($value)) {
 			$error = sprintf(
 				/* translators: %s: field label */
-				__('%s has an invalid value.', RL_FSBI_Options_Framework::text_domain()),
+				__('%s has an invalid value.', RL_Options_Framework::text_domain()),
 				$field_label
 			);
 			return false;
@@ -53,7 +53,7 @@ class RL_FSBI_Field_Text implements RL_FSBI_Field_Interface, RL_FSBI_Field_Proce
 		if (isset($field['maxlength']) && mb_strlen((string) $value) > $field['maxlength']) {
 			$error = sprintf(
 				/* translators: 1: field label, 2: max length */
-				__('%1$s must be no more than %2$s characters.', RL_FSBI_Options_Framework::text_domain()),
+				__('%1$s must be no more than %2$s characters.', RL_Options_Framework::text_domain()),
 				$field_label,
 				$field['maxlength']
 			);
@@ -63,7 +63,7 @@ class RL_FSBI_Field_Text implements RL_FSBI_Field_Interface, RL_FSBI_Field_Proce
 		if (isset($field['pattern']) && !preg_match($field['pattern'], $value)) {
 			$error = sprintf(
 				/* translators: %s: field label */
-				__('%s has an invalid format.', RL_FSBI_Options_Framework::text_domain()),
+				__('%s has an invalid format.', RL_Options_Framework::text_domain()),
 				$field_label
 			);
 			return false;

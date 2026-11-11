@@ -22,10 +22,10 @@
  * copy that won. A mismatch is reported via the `rl_options_framework_duplicate_copy`
  * action (and error_log when WP_DEBUG is on) instead of failing silently.
  *
- * Defines RL_FSBI_OPTIONS_FRAMEWORK_VERSION and RL_FSBI_OPTIONS_FRAMEWORK_FILE for the
+ * Defines RL_OPTIONS_FRAMEWORK_VERSION and RL_OPTIONS_FRAMEWORK_FILE for the
  * loaded copy.
  *
- * @package RL_FSBI_Options_Framework
+ * @package RL_Options_Framework
  * @version 2.5.1
  */
 
@@ -33,16 +33,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 	return;
 }
 
-// Version of *this* copy; keep in sync with RL_FSBI_Options_Framework::VERSION.
+// Version of *this* copy; keep in sync with RL_Options_Framework::VERSION.
 $rlof_version = '2.5.1';
 
 // Guard against duplicate class declarations on multiple requires.
-if ( class_exists( 'RL_FSBI_Options_Framework', false ) ) {
+if ( class_exists( 'RL_Options_Framework', false ) ) {
 	// A second bundled copy cannot declare its classes again, and silently calling
 	// into the foreign copy is how a plugin ends up rendering its settings page with
 	// another plugin's framework build. Report the conflict so it is diagnosable.
-	$rlof_loaded_file    = (string) ( new ReflectionClass( 'RL_FSBI_Options_Framework' ) )->getFileName();
-	$rlof_loaded_version = defined( 'RL_FSBI_Options_Framework::VERSION' ) ? RL_FSBI_Options_Framework::VERSION : 'unknown';
+	$rlof_loaded_file    = (string) ( new ReflectionClass( 'RL_Options_Framework' ) )->getFileName();
+	$rlof_loaded_version = defined( 'RL_Options_Framework::VERSION' ) ? RL_Options_Framework::VERSION : 'unknown';
 
 	// Compare against *this* copy's path: the loaded class may belong to another plugin.
 	$rlof_conflict = $rlof_loaded_file !== __DIR__ . '/class-rl-options-framework.php'
@@ -68,9 +68,9 @@ if ( class_exists( 'RL_FSBI_Options_Framework', false ) ) {
 	return;
 }
 
-if ( ! defined( 'RL_FSBI_OPTIONS_FRAMEWORK_VERSION' ) ) {
-	define( 'RL_FSBI_OPTIONS_FRAMEWORK_VERSION', $rlof_version );
-	define( 'RL_FSBI_OPTIONS_FRAMEWORK_FILE', __FILE__ );
+if ( ! defined( 'RL_OPTIONS_FRAMEWORK_VERSION' ) ) {
+	define( 'RL_OPTIONS_FRAMEWORK_VERSION', $rlof_version );
+	define( 'RL_OPTIONS_FRAMEWORK_FILE', __FILE__ );
 }
 
 unset( $rlof_version );

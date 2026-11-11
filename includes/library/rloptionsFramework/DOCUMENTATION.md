@@ -55,23 +55,23 @@ $config = [
     'text_domain'       => 'my-project',
 ];
 
-$framework = new RL_FSBI_Options_Framework($config);
+$framework = new RL_Options_Framework($config);
 $framework->init();
 ```
 
 ### Bundling the library in more than one plugin
 
-All classes are global (`RL_FSBI_Options_Framework`, `RL_FSBI_Field_*`, `RL_FSBI_Logger`), so WordPress keeps whichever
+All classes are global (`RL_Options_Framework`, `RL_Field_*`, `RL_Logger`), so WordPress keeps whichever
 copy loads first — two plugins bundling different library versions would otherwise run one plugin's
 settings page with the other plugin's build. `main.php` therefore:
 
-- declares `RL_FSBI_OPTIONS_FRAMEWORK_VERSION` and `RL_FSBI_OPTIONS_FRAMEWORK_FILE` for the copy that loaded;
+- declares `RL_OPTIONS_FRAMEWORK_VERSION` and `RL_OPTIONS_FRAMEWORK_FILE` for the copy that loaded;
 - when a second copy is required, reports the conflict (path + version of the winning copy) through
   `error_log()` when `WP_DEBUG` is on and the `rl_options_framework_duplicate_copy` action;
 - scopes shared vendor handles per instance (`asset_handle_prefix`, see
   [Configuration](#3-configuration)).
 
-A host that must guarantee its own build can compare `RL_FSBI_OPTIONS_FRAMEWORK_FILE` with its expected path
+A host that must guarantee its own build can compare `RL_OPTIONS_FRAMEWORK_FILE` with its expected path
 on `admin_init`. The durable fix is to ship the library as a Composer package
 (`rosendolabs/rl-options-framework`) pinned per host instead of copying the folder — see the
 Installation section of the [README](./README.md).
@@ -115,17 +115,17 @@ The framework provides several filters you can use with `add_filter` to modify i
 
 | Filter Name | Description | Parameters |
 |-------------|-------------|------------|
-| `rl_options_framework_header_meta_html` | Inject custom HTML into the header area of the options page. | `string $html`, `array $config`, `RL_FSBI_Options_Framework $framework` |
+| `rl_options_framework_header_meta_html` | Inject custom HTML into the header area of the options page. | `string $html`, `array $config`, `RL_Options_Framework $framework` |
 | `rl_options_framework_html_allowed_html` | Modify the `wp_kses` allowed tags for the `html` field type. | `array $allowed_html`, `array $field`, `array $context` |
-| `rl_options_framework_resolved_provider_options` | Filter the resolved options array before it's sent to the field. | `array $options`, `array $provider`, `array $field`, `array $state`, `RL_FSBI_Options_Framework $framework` |
-| `rl_options_framework_country_reference_sources` | Modify or add data sources for the country reference service. | `array $sources`, `RL_FSBI_Options_Framework $framework` |
-| `rl_options_framework_country_reference_data` | Filter the normalized array of country data before caching. | `array $data`, `array $sources`, `RL_FSBI_Options_Framework $framework` |
-| `rl_options_framework_country_reference_ttl` | Change the transient caching TTL (in seconds) for geo endpoints. | `int $ttl`, `RL_FSBI_Options_Framework $framework` |
-| `rl_options_framework_country_subdivisions` | Filter the subdivisions (states/districts) for a specific country. | `array $out`, `string $country_code`, `RL_FSBI_Options_Framework $framework` |
-| `rl_options_framework_country_municipalities` | Filter municipalities (cities) for a specific country & subdivision. | `array $out`, `string $country_code`, `string $subdivision`, `RL_FSBI_Options_Framework $framework` |
+| `rl_options_framework_resolved_provider_options` | Filter the resolved options array before it's sent to the field. | `array $options`, `array $provider`, `array $field`, `array $state`, `RL_Options_Framework $framework` |
+| `rl_options_framework_country_reference_sources` | Modify or add data sources for the country reference service. | `array $sources`, `RL_Options_Framework $framework` |
+| `rl_options_framework_country_reference_data` | Filter the normalized array of country data before caching. | `array $data`, `array $sources`, `RL_Options_Framework $framework` |
+| `rl_options_framework_country_reference_ttl` | Change the transient caching TTL (in seconds) for geo endpoints. | `int $ttl`, `RL_Options_Framework $framework` |
+| `rl_options_framework_country_subdivisions` | Filter the subdivisions (states/districts) for a specific country. | `array $out`, `string $country_code`, `RL_Options_Framework $framework` |
+| `rl_options_framework_country_municipalities` | Filter municipalities (cities) for a specific country & subdivision. | `array $out`, `string $country_code`, `string $subdivision`, `RL_Options_Framework $framework` |
 | `rl_options_color_palette` | Filter global default color palette array for color pickers and swatches. | `array $palette`, `array $config` |
-| `rl_options_framework_array_field_types` | Field types allowed to store array values (everything else rejects array payloads as invalid). | `string[] $types`, `array $field`, `RL_FSBI_Options_Framework $framework` |
-| `rl_options_framework_non_storing_field_types` | Field types that are rendered/validated but never persisted. | `string[] $types`, `array $field`, `RL_FSBI_Options_Framework $framework` |
+| `rl_options_framework_array_field_types` | Field types allowed to store array values (everything else rejects array payloads as invalid). | `string[] $types`, `array $field`, `RL_Options_Framework $framework` |
+| `rl_options_framework_non_storing_field_types` | Field types that are rendered/validated but never persisted. | `string[] $types`, `array $field`, `RL_Options_Framework $framework` |
 
 ### Global Actions
 
@@ -191,7 +191,7 @@ Every key accepted by the constructor, with its default:
 | `ajax_action` | `'rl_save_options_ajax'` | `wp_ajax_` action used by the AJAX save |
 | `assets_url` | `''` (auto) | Explicit URL to the framework `assets/` directory |
 | `plugin_url` | `''` | Optional host plugin URL (informational) |
-| `version` | `RL_FSBI_Options_Framework::VERSION` | Asset cache-buster (`?ver=`) |
+| `version` | `RL_Options_Framework::VERSION` | Asset cache-buster (`?ver=`) |
 | `asset_handle_prefix` | `''` → `page_slug` | Prefix for shared vendor handles (`-sweetalert2`, `-tippy`, `-popper`); set it when two plugins bundle the framework |
 | `context` | `'auto'` | Asset URL resolution: `auto`, `plugin`, `theme` |
 | `register_menu` | `true` | Register the admin menu/submenu automatically |
@@ -231,7 +231,7 @@ This makes field maintenance and additions safer than editing a single large swi
 ### Register custom field renderer
 
 ```php
-class My_Project_Field_Rating implements RL_FSBI_Field_Interface {
+class My_Project_Field_Rating implements RL_Field_Interface {
     public function type(): string {
         return 'rating';
     }
@@ -243,7 +243,7 @@ class My_Project_Field_Rating implements RL_FSBI_Field_Interface {
     }
 }
 
-add_action('my_project_options_framework_boot', function(RL_FSBI_Options_Framework $framework) {
+add_action('my_project_options_framework_boot', function(RL_Options_Framework $framework) {
     $framework->register_field_renderer(new My_Project_Field_Rating());
 });
 ```
@@ -868,7 +868,7 @@ If `pattern` is provided without regex delimiters, framework wraps it as anchore
 
 ### What it is
 
-Global geo reference service (`RL_FSBI_Options_Rest_Api`) with normalized outputs for framework and external consumers. Logic lives in `services/class-rl-options-rest-api.php`. The framework exposes proxy methods for backward compatibility.
+Global geo reference service (`RL_Options_Rest_Api`) with normalized outputs for framework and external consumers. Logic lives in `services/class-rl-options-rest-api.php`. The framework exposes proxy methods for backward compatibility.
 
 ### Data model keys
 
@@ -945,7 +945,7 @@ rl_options_framework_get_country_municipalities('PT', 'lisboa');
   force `wp_kses()` filtering (required for any dynamic markup).
 - Every field is rendered inside the framework form. A field renderer that emits `<form>`/`</form>`
   (nested forms make the browser close the outer form, orphaning the Save button) has those tags
-  stripped and triggers a `RL_FSBI_Logger::warn()` entry naming the field.
+  stripped and triggers a `RL_Logger::warn()` entry naming the field.
 - Remote geo reference sources are fetched over HTTPS with `wp_safe_remote_get()`.
 - Logger context redacts sensitive keys such as nonce/token/password/secret values.
 
@@ -967,23 +967,23 @@ The framework core (`class-rl-options-framework.php`) is an orchestration layer.
 
 | Service class | File | Responsibility |
 |---|---|---|
-| `RL_FSBI_Options_Render_Service` | `services/class-rl-options-render-service.php` | Admin page rendering, field output (single field included), tooltip formatting |
-| `RL_FSBI_Options_Admin_Handler` | `services/class-rl-options-admin-handler.php` | Form save (POST), AJAX save, AJAX field options, AJAX inline validation |
-| `RL_FSBI_Options_Schema_Manager` | `services/class-rl-options-schema-manager.php` | Tab/section/field normalization, schema building, condition filtering |
-| `RL_FSBI_Options_Rest_Api` | `services/class-rl-options-rest-api.php` | REST route registration, geo reference data, transient caching |
-| `RL_FSBI_Options_Builder` | `services/class-rl-options-builder.php` | Opt-in drag-and-drop schema builder, draft storage, PHP export model |
+| `RL_Options_Render_Service` | `services/class-rl-options-render-service.php` | Admin page rendering, field output (single field included), tooltip formatting |
+| `RL_Options_Admin_Handler` | `services/class-rl-options-admin-handler.php` | Form save (POST), AJAX save, AJAX field options, AJAX inline validation |
+| `RL_Options_Schema_Manager` | `services/class-rl-options-schema-manager.php` | Tab/section/field normalization, schema building, condition filtering |
+| `RL_Options_Rest_Api` | `services/class-rl-options-rest-api.php` | REST route registration, geo reference data, transient caching |
+| `RL_Options_Builder` | `services/class-rl-options-builder.php` | Opt-in drag-and-drop schema builder, draft storage, PHP export model |
 
 ### Service access
 
 All services are accessible via framework accessor methods after `init()` is called:
 
 ```php
-$framework->rest_api();      // RL_FSBI_Options_Rest_Api
+$framework->rest_api();      // RL_Options_Rest_Api
 ```
 
 ### REST API service — public methods
 
-The `RL_FSBI_Options_Rest_Api` service exposes geo data methods for use in field providers, custom endpoints, or third-party integrations:
+The `RL_Options_Rest_Api` service exposes geo data methods for use in field providers, custom endpoints, or third-party integrations:
 
 ```php
 $rest = $framework->rest_api();
@@ -1011,7 +1011,7 @@ $framework->get_country_municipalities('PT', 'lisboa');
 
 ### normalize_options_for_transport()
 
-This utility method is public on `RL_FSBI_Options_Framework` so services and custom field renderers can normalize their options into the `[{value, label}]` transport format:
+This utility method is public on `RL_Options_Framework` so services and custom field renderers can normalize their options into the `[{value, label}]` transport format:
 
 ```php
 $options = $framework->normalize_options_for_transport([
@@ -1053,7 +1053,7 @@ No host-side changes are required.
 | AJAX endpoints | New instance-scoped actions; the legacy global actions remain registered once |
 | `html` fields | Trusted markup is rendered as-is; set `'sanitize_html' => true` for dynamic markup |
 | Display-only fields | `html`, `info`, `export`, `import`, `reset`, `reset_section` are no longer persisted |
-| Versioning | `RL_FSBI_Options_Framework::VERSION` is the single source; pass your own `version` only if you need a different cache-buster |
+| Versioning | `RL_Options_Framework::VERSION` is the single source; pass your own `version` only if you need a different cache-buster |
 
 ---
 
@@ -1476,7 +1476,7 @@ public function add_bundle_fields(string $tab_slug, string $section_id, string $
 Add preset or bundle instance to a section.
 
 ```php
-public function presets(): ?RL_FSBI_Field_Presets
+public function presets(): ?RL_Field_Presets
 ```
 
 Get preset registry accessor.
@@ -1505,8 +1505,8 @@ Reset all framework options to their default values, creating a backup first. Fi
 ### Service Accessors
 
 ```php
-public function rest_api(): ?RL_FSBI_Options_Rest_Api
-public function builder(): ?RL_FSBI_Options_Builder
+public function rest_api(): ?RL_Options_Rest_Api
+public function builder(): ?RL_Options_Builder
 ```
 
 Access the REST API service for geo data (Section 11) or the visual schema builder (Section 24).
@@ -1514,10 +1514,10 @@ Access the REST API service for geo data (Section 11) or the visual schema build
 config flag before using the page.
 
 ```php
-public function field_registry(): ?RL_FSBI_Field_Registry
-public function get_storage_service(): ?RL_FSBI_Options_Storage_Service
-public function get_field_processor(): ?RL_FSBI_Options_Field_Processor
-public function get_admin_handler(): ?RL_FSBI_Options_Admin_Handler
+public function field_registry(): ?RL_Field_Registry
+public function get_storage_service(): ?RL_Options_Storage_Service
+public function get_field_processor(): ?RL_Options_Field_Processor
+public function get_admin_handler(): ?RL_Options_Admin_Handler
 public function plugin_instance()
 ```
 
@@ -1543,13 +1543,13 @@ validation. They are already localized as `rlFramework.provider_action` / `.vali
 ### Field Renderer Registration
 
 ```php
-public function register_field_renderer(RL_FSBI_Field_Interface $renderer): void
+public function register_field_renderer(RL_Field_Interface $renderer): void
 ```
 
-Register custom field type. Callback must implement `RL_FSBI_Field_Interface`:
+Register custom field type. Callback must implement `RL_Field_Interface`:
 
 ```php
-interface RL_FSBI_Field_Interface {
+interface RL_Field_Interface {
     public function type(): string;
     public function render(array $field, $value, array $context = []): void;
 }
@@ -1572,7 +1572,7 @@ and return the markup. `$options` is the full option array used to resolve the c
 the builder preview endpoint; handy for custom previews, emails or REST responses:
 
 ```php
-$renderer = new RL_FSBI_Options_Render_Service( $framework );
+$renderer = new RL_Options_Render_Service( $framework );
 
 $html = $renderer->render_single_field(
     [
@@ -2054,7 +2054,7 @@ $framework->add_field([
 **Cause:** a field renderer printed its own `<form>` markup. The browser drops the nested start tag but
 honours its `</form>`, which closes the framework form and leaves `type="submit"` outside any form.
 
-**Fix:** the framework strips `<form>` / `</form>` from field output and logs a `RL_FSBI_Logger::warn()`
+**Fix:** the framework strips `<form>` / `</form>` from field output and logs a `RL_Logger::warn()`
 naming the field (set `debug_level => 'debug'` to see it). Move the markup out of the field — a nested
 form cannot work inside the settings page.
 
@@ -2079,7 +2079,7 @@ form cannot work inside the settings page.
 **Check:**
 1. Is REST API warmed? `get_transient('rl_options_geo_countries')`
 2. Try clearing transients: `delete_transients_like('rl_options%')`
-3. Check `RL_FSBI_Logger` debug output if `debug_level` is `debug`
+3. Check `RL_Logger` debug output if `debug_level` is `debug`
 4. Is data source responding? `curl https://restcountries.com/v3.1/all?fields=cca2,name,region,capital`
 
 ### Q: Can I use this outside WordPress admin?
@@ -2137,19 +2137,19 @@ form cannot work inside the settings page.
 
 The framework provides a unified logging utility that can be configured and consumed globally by the plugin that implements the framework, both on the PHP backend and JS frontend.
 
-### PHP Logging (`RL_FSBI_Logger`)
+### PHP Logging (`RL_Logger`)
 
-You can set a custom prefix for all logs generated via the `RL_FSBI_Logger` class.
+You can set a custom prefix for all logs generated via the `RL_Logger` class.
 
 #### How to use
 
 ```php
 // Set a custom prefix instead of the default '[RL Framework]'
-RL_FSBI_Logger::set_prefix( '[My Plugin]' );
+RL_Logger::set_prefix( '[My Plugin]' );
 
 // Log messages
-RL_FSBI_Logger::info( 'This is an info log.' );
-RL_FSBI_Logger::error( 'This is an error log.', [ 'context' => 'data' ] );
+RL_Logger::info( 'This is an info log.' );
+RL_Logger::error( 'This is an error log.', [ 'context' => 'data' ] );
 ```
 
 ### JS Logging (`window.rlFramework`)
@@ -2162,7 +2162,7 @@ The JS logging utility has been extracted to a **standalone script** (`rl-logger
 2. Add a native `toggle` field with that ID in your settings.
 
 ```php
-$framework = new RL_FSBI_Options_Framework([
+$framework = new RL_Options_Framework([
     // ...
     'debug_field_id' => 'enable_debug_mode',
 ]);
@@ -2202,7 +2202,7 @@ saved option values (only its own draft option).
 The builder is disabled by default so a drop-in never surprises a host plugin with an extra menu.
 
 ```php
-$framework = new RL_FSBI_Options_Framework([
+$framework = new RL_Options_Framework([
     'option_name' => 'my_plugin_settings',
     'page_slug'   => 'my-plugin-settings',
     'builder'     => true,                       // enables the builder menu
@@ -2376,7 +2376,7 @@ your own form, an import file or a REST call.
 
 - Menu, page and AJAX handler all require the framework `capability`.
 - The AJAX endpoints (draft save and field preview) verify the nonce **before** reading the payload and reject payloads over 1 MB.
-- The preview endpoint whitelists the posted field through the same sanitizer as the draft, then renders it with `RL_FSBI_Options_Render_Service::render_single_field()`; it never returns unsanitized input.
+- The preview endpoint whitelists the posted field through the same sanitizer as the draft, then renders it with `RL_Options_Render_Service::render_single_field()`; it never returns unsanitized input.
 - Stored data is the sanitized model only — the builder never echoes unsanitized input back.
 
 ---

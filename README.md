@@ -992,19 +992,17 @@ bumping `Version:` means no site will ever see it.
 
 ### Unreleased - RL Options Framework 2.5.1
 
-Pulled from [drosendo/rl-options-framework](https://github.com/drosendo/rl-options-framework) (2.2.0 → 2.5.1) and re-vendored under `includes/library/rloptionsFramework/`, keeping the `RL_FSBI_` prefix so the copy cannot collide with the one RL Support Tickets ships.
+`includes/library/rloptionsFramework/` is now **upstream 2.5.1, verbatim** from [drosendo/rl-options-framework](https://github.com/drosendo/rl-options-framework). Nothing in it is edited by this plugin, and nothing should be: the plugin adapts to what the library offers.
 
-What the update brings:
+Adaptations on our side:
 
-- **A blank optional `number` / `slider` field no longer aborts the whole save.** The workaround that declared those fields as `text` here can be undone.
-- **A field that renders its own `<form>` can no longer orphan the Save button** — the tags are stripped and the field is named in a log entry.
-- **Vendor handles are prefixed per instance** instead of registering `sweetalert2` / `tippy` globally.
-- **A second bundled copy is reported** via `rl_options_framework_duplicate_copy` instead of being silently reused.
-- `RL_OPTIONS_FRAMEWORK_VERSION` / `_FILE` identify the loaded copy.
+- Class names are the library's own — `RL_Options_Framework`, `RL_Logger`, `RL_Field_Interface`, `RL_Field_Processing_Interface`.
+- The framework ships a `Password` field from 2.5.1, so the one this plugin added when the library had none is deleted.
+- The two field interfaces are loaded by the library (`fields/load.php`), so requiring them again here redeclared them and fatalled. Those requires are gone.
 
-One adjustment in the host: the framework now ships its own `Password` field, whose class name collided with the one this plugin added when the framework had none. Ours is deleted and the built-in is used.
+What the update brings: a blank optional `number`/`slider` no longer aborts the whole save; a field that renders its own `<form>` can no longer orphan the Save button; vendor handles are prefixed per instance; a second bundled copy is reported through `rl_options_framework_duplicate_copy` instead of being reused silently.
 
-Verified: framework reports 2.5.1, the settings page renders all 68 fields under `rl_options[...]` with a working Save, and the dashboard loads with its five KPIs and no fatals.
+Verified: `RL_OPTIONS_FRAMEWORK_VERSION` = 2.5.1, settings page renders 60 `rl_options[...]` fields with a working Save, dashboard loads with five KPIs, no fatals.
 
 ### Unreleased - one vertical rhythm for every card
 

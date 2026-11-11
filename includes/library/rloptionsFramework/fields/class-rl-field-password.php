@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Password input with a reveal toggle.
  */
-class RL_FSBI_Field_Password implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Password implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{
@@ -25,8 +25,8 @@ class RL_FSBI_Field_Password implements RL_FSBI_Field_Interface, RL_FSBI_Field_P
 			esc_attr($input_id),
 			esc_attr($field_name),
 			esc_attr((string) $value),
-			esc_attr__('Show password', RL_FSBI_Options_Framework::text_domain()),
-			esc_html__('Show', RL_FSBI_Options_Framework::text_domain())
+			esc_attr__('Show password', RL_Options_Framework::text_domain()),
+			esc_html__('Show', RL_Options_Framework::text_domain())
 		);
 	}
 
@@ -40,7 +40,7 @@ class RL_FSBI_Field_Password implements RL_FSBI_Field_Interface, RL_FSBI_Field_P
 		if (!empty($field['minlength']) && is_numeric($field['minlength']) && strlen((string) $value) < (int) $field['minlength']) {
 			$error = sprintf(
 				/* translators: 1: field label, 2: minimum length */
-				__('%1$s must be at least %2$s characters.', RL_FSBI_Options_Framework::text_domain()),
+				__('%1$s must be at least %2$s characters.', RL_Options_Framework::text_domain()),
 				$context['field_label'] ?? 'Field',
 				(int) $field['minlength']
 			);

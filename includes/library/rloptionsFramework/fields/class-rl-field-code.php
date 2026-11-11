@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
  *
  * Values are stored verbatim (CSS/JS/HTML snippets); only invalid UTF-8 is stripped.
  */
-class RL_FSBI_Field_Code implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Code implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{

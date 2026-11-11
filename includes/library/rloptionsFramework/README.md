@@ -71,7 +71,7 @@ the result as ready-to-paste PHP (`add_tab()`/`add_section()`/`add_field()` call
 the builder never touches saved option values.
 
 ```php
-$framework = new RL_FSBI_Options_Framework([
+$framework = new RL_Options_Framework([
     'option_name' => 'my_plugin_settings',
     'page_slug'   => 'my-plugin-settings',
     'builder'     => true, // Settings → RL Builder
@@ -108,7 +108,7 @@ composer require rosendolabs/rl-options-framework
 ```php
 add_action( 'plugins_loaded', function () {
 
-    $framework = new RL_FSBI_Options_Framework([
+    $framework = new RL_Options_Framework([
         'option_name'       => 'my_plugin_settings',
         'form_field_prefix' => 'my_plugin',
         'page_slug'         => 'my-plugin-settings',
@@ -598,7 +598,7 @@ Show or hide any field, section, or tab based on another field's value.
 | `ajax_action` | `string` | `'rl_save_options_ajax'` | AJAX action name |
 | `assets_url` | `string` | Auto-detected | URL to the `assets/` folder |
 | `plugin_url` | `string` | `''` | Optional host plugin URL (informational) |
-| `version` | `string` | `RL_FSBI_Options_Framework::VERSION` | For cache-busting enqueued assets |
+| `version` | `string` | `RL_Options_Framework::VERSION` | For cache-busting enqueued assets |
 | `asset_handle_prefix` | `string` | `page_slug` | Prefix for shared vendor handles (`-sweetalert2`, `-tippy`, `-popper`); set it when two plugins bundle the library |
 | `context` | `string` | `'auto'` | Asset resolution: `auto`, `plugin` (needs `init($plugin)` with `get_plugin_url()`), `theme` |
 | `register_menu` | `bool` | `true` | Register the admin submenu automatically |
@@ -652,8 +652,8 @@ The framework provides a unified logging utility for both PHP and JS. You can co
 ### PHP Logging
 
 ```php
-RL_FSBI_Logger::set_prefix( '[My Plugin]' );
-RL_FSBI_Logger::info( 'This is an info log.' );
+RL_Logger::set_prefix( '[My Plugin]' );
+RL_Logger::info( 'This is an info log.' );
 ```
 
 ### JS Logging
@@ -661,7 +661,7 @@ RL_FSBI_Logger::info( 'This is an info log.' );
 The JS logger is a standalone script that is automatically enqueued globally when debugging is enabled. Add a debug toggle to your settings:
 
 ```php
-$framework = new RL_FSBI_Options_Framework([
+$framework = new RL_Options_Framework([
     'debug_field_id' => 'enable_debug',
 ]);
 // Add 'enable_debug' as a toggle field...
@@ -712,15 +712,15 @@ Framework-level fixes for hosts that bundle this library — no API changes.
   Save button — the tags are stripped and the field is named in a log warning
 - Vendor handles (`sweetalert2` / `popper` / `tippy`) are prefixed per instance (default `page_slug`,
   override with `asset_handle_prefix`) so two plugins bundling the library cannot collide
-- A second bundled copy now reports the conflict (path + version) via `RL_FSBI_OPTIONS_FRAMEWORK_VERSION`,
-  `RL_FSBI_OPTIONS_FRAMEWORK_FILE` and the `rl_options_framework_duplicate_copy` action
+- A second bundled copy now reports the conflict (path + version) via `RL_OPTIONS_FRAMEWORK_VERSION`,
+  `RL_OPTIONS_FRAMEWORK_FILE` and the `rl_options_framework_duplicate_copy` action
 
 ### 2.5.0
 
 Live RL Builder: the canvas renders the real field controls while you build.
 
 - WYSIWYG canvas — every row is rendered by the settings-page renderer
-  (`RL_FSBI_Options_Render_Service::render_single_field()`) through a new preview endpoint, cached per
+  (`RL_Options_Render_Service::render_single_field()`) through a new preview endpoint, cached per
   definition and debounced
 - **Preview page** mode hides the palette/inspector and shows the schema full width exactly like the
   settings page, with interactive controls

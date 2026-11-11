@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) {
 	return;
 }
 
-class RL_FSBI_Field_Multiselect implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Multiselect implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{
@@ -61,7 +61,7 @@ class RL_FSBI_Field_Multiselect implements RL_FSBI_Field_Interface, RL_FSBI_Fiel
 			if (!in_array((string) $item, $allowed, true)) {
 				$error = sprintf(
 					/* translators: %s: field label */
-					__('%s includes an invalid option.', RL_FSBI_Options_Framework::text_domain()),
+					__('%s includes an invalid option.', RL_Options_Framework::text_domain()),
 					$field_label
 				);
 				return false;

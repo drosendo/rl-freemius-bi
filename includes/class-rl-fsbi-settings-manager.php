@@ -15,7 +15,7 @@ class RL_FSBI_Settings_Manager {
 	/**
 	 * Framework instance.
 	 *
-	 * @var RL_FSBI_Options_Framework|null
+	 * @var RL_Options_Framework|null
 	 */
 	private $framework = null;
 
@@ -41,17 +41,14 @@ class RL_FSBI_Settings_Manager {
 			return;
 		}
 
+		// The framework loads its own field interfaces (fields/load.php). Requiring
+		// them again here redeclared them and fatalled.
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/main.php';
-		// Our field renderers implement these interfaces at include time, so the
-		// contracts have to exist before them. They used to be inherited from
-		// whichever plugin defined the framework first.
-		require_once RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/fields/class-rl-field-interface.php';
-		require_once RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/fields/class-rl-field-processing-interface.php';
 		// The framework ships its own Password field from 2.5.1; this plugin used to
 		// add one because it did not, and the two class names collided.
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/fields/class-rl-fsbi-field-checkbox-list.php';
 
-		$this->framework = new RL_FSBI_Options_Framework(
+		$this->framework = new RL_Options_Framework(
 			array(
 				'option_name'   => 'rl_fsbi_settings',
 				'menu_title'    => esc_html__( 'Settings', 'rl-freemius-bi' ),
@@ -71,7 +68,7 @@ class RL_FSBI_Settings_Manager {
 		add_action(
 			'rl_fsbi_settings_framework_boot',
 			function ( $fw ) {
-				if ( $fw instanceof RL_FSBI_Options_Framework ) {
+				if ( $fw instanceof RL_Options_Framework ) {
 					$fw->register_field_renderer( new RL_FSBI_Field_Checkbox_List() );
 				}
 			}

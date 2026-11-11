@@ -33,7 +33,7 @@
  *     'assets_url'        => plugin_dir_url( __FILE__ ) . 'assets/',
  * ];
  * 
- * $framework = new RL_FSBI_Options_Framework( $config );
+ * $framework = new RL_Options_Framework( $config );
  * $framework->init();
  * 
  * // Add a tab
@@ -68,7 +68,7 @@
  * $max_items = $framework->get_option('max_items', 10);
  * ```
  *
- * @package RL_FSBI_Options_Framework
+ * @package RL_Options_Framework
  * @version 2.5.1
  */
 
@@ -85,7 +85,7 @@ if (!function_exists('rl_options_framework_get_countries')) {
 	 */
 	function rl_options_framework_get_countries(): array
 	{
-		$framework = RL_FSBI_Options_Framework::instance();
+		$framework = RL_Options_Framework::instance();
 		return $framework->get_country_reference_countries();
 	}
 }
@@ -99,7 +99,7 @@ if (!function_exists('rl_options_framework_get_country_subdivisions')) {
 	 */
 	function rl_options_framework_get_country_subdivisions(string $country_code): array
 	{
-		$framework = RL_FSBI_Options_Framework::instance();
+		$framework = RL_Options_Framework::instance();
 		return $framework->get_country_subdivisions($country_code);
 	}
 }
@@ -113,7 +113,7 @@ if (!function_exists('rl_options_framework_get_country_municipalities')) {
 	 */
 	function rl_options_framework_get_country_municipalities(string $country_code, string $subdivision = ''): array
 	{
-		$framework = RL_FSBI_Options_Framework::instance();
+		$framework = RL_Options_Framework::instance();
 		return $framework->get_country_municipalities($country_code, $subdivision);
 	}
 }
@@ -122,7 +122,7 @@ if (!function_exists('rl_options_framework_get_country_municipalities')) {
  * Generic options framework for WordPress plugins.
  */
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound
-final class RL_FSBI_Options_Framework
+final class RL_Options_Framework
 {
 	/**
 	 * Framework version. Single source of truth for asset cache busting.
@@ -139,7 +139,7 @@ final class RL_FSBI_Options_Framework
 	/**
 	 * Singleton instance (for backward compatibility).
 	 *
-	 * @var RL_FSBI_Options_Framework
+	 * @var RL_Options_Framework
 	 */
 	private static $instance = null;
 
@@ -244,72 +244,72 @@ final class RL_FSBI_Options_Framework
 	/**
 	 * Presets manager instance for developer-registered presets and bundles.
 	 *
-	 * @var RL_FSBI_Field_Presets|null
+	 * @var RL_Field_Presets|null
 	 */
-	private ?RL_FSBI_Field_Presets $presets = null;
+	private ?RL_Field_Presets $presets = null;
 
 	/**
 	 * Field renderer registry.
 	 *
-	 * @var RL_FSBI_Field_Registry|null
+	 * @var RL_Field_Registry|null
 	 */
-	private ?RL_FSBI_Field_Registry $field_registry = null;
+	private ?RL_Field_Registry $field_registry = null;
 
 	/**
 	 * Render service instance for page rendering logic.
 	 *
-	 * @var RL_FSBI_Options_Render_Service|null
+	 * @var RL_Options_Render_Service|null
 	 */
-	private ?RL_FSBI_Options_Render_Service $render_service = null;
+	private ?RL_Options_Render_Service $render_service = null;
 
 	/**
 	 * Admin handler service instance for request handlers.
 	 *
-	 * @var RL_FSBI_Options_Admin_Handler|null
+	 * @var RL_Options_Admin_Handler|null
 	 */
-	private ?RL_FSBI_Options_Admin_Handler $admin_handler = null;
+	private ?RL_Options_Admin_Handler $admin_handler = null;
 
 	/**
 	 * Schema manager service instance for schema building and management.
 	 *
-	 * @var RL_FSBI_Options_Schema_Manager|null
+	 * @var RL_Options_Schema_Manager|null
 	 */
-	private ?RL_FSBI_Options_Schema_Manager $schema_manager = null;
+	private ?RL_Options_Schema_Manager $schema_manager = null;
 
 	/**
 	 * REST API service instance for geo data and REST route management.
 	 *
-	 * @var RL_FSBI_Options_Rest_Api|null
+	 * @var RL_Options_Rest_Api|null
 	 */
-	private ?RL_FSBI_Options_Rest_Api $rest_api = null;
+	private ?RL_Options_Rest_Api $rest_api = null;
 
 	/**
 	 * Storage service instance for backup/import/export/reset logic.
 	 *
-	 * @var RL_FSBI_Options_Storage_Service|null
+	 * @var RL_Options_Storage_Service|null
 	 */
-	private ?RL_FSBI_Options_Storage_Service $storage_service = null;
+	private ?RL_Options_Storage_Service $storage_service = null;
 
 	/**
 	 * Field processor service instance for validation/sanitization/processing logic.
 	 *
-	 * @var RL_FSBI_Options_Field_Processor|null
+	 * @var RL_Options_Field_Processor|null
 	 */
-	private ?RL_FSBI_Options_Field_Processor $field_processor = null;
+	private ?RL_Options_Field_Processor $field_processor = null;
 
 	/**
 	 * Assets service instance for asset enqueueing and CDN/local asset management.
 	 *
-	 * @var RL_FSBI_Options_Assets_Service|null
+	 * @var RL_Options_Assets_Service|null
 	 */
-	private ?RL_FSBI_Options_Assets_Service $assets_service = null;
+	private ?RL_Options_Assets_Service $assets_service = null;
 
 	/**
 	 * Optional visual schema builder service.
 	 *
-	 * @var RL_FSBI_Options_Builder|null
+	 * @var RL_Options_Builder|null
 	 */
-	private ?RL_FSBI_Options_Builder $builder = null;
+	private ?RL_Options_Builder $builder = null;
 
 	/**
 	 * Constructor.
@@ -361,10 +361,10 @@ final class RL_FSBI_Options_Framework
 	/**
 	 * Retrieve singleton instance (for backward compatibility).
 	 *
-	 * @deprecated Use new RL_FSBI_Options_Framework($config) instead.
+	 * @deprecated Use new RL_Options_Framework($config) instead.
 	 * @param array $config Optional configuration array.
 	 */
-	public static function instance(array $config = []): RL_FSBI_Options_Framework
+	public static function instance(array $config = []): RL_Options_Framework
 	{
 		if (null === self::$instance) {
 			// Create with provided config or defaults
@@ -394,45 +394,45 @@ final class RL_FSBI_Options_Framework
 			$this->config['_plugin_instance'] = $plugin;
 		}
 
-		RL_FSBI_Logger::set_level((string) ($this->config['debug_level'] ?? 'error'));
+		RL_Logger::set_level((string) ($this->config['debug_level'] ?? 'error'));
 
 		$this->assets_url = $this->resolve_assets_url($plugin);
 
 		// Initialize schema manager service before consuming default tabs.
-		$this->schema_manager = new RL_FSBI_Options_Schema_Manager($this);
+		$this->schema_manager = new RL_Options_Schema_Manager($this);
 
 		$this->tabs = $this->schema_manager->get_default_tabs();
 
 		// Initialize presets manager
 		require_once __DIR__ . '/class-rl-field-presets.php';
 		require_once __DIR__ . '/class-rl-field-types.php';
-		$this->presets = new RL_FSBI_Field_Presets();
+		$this->presets = new RL_Field_Presets();
 
 		// Initialize field renderer registry (ACF-style single class per field type).
 		require_once __DIR__ . '/fields/load.php';
-		$this->field_registry = new RL_FSBI_Field_Registry();
-		RL_FSBI_Field_Bootstrap::register_defaults($this->field_registry);
+		$this->field_registry = new RL_Field_Registry();
+		RL_Field_Bootstrap::register_defaults($this->field_registry);
 
 		// Initialize render service for page rendering logic.
-		$this->render_service = new RL_FSBI_Options_Render_Service($this);
+		$this->render_service = new RL_Options_Render_Service($this);
 
 		// Initialize admin handler service for request handlers.
-		$this->admin_handler = new RL_FSBI_Options_Admin_Handler($this);
+		$this->admin_handler = new RL_Options_Admin_Handler($this);
 
 		// Initialize REST API service for geo data and REST route registration.
-		$this->rest_api = new RL_FSBI_Options_Rest_Api($this);
+		$this->rest_api = new RL_Options_Rest_Api($this);
 
 		// Initialize storage service for backup/import/export/reset operations.
-		$this->storage_service = new RL_FSBI_Options_Storage_Service($this);
+		$this->storage_service = new RL_Options_Storage_Service($this);
 
 		// Initialize field processor service for validation/sanitization logic.
-		$this->field_processor = new RL_FSBI_Options_Field_Processor($this);
+		$this->field_processor = new RL_Options_Field_Processor($this);
 
 		// Initialize assets service for admin asset enqueueing.
-		$this->assets_service = new RL_FSBI_Options_Assets_Service($this);
+		$this->assets_service = new RL_Options_Assets_Service($this);
 
 		// Optional visual schema builder (opt-in via config).
-		$this->builder = new RL_FSBI_Options_Builder($this);
+		$this->builder = new RL_Options_Builder($this);
 		$this->builder->register();
 
 
@@ -475,7 +475,7 @@ final class RL_FSBI_Options_Framework
 	/**
 	 * Access REST API service (geo data and route registry).
 	 */
-	public function rest_api(): ?RL_FSBI_Options_Rest_Api
+	public function rest_api(): ?RL_Options_Rest_Api
 	{
 		return $this->rest_api;
 	}
@@ -483,7 +483,7 @@ final class RL_FSBI_Options_Framework
 	/**
 	 * Access the visual schema builder (null unless enabled).
 	 */
-	public function builder(): ?RL_FSBI_Options_Builder
+	public function builder(): ?RL_Options_Builder
 	{
 		return $this->builder;
 	}
@@ -491,7 +491,7 @@ final class RL_FSBI_Options_Framework
 	/**
 	 * Access the storage service (backup/import/export/reset).
 	 */
-	public function get_storage_service(): ?RL_FSBI_Options_Storage_Service
+	public function get_storage_service(): ?RL_Options_Storage_Service
 	{
 		return $this->storage_service;
 	}
@@ -499,7 +499,7 @@ final class RL_FSBI_Options_Framework
 	/**
 	 * Access the field processor service (validation/sanitization).
 	 */
-	public function get_field_processor(): ?RL_FSBI_Options_Field_Processor
+	public function get_field_processor(): ?RL_Options_Field_Processor
 	{
 		return $this->field_processor;
 	}
@@ -507,7 +507,7 @@ final class RL_FSBI_Options_Framework
 	/**
 	 * Access the admin handler service.
 	 */
-	public function get_admin_handler(): ?RL_FSBI_Options_Admin_Handler
+	public function get_admin_handler(): ?RL_Options_Admin_Handler
 	{
 		return $this->admin_handler;
 	}
@@ -575,7 +575,7 @@ final class RL_FSBI_Options_Framework
 	/**
 	 * Access preset/bundle registry.
 	 */
-	public function presets(): ?RL_FSBI_Field_Presets
+	public function presets(): ?RL_Field_Presets
 	{
 		return $this->presets;
 	}
@@ -697,9 +697,9 @@ final class RL_FSBI_Options_Framework
 	/**
 	 * Access field registry.
 	 *
-	 * @return RL_FSBI_Field_Registry|null
+	 * @return RL_Field_Registry|null
 	 */
-	public function field_registry(): ?RL_FSBI_Field_Registry
+	public function field_registry(): ?RL_Field_Registry
 	{
 		return $this->field_registry;
 	}
@@ -707,7 +707,7 @@ final class RL_FSBI_Options_Framework
 	/**
 	 * Register a custom field renderer.
 	 */
-	public function register_field_renderer(RL_FSBI_Field_Interface $renderer): void
+	public function register_field_renderer(RL_Field_Interface $renderer): void
 	{
 		if (!$this->field_registry) {
 			return;
@@ -742,11 +742,11 @@ final class RL_FSBI_Options_Framework
 	 */
 	public function register_menu(): void
 	{
-		RL_FSBI_Logger::log('register_menu() called');
-		RL_FSBI_Logger::log('Parent menu: ' . $this->config['parent_menu']);
-		RL_FSBI_Logger::log('Page slug: ' . $this->config['page_slug']);
-		RL_FSBI_Logger::log('Menu title: ' . $this->config['menu_title']);
-		RL_FSBI_Logger::log('Capability: ' . $this->config['capability']);
+		RL_Logger::log('register_menu() called');
+		RL_Logger::log('Parent menu: ' . $this->config['parent_menu']);
+		RL_Logger::log('Page slug: ' . $this->config['page_slug']);
+		RL_Logger::log('Menu title: ' . $this->config['menu_title']);
+		RL_Logger::log('Capability: ' . $this->config['capability']);
 
 		$hook = add_submenu_page(
 			$this->config['parent_menu'],
@@ -757,7 +757,7 @@ final class RL_FSBI_Options_Framework
 			[$this, 'render_page']
 		);
 
-		RL_FSBI_Logger::log('Menu registered, hook suffix: ' . ($hook ?: 'FAILED'));
+		RL_Logger::log('Menu registered, hook suffix: ' . ($hook ?: 'FAILED'));
 	}
 
 	/**
@@ -815,7 +815,7 @@ final class RL_FSBI_Options_Framework
 		if (isset($_GET[$message_param]) && 'saved' === $_GET[$message_param]) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			printf(
 				'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
-				esc_html__('Settings saved.', RL_FSBI_Options_Framework::text_domain())
+				esc_html__('Settings saved.', RL_Options_Framework::text_domain())
 			);
 		}
 
@@ -966,10 +966,10 @@ final class RL_FSBI_Options_Framework
 	/**
 	 * REST API service, created on demand.
 	 */
-	private function rest_api_service(): RL_FSBI_Options_Rest_Api
+	private function rest_api_service(): RL_Options_Rest_Api
 	{
 		if (null === $this->rest_api) {
-			$this->rest_api = new RL_FSBI_Options_Rest_Api($this);
+			$this->rest_api = new RL_Options_Rest_Api($this);
 		}
 
 		return $this->rest_api;
@@ -985,7 +985,7 @@ final class RL_FSBI_Options_Framework
 	public function normalize_options_for_transport(array $options, array $mapping = []): array
 	{
 		if (null === $this->field_processor) {
-			$this->field_processor = new RL_FSBI_Options_Field_Processor($this);
+			$this->field_processor = new RL_Options_Field_Processor($this);
 		}
 
 		return $this->field_processor->normalize_options_for_transport($options, $mapping);

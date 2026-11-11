@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Repeatable single-line text rows.
  */
-class RL_FSBI_Field_Multi_Text implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Multi_Text implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{
@@ -35,7 +35,7 @@ class RL_FSBI_Field_Multi_Text implements RL_FSBI_Field_Interface, RL_FSBI_Field
 
 		printf(
 			'</div><button type="button" class="button rl-multi-text-add">%s</button></div>',
-			esc_html__('Add row', RL_FSBI_Options_Framework::text_domain())
+			esc_html__('Add row', RL_Options_Framework::text_domain())
 		);
 	}
 
@@ -48,7 +48,7 @@ class RL_FSBI_Field_Multi_Text implements RL_FSBI_Field_Interface, RL_FSBI_Field
 			'<div class="rl-multi-text-row"><input type="text" class="regular-text" name="%1$s[]" value="%2$s" /><button type="button" class="button rl-multi-text-remove" aria-label="%3$s">&times;</button></div>',
 			esc_attr($field_name),
 			esc_attr($value),
-			esc_attr__('Remove row', RL_FSBI_Options_Framework::text_domain())
+			esc_attr__('Remove row', RL_Options_Framework::text_domain())
 		);
 	}
 

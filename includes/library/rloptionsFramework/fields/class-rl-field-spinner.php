@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Numeric input with increment/decrement buttons.
  */
-class RL_FSBI_Field_Spinner extends RL_FSBI_Field_Number
+class RL_Field_Spinner extends RL_Field_Number
 {
 	public function type(): string
 	{
@@ -27,14 +27,14 @@ class RL_FSBI_Field_Spinner extends RL_FSBI_Field_Number
 
 		printf(
 			'<div class="rl-spinner"><button type="button" class="button rl-spinner-down" aria-label="%1$s">&minus;</button><input type="number" class="small-text rl-spinner-input" id="%2$s" name="%3$s" value="%4$s" min="%5$s"%6$s step="%7$s" /><button type="button" class="button rl-spinner-up" aria-label="%8$s">&plus;</button><span class="rl-spinner-unit">%9$s</span></div>',
-			esc_attr__('Decrease', RL_FSBI_Options_Framework::text_domain()),
+			esc_attr__('Decrease', RL_Options_Framework::text_domain()),
 			esc_attr($input_id),
 			esc_attr($field_name),
 			esc_attr((string) $value),
 			esc_attr((string) $min),
 			'' !== (string) $max ? ' max="' . esc_attr((string) $max) . '"' : '',
 			esc_attr((string) $step),
-			esc_attr__('Increase', RL_FSBI_Options_Framework::text_domain()),
+			esc_attr__('Increase', RL_Options_Framework::text_domain()),
 			esc_html((string) ($field['unit'] ?? ''))
 		);
 	}

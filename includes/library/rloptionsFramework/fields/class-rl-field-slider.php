@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Range slider with a synced numeric input.
  */
-class RL_FSBI_Field_Slider implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Slider implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{
@@ -62,7 +62,7 @@ class RL_FSBI_Field_Slider implements RL_FSBI_Field_Interface, RL_FSBI_Field_Pro
 		if (!is_numeric($value)) {
 			$error = sprintf(
 				/* translators: %s: field label */
-				__('%s must be a valid number.', RL_FSBI_Options_Framework::text_domain()),
+				__('%s must be a valid number.', RL_Options_Framework::text_domain()),
 				$context['field_label'] ?? 'Field'
 			);
 			return false;

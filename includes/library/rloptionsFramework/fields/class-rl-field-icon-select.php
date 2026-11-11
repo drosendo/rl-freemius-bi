@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Dashicons picker with a search filter.
  */
-class RL_FSBI_Field_Icon_Select implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Icon_Select implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{
@@ -61,7 +61,7 @@ class RL_FSBI_Field_Icon_Select implements RL_FSBI_Field_Interface, RL_FSBI_Fiel
 
 		printf(
 			'<div class="rl-icon-select"><input type="search" class="rl-icon-search" placeholder="%1$s" aria-label="%1$s" /><input type="hidden" id="%2$s" name="%3$s" value="%4$s" class="rl-icon-value" /><div class="rl-icon-grid" role="listbox">',
-			esc_attr__('Search icons…', RL_FSBI_Options_Framework::text_domain()),
+			esc_attr__('Search icons…', RL_Options_Framework::text_domain()),
 			esc_attr($input_id),
 			esc_attr($field_name),
 			esc_attr($current)
@@ -77,7 +77,7 @@ class RL_FSBI_Field_Icon_Select implements RL_FSBI_Field_Interface, RL_FSBI_Fiel
 			);
 		}
 
-		echo '</div><button type="button" class="button rl-icon-clear">' . esc_html__('Clear', RL_FSBI_Options_Framework::text_domain()) . '</button></div>';
+		echo '</div><button type="button" class="button rl-icon-clear">' . esc_html__('Clear', RL_Options_Framework::text_domain()) . '</button></div>';
 	}
 
 	public function sanitize(array $field, $value, array $context = [])

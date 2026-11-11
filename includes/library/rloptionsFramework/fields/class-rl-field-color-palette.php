@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) {
 	return;
 }
 
-class RL_FSBI_Field_Color_Palette implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Color_Palette implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{
@@ -68,7 +68,7 @@ class RL_FSBI_Field_Color_Palette implements RL_FSBI_Field_Interface, RL_FSBI_Fi
 		$current    = (string) ($value ?? ($field['default'] ?? ''));
 
 		if (empty($options)) {
-			echo '<p class="description">' . esc_html__('No color palette options configured.', RL_FSBI_Options_Framework::text_domain()) . '</p>';
+			echo '<p class="description">' . esc_html__('No color palette options configured.', RL_Options_Framework::text_domain()) . '</p>';
 			return;
 		}
 
@@ -197,7 +197,7 @@ class RL_FSBI_Field_Color_Palette implements RL_FSBI_Field_Interface, RL_FSBI_Fi
 			if (!$matched) {
 				$error = sprintf(
 					/* translators: %s: field label */
-					__('%s has an invalid color selected.', RL_FSBI_Options_Framework::text_domain()),
+					__('%s has an invalid color selected.', RL_Options_Framework::text_domain()),
 					$field_label
 				);
 				return false;
@@ -213,7 +213,7 @@ class RL_FSBI_Field_Color_Palette implements RL_FSBI_Field_Interface, RL_FSBI_Fi
 
 		$error = sprintf(
 			/* translators: %s: field label */
-			__('%s must be a valid color.', RL_FSBI_Options_Framework::text_domain()),
+			__('%s must be a valid color.', RL_Options_Framework::text_domain()),
 			$field_label
 		);
 		return false;

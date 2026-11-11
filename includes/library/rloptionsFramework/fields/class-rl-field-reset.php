@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) {
 	return;
 }
 
-class RL_FSBI_Field_Reset implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Reset implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{
@@ -14,15 +14,15 @@ class RL_FSBI_Field_Reset implements RL_FSBI_Field_Interface, RL_FSBI_Field_Proc
 
 	public function render(array $field, $value, array $context = []): void
 	{
-		$label = $field['button_label'] ?? __('Reset All Settings', RL_FSBI_Options_Framework::text_domain());
-		$desc = $field['description'] ?? __('This will permanently delete all settings and restore the default configuration. This cannot be undone.', RL_FSBI_Options_Framework::text_domain());
-		$confirm_msg = $field['confirm_message'] ?? __('Are you sure you want to reset ALL settings to their defaults? This cannot be undone.', RL_FSBI_Options_Framework::text_domain());
+		$label = $field['button_label'] ?? __('Reset All Settings', RL_Options_Framework::text_domain());
+		$desc = $field['description'] ?? __('This will permanently delete all settings and restore the default configuration. This cannot be undone.', RL_Options_Framework::text_domain());
+		$confirm_msg = $field['confirm_message'] ?? __('Are you sure you want to reset ALL settings to their defaults? This cannot be undone.', RL_Options_Framework::text_domain());
 
 		if (!empty($desc)) {
 			echo '<p>' . wp_kses_post($desc) . '</p>';
 		}
 
-		$framework = $context['framework'] ?? RL_FSBI_Options_Framework::instance();
+		$framework = $context['framework'] ?? RL_Options_Framework::instance();
 		$reset_input_name = $framework->get_config('form_field_prefix') . '_reset_settings';
 
 		// Hidden input to capture the reset intent

@@ -11,28 +11,28 @@
  * - Dynamic option resolution (providers, geo fields)
  * - Dependency rule matching
  *
- * @package RL_FSBI_Options_Framework
+ * @package RL_Options_Framework
  * @since 2.1.0
  */
 
 /**
  * Field processor service for RL Options Framework.
  */
-class RL_FSBI_Options_Field_Processor {
+class RL_Options_Field_Processor {
 
 	/**
 	 * Framework instance.
 	 *
-	 * @var RL_FSBI_Options_Framework
+	 * @var RL_Options_Framework
 	 */
 	private $framework;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_FSBI_Options_Framework $framework Framework instance.
+	 * @param RL_Options_Framework $framework Framework instance.
 	 */
-	public function __construct( RL_FSBI_Options_Framework $framework ) {
+	public function __construct( RL_Options_Framework $framework ) {
 		$this->framework = $framework;
 	}
 
@@ -52,7 +52,7 @@ class RL_FSBI_Options_Field_Processor {
 		$registry = $this->framework->field_registry();
 		$renderer = $registry ? $registry->get( $type ) : null;
 
-		if ( class_exists( 'RL_FSBI_Field_Composite' ) && $renderer instanceof RL_FSBI_Field_Composite ) {
+		if ( class_exists( 'RL_Field_Composite' ) && $renderer instanceof RL_Field_Composite ) {
 			return true;
 		}
 
@@ -76,13 +76,13 @@ class RL_FSBI_Options_Field_Processor {
 		if ( 'image_select' === $type ) {
 			$options = $field['options'] ?? [];
 			if ( ! is_array( $options ) || empty( $options ) ) {
-				RL_FSBI_Logger::warn( 'image_select field is missing options.', [ 'field_id' => $id ] );
+				RL_Logger::warn( 'image_select field is missing options.', [ 'field_id' => $id ] );
 				return;
 			}
 
 			foreach ( $options as $key => $option ) {
 				if ( ! is_array( $option ) || empty( $option['src'] ) || empty( $option['label'] ) ) {
-					RL_FSBI_Logger::warn( 'image_select option should define src and label.', [
+					RL_Logger::warn( 'image_select option should define src and label.', [
 						'field_id'   => $id,
 						'option_key' => $key,
 					] );
@@ -92,7 +92,7 @@ class RL_FSBI_Options_Field_Processor {
 
 		if ( 'image' === $type ) {
 			if ( ! empty( $field['options'] ) ) {
-				RL_FSBI_Logger::warn( 'image field should not define options; use image_select instead.', [ 'field_id' => $id ] );
+				RL_Logger::warn( 'image field should not define options; use image_select instead.', [ 'field_id' => $id ] );
 			}
 		}
 	}
@@ -143,7 +143,7 @@ class RL_FSBI_Options_Field_Processor {
 		$field_type = (string) ( $field['type'] ?? 'text' );
 		$field_registry = $this->framework->field_registry();
 		$renderer       = $field_registry ? $field_registry->get( $field_type ) : null;
-		if ( $renderer instanceof RL_FSBI_Field_Processing_Interface ) {
+		if ( $renderer instanceof RL_Field_Processing_Interface ) {
 			return $renderer->sanitize(
 				$field,
 				$value,
@@ -176,7 +176,7 @@ class RL_FSBI_Options_Field_Processor {
 
 		$field_registry = $this->framework->field_registry();
 		$renderer       = $field_registry ? $field_registry->get( (string) $field_type ) : null;
-		if ( $renderer instanceof RL_FSBI_Field_Processing_Interface ) {
+		if ( $renderer instanceof RL_Field_Processing_Interface ) {
 			return $renderer->prepare_for_validation(
 				$field,
 				$value,
@@ -223,7 +223,7 @@ class RL_FSBI_Options_Field_Processor {
 		if ( ! $this->accepts_array_value( $field ) && null !== $value && ! is_scalar( $value ) ) {
 			$error = sprintf(
 				/* translators: %s: field title */
-				__( '%s has an invalid value.', RL_FSBI_Options_Framework::text_domain() ),
+				__( '%s has an invalid value.', RL_Options_Framework::text_domain() ),
 				$field_label
 			);
 			return false;
@@ -239,7 +239,7 @@ class RL_FSBI_Options_Field_Processor {
 			if ( false === $result ) {
 				$error = sprintf(
 					/* translators: %s: field title */
-					__( '%s is invalid.', RL_FSBI_Options_Framework::text_domain() ),
+					__( '%s is invalid.', RL_Options_Framework::text_domain() ),
 					$field_label
 				);
 				return false;
@@ -251,7 +251,7 @@ class RL_FSBI_Options_Field_Processor {
 		if ( ! empty( $field['required'] ) && ( $value === null || $value === '' ) ) {
 			$error = sprintf(
 				/* translators: %s: field title */
-				__( '%s is required.', RL_FSBI_Options_Framework::text_domain() ),
+				__( '%s is required.', RL_Options_Framework::text_domain() ),
 				$field_label
 			);
 			return false;
@@ -261,7 +261,7 @@ class RL_FSBI_Options_Field_Processor {
 		if ( ! empty( $field['required_if'] ) && is_array( $field['required_if'] ) && $this->is_required_by_rules( $field['required_if'], $validation_context ) && ( $value === null || $value === '' ) ) {
 			$error = sprintf(
 				/* translators: %s: field title */
-				__( '%s is required for the selected dependency values.', RL_FSBI_Options_Framework::text_domain() ),
+				__( '%s is required for the selected dependency values.', RL_Options_Framework::text_domain() ),
 				$field_label
 			);
 			return false;
@@ -271,7 +271,7 @@ class RL_FSBI_Options_Field_Processor {
 		$field_type     = (string) ( $field['type'] ?? 'text' );
 		$field_registry = $this->framework->field_registry();
 		$renderer       = $field_registry ? $field_registry->get( $field_type ) : null;
-		if ( $renderer instanceof RL_FSBI_Field_Processing_Interface ) {
+		if ( $renderer instanceof RL_Field_Processing_Interface ) {
 			return $renderer->validate(
 				$field,
 				$value,

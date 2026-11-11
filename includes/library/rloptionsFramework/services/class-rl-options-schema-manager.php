@@ -10,28 +10,28 @@
  * - Field type expansion and validation
  * - Tab/section/field visibility conditions
  *
- * @package RL_FSBI_Options_Framework
+ * @package RL_Options_Framework
  * @since 2.1.0
  */
 
 /**
  * Schema manager service for RL Options Framework.
  */
-class RL_FSBI_Options_Schema_Manager {
+class RL_Options_Schema_Manager {
 
 	/**
 	 * Framework instance.
 	 *
-	 * @var RL_FSBI_Options_Framework
+	 * @var RL_Options_Framework
 	 */
 	private $framework;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_FSBI_Options_Framework $framework Framework instance.
+	 * @param RL_Options_Framework $framework Framework instance.
 	 */
-	public function __construct( RL_FSBI_Options_Framework $framework ) {
+	public function __construct( RL_Options_Framework $framework ) {
 		$this->framework = $framework;
 	}
 
@@ -281,13 +281,13 @@ class RL_FSBI_Options_Schema_Manager {
 	 * @param array $field Field configuration.
 	 */
 	private function normalize_field( array $field ): array {
-		if ( ! class_exists( 'RL_FSBI_Field_Types' ) ) {
+		if ( ! class_exists( 'RL_Field_Types' ) ) {
 			require_once __DIR__ . '/../class-rl-field-types.php';
 		}
 
 		// Expand typed aliases (email, phone, postal_code, url, nif) into framework-native field definitions.
-		if ( class_exists( 'RL_FSBI_Field_Types' ) ) {
-			$field = RL_FSBI_Field_Types::expand_typed_field( $field );
+		if ( class_exists( 'RL_Field_Types' ) ) {
+			$field = RL_Field_Types::expand_typed_field( $field );
 		}
 
 		// Provider shorthand: provider => 'countries' (or array) maps to options_provider.
@@ -379,9 +379,9 @@ class RL_FSBI_Options_Schema_Manager {
 			$debug_field => [
 				'id'       => $debug_field,
 				'type'     => 'toggle',
-				'label'    => __( 'Enable Debug Mode', RL_FSBI_Options_Framework::text_domain() ),
-				'text'     => __( 'Enable debug logging', RL_FSBI_Options_Framework::text_domain() ),
-				'desc'     => __( 'Enable verbose debug logging for troubleshooting. Disable on production sites.', RL_FSBI_Options_Framework::text_domain() ),
+				'label'    => __( 'Enable Debug Mode', RL_Options_Framework::text_domain() ),
+				'text'     => __( 'Enable debug logging', RL_Options_Framework::text_domain() ),
+				'desc'     => __( 'Enable verbose debug logging for troubleshooting. Disable on production sites.', RL_Options_Framework::text_domain() ),
 				'default'  => false,
 				'priority' => 10,
 			],
@@ -391,9 +391,9 @@ class RL_FSBI_Options_Schema_Manager {
 			$debug_fields[ $local_assets_field ] = [
 				'id'       => $local_assets_field,
 				'type'     => 'toggle',
-				'label'    => __( 'Use Local Assets', RL_FSBI_Options_Framework::text_domain() ),
-				'text'     => __( 'Load options framework libraries locally (GDPR compliant)', RL_FSBI_Options_Framework::text_domain() ),
-				'desc'     => __( 'Controls how the RL Options Framework loads its own UI libraries (SweetAlert2, Tippy.js, jQuery UI theme). When enabled, these are served from your server. When disabled, they are loaded from public CDNs. This setting does not affect any other plugin assets.', RL_FSBI_Options_Framework::text_domain() ),
+				'label'    => __( 'Use Local Assets', RL_Options_Framework::text_domain() ),
+				'text'     => __( 'Load options framework libraries locally (GDPR compliant)', RL_Options_Framework::text_domain() ),
+				'desc'     => __( 'Controls how the RL Options Framework loads its own UI libraries (SweetAlert2, Tippy.js, jQuery UI theme). When enabled, these are served from your server. When disabled, they are loaded from public CDNs. This setting does not affect any other plugin assets.', RL_Options_Framework::text_domain() ),
 				'default'  => true,
 				'priority' => 20,
 			];
@@ -401,12 +401,12 @@ class RL_FSBI_Options_Schema_Manager {
 
 		return [
 			'support' => [
-				'label'    => __( 'Support', RL_FSBI_Options_Framework::text_domain() ),
+				'label'    => __( 'Support', RL_Options_Framework::text_domain() ),
 				'priority' => 900,
 				'sections' => [
 					'debug' => [
 						'id'     => 'debug',
-						'title'  => __( 'Debug Settings', RL_FSBI_Options_Framework::text_domain() ),
+						'title'  => __( 'Debug Settings', RL_Options_Framework::text_domain() ),
 						'fields' => $debug_fields,
 					],
 				],

@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
  *
  * Stores the enabled keys in display order (same payload as `sortable`).
  */
-class RL_FSBI_Field_Sorter extends RL_FSBI_Field_Sortable
+class RL_Field_Sorter extends RL_Field_Sortable
 {
 	public function type(): string
 	{

@@ -9,28 +9,28 @@
  * - Subdivision and municipality data with transient caching
  * - Remote REST Countries API integration with configurable sources
  *
- * @package RL_FSBI_Options_Framework
+ * @package RL_Options_Framework
  * @since 2.1.0
  */
 
 /**
  * REST API and geo data service for RL Options Framework.
  */
-class RL_FSBI_Options_Rest_Api {
+class RL_Options_Rest_Api {
 
 	/**
 	 * Framework instance.
 	 *
-	 * @var RL_FSBI_Options_Framework
+	 * @var RL_Options_Framework
 	 */
 	private $framework;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_FSBI_Options_Framework $framework Framework instance.
+	 * @param RL_Options_Framework $framework Framework instance.
 	 */
-	public function __construct( RL_FSBI_Options_Framework $framework ) {
+	public function __construct( RL_Options_Framework $framework ) {
 		$this->framework = $framework;
 	}
 

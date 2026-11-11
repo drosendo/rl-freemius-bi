@@ -9,7 +9,7 @@
  *             max_rows, minlength, options: [[value,label]], conditions, required_if }
  *       ] } ] } ] }
  *
- * @package RL_FSBI_Options_Framework
+ * @package RL_Options_Framework
  */
 (function (window, document) {
 	'use strict';

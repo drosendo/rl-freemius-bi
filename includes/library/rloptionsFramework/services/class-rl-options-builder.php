@@ -7,7 +7,7 @@
  * per-field inspector for visibility conditions and required rules, and exports
  * the resulting schema as ready-to-paste PHP.
  *
- * @package RL_FSBI_Options_Framework
+ * @package RL_Options_Framework
  * @since 2.4.0
  */
 
@@ -18,21 +18,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Visual schema builder for the RL Options Framework.
  */
-class RL_FSBI_Options_Builder {
+class RL_Options_Builder {
 
 	/**
 	 * Framework instance.
 	 *
-	 * @var RL_FSBI_Options_Framework
+	 * @var RL_Options_Framework
 	 */
 	private $framework;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_FSBI_Options_Framework $framework Framework instance.
+	 * @param RL_Options_Framework $framework Framework instance.
 	 */
-	public function __construct( RL_FSBI_Options_Framework $framework ) {
+	public function __construct( RL_Options_Framework $framework ) {
 		$this->framework = $framework;
 	}
 
@@ -80,11 +80,11 @@ class RL_FSBI_Options_Builder {
 		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
 
 		if ( '' === $nonce || ! wp_verify_nonce( $nonce, $this->save_action() . '_nonce' ) ) {
-			wp_send_json_error( [ 'message' => __( 'Security check failed. Refresh the page and try again.', RL_FSBI_Options_Framework::text_domain() ) ], 403 );
+			wp_send_json_error( [ 'message' => __( 'Security check failed. Refresh the page and try again.', RL_Options_Framework::text_domain() ) ], 403 );
 		}
 
 		if ( ! current_user_can( (string) $this->framework->get_config( 'capability' ) ) ) {
-			wp_send_json_error( [ 'message' => __( 'You are not allowed to use the builder.', RL_FSBI_Options_Framework::text_domain() ) ], 403 );
+			wp_send_json_error( [ 'message' => __( 'You are not allowed to use the builder.', RL_Options_Framework::text_domain() ) ], 403 );
 		}
 	}
 
@@ -108,14 +108,14 @@ class RL_FSBI_Options_Builder {
 			$options = [];
 		}
 
-		$renderer = new RL_FSBI_Options_Render_Service( $this->framework );
+		$renderer = new RL_Options_Render_Service( $this->framework );
 
 		if ( is_string( $batch ) && '' !== $batch ) {
 			$fields = json_decode( $batch, true );
 			$fields = is_array( $fields ) ? array_slice( $fields, 0, 200 ) : [];
 
 			if ( ! $fields ) {
-				wp_send_json_error( [ 'message' => __( 'Invalid field payload.', RL_FSBI_Options_Framework::text_domain() ) ], 400 );
+				wp_send_json_error( [ 'message' => __( 'Invalid field payload.', RL_Options_Framework::text_domain() ) ], 400 );
 			}
 
 			$html = [];
@@ -135,7 +135,7 @@ class RL_FSBI_Options_Builder {
 		$html  = $this->render_model_field( $field, $renderer, $options );
 
 		if ( null === $html ) {
-			wp_send_json_error( [ 'message' => __( 'Invalid field payload.', RL_FSBI_Options_Framework::text_domain() ) ], 400 );
+			wp_send_json_error( [ 'message' => __( 'Invalid field payload.', RL_Options_Framework::text_domain() ) ], 400 );
 		}
 
 		wp_send_json_success( [ 'html' => $html[1] ] );
@@ -145,11 +145,11 @@ class RL_FSBI_Options_Builder {
 	 * Sanitize one builder field and render it.
 	 *
 	 * @param mixed                    $field    Raw field payload.
-	 * @param RL_FSBI_Options_Render_Service $renderer Renderer instance.
+	 * @param RL_Options_Render_Service $renderer Renderer instance.
 	 * @param array                    $options  Stored option values.
 	 * @return array{0:string,1:string}|null Field id + markup, or null when the payload is unusable.
 	 */
-	private function render_model_field( $field, RL_FSBI_Options_Render_Service $renderer, array $options ): ?array {
+	private function render_model_field( $field, RL_Options_Render_Service $renderer, array $options ): ?array {
 		if ( ! is_array( $field ) || empty( $field['id'] ) || empty( $field['type'] ) ) {
 			return null;
 		}
@@ -282,8 +282,8 @@ class RL_FSBI_Options_Builder {
 	public function register_menu(): void {
 		add_submenu_page(
 			(string) $this->framework->get_config( 'parent_menu' ),
-			__( 'RL Builder', RL_FSBI_Options_Framework::text_domain() ),
-			__( 'RL Builder', RL_FSBI_Options_Framework::text_domain() ),
+			__( 'RL Builder', RL_Options_Framework::text_domain() ),
+			__( 'RL Builder', RL_Options_Framework::text_domain() ),
 			(string) $this->framework->get_config( 'capability' ),
 			$this->page_slug(),
 			[ $this, 'render_page' ]
@@ -312,9 +312,9 @@ class RL_FSBI_Options_Builder {
 
 		wp_enqueue_style( 'dashicons' );
 		wp_enqueue_style( 'wp-color-picker' );
-		wp_enqueue_style( $framework_style, $assets_url . 'css/options-framework.css', [ 'dashicons', 'wp-color-picker' ], RL_FSBI_Options_Framework::VERSION );
-		wp_enqueue_style( 'rl-options-builder', $assets_url . 'css/options-builder.css', [ 'dashicons', $framework_style ], RL_FSBI_Options_Framework::VERSION );
-		wp_enqueue_script( 'rl-options-builder', $assets_url . 'js/options-builder.js', [], RL_FSBI_Options_Framework::VERSION, true );
+		wp_enqueue_style( $framework_style, $assets_url . 'css/options-framework.css', [ 'dashicons', 'wp-color-picker' ], RL_Options_Framework::VERSION );
+		wp_enqueue_style( 'rl-options-builder', $assets_url . 'css/options-builder.css', [ 'dashicons', $framework_style ], RL_Options_Framework::VERSION );
+		wp_enqueue_script( 'rl-options-builder', $assets_url . 'js/options-builder.js', [], RL_Options_Framework::VERSION, true );
 
 		wp_localize_script(
 			'rl-options-builder',
@@ -331,7 +331,7 @@ class RL_FSBI_Options_Builder {
 				'currentTabs' => $this->current_tabs_for_export(),
 				'catalog'     => $this->field_catalog(),
 				'operators'   => $this->operators(),
-				'textDomain'  => RL_FSBI_Options_Framework::text_domain(),
+				'textDomain'  => RL_Options_Framework::text_domain(),
 			]
 		);
 	}
@@ -358,24 +358,24 @@ class RL_FSBI_Options_Builder {
 		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
 
 		if ( '' === $nonce || ! wp_verify_nonce( $nonce, $this->save_action() . '_nonce' ) ) {
-			wp_send_json_error( [ 'message' => __( 'Security check failed. Refresh the page and try again.', RL_FSBI_Options_Framework::text_domain() ) ], 403 );
+			wp_send_json_error( [ 'message' => __( 'Security check failed. Refresh the page and try again.', RL_Options_Framework::text_domain() ) ], 403 );
 		}
 
 		if ( ! current_user_can( (string) $this->framework->get_config( 'capability' ) ) ) {
-			wp_send_json_error( [ 'message' => __( 'You are not allowed to use the builder.', RL_FSBI_Options_Framework::text_domain() ) ], 403 );
+			wp_send_json_error( [ 'message' => __( 'You are not allowed to use the builder.', RL_Options_Framework::text_domain() ) ], 403 );
 		}
 
 		$payload = isset( $_POST['schema'] ) ? wp_unslash( $_POST['schema'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- JSON is re-encoded below.
 		$payload = is_string( $payload ) ? $payload : '';
 
 		if ( strlen( $payload ) > 1048576 ) {
-			wp_send_json_error( [ 'message' => __( 'Schema is too large to store.', RL_FSBI_Options_Framework::text_domain() ) ], 413 );
+			wp_send_json_error( [ 'message' => __( 'Schema is too large to store.', RL_Options_Framework::text_domain() ) ], 413 );
 		}
 
 		$decoded = json_decode( $payload, true );
 
 		if ( ! is_array( $decoded ) || ! isset( $decoded['tabs'] ) || ! is_array( $decoded['tabs'] ) ) {
-			wp_send_json_error( [ 'message' => __( 'Invalid schema payload.', RL_FSBI_Options_Framework::text_domain() ) ], 400 );
+			wp_send_json_error( [ 'message' => __( 'Invalid schema payload.', RL_Options_Framework::text_domain() ) ], 400 );
 		}
 
 		$schema = $this->sanitize_schema( $decoded );
@@ -383,7 +383,7 @@ class RL_FSBI_Options_Builder {
 
 		wp_send_json_success(
 			[
-				'message' => __( 'Draft saved.', RL_FSBI_Options_Framework::text_domain() ),
+				'message' => __( 'Draft saved.', RL_Options_Framework::text_domain() ),
 				'tabs'    => count( $schema['tabs'] ),
 			]
 		);
@@ -616,42 +616,42 @@ class RL_FSBI_Options_Builder {
 			'groups' => [
 				[
 					'id'    => 'text',
-					'label' => __( 'Text & numbers', RL_FSBI_Options_Framework::text_domain() ),
+					'label' => __( 'Text & numbers', RL_Options_Framework::text_domain() ),
 					'types' => [ 'text', 'textarea', 'password', 'number', 'slider', 'spinner', 'code', 'editor' ],
 				],
 				[
 					'id'    => 'choice',
-					'label' => __( 'Choice', RL_FSBI_Options_Framework::text_domain() ),
+					'label' => __( 'Choice', RL_Options_Framework::text_domain() ),
 					'types' => [ 'select', 'multiselect', 'radio', 'checkbox', 'toggle', 'switch', 'button_set', 'image_select', 'icon_select' ],
 				],
 				[
 					'id'    => 'media',
-					'label' => __( 'Media', RL_FSBI_Options_Framework::text_domain() ),
+					'label' => __( 'Media', RL_Options_Framework::text_domain() ),
 					'types' => [ 'image', 'media', 'gallery' ],
 				],
 				[
 					'id'    => 'design',
-					'label' => __( 'Design', RL_FSBI_Options_Framework::text_domain() ),
+					'label' => __( 'Design', RL_Options_Framework::text_domain() ),
 					'types' => [ 'color', 'color_palette', 'color_gradient', 'link_color', 'border', 'box_shadow', 'dimensions', 'spacing', 'typography', 'background' ],
 				],
 				[
 					'id'    => 'content',
-					'label' => __( 'Content & layout', RL_FSBI_Options_Framework::text_domain() ),
+					'label' => __( 'Content & layout', RL_Options_Framework::text_domain() ),
 					'types' => [ 'html', 'info', 'divider', 'raw' ],
 				],
 				[
 					'id'    => 'collections',
-					'label' => __( 'Collections', RL_FSBI_Options_Framework::text_domain() ),
+					'label' => __( 'Collections', RL_Options_Framework::text_domain() ),
 					'types' => [ 'multi_text', 'sortable', 'sorter' ],
 				],
 				[
 					'id'    => 'geo',
-					'label' => __( 'Geo & dates', RL_FSBI_Options_Framework::text_domain() ),
+					'label' => __( 'Geo & dates', RL_Options_Framework::text_domain() ),
 					'types' => [ 'country', 'state', 'city', 'country_state_city', 'date', 'datetime' ],
 				],
 				[
 					'id'    => 'system',
-					'label' => __( 'System', RL_FSBI_Options_Framework::text_domain() ),
+					'label' => __( 'System', RL_Options_Framework::text_domain() ),
 					'types' => [ 'export', 'import', 'reset', 'reset_section' ],
 				],
 			],
@@ -712,20 +712,20 @@ class RL_FSBI_Options_Builder {
 	 */
 	private function operators(): array {
 		return [
-			'equals'     => __( 'equals', RL_FSBI_Options_Framework::text_domain() ),
-			'not_equals' => __( 'not equals', RL_FSBI_Options_Framework::text_domain() ),
-			'in'         => __( 'in', RL_FSBI_Options_Framework::text_domain() ),
-			'not_in'     => __( 'not in', RL_FSBI_Options_Framework::text_domain() ),
-			'empty'      => __( 'is empty', RL_FSBI_Options_Framework::text_domain() ),
-			'not_empty'  => __( 'is not empty', RL_FSBI_Options_Framework::text_domain() ),
-			'truthy'     => __( 'is truthy', RL_FSBI_Options_Framework::text_domain() ),
-			'falsy'      => __( 'is falsy', RL_FSBI_Options_Framework::text_domain() ),
-			'contains'   => __( 'contains', RL_FSBI_Options_Framework::text_domain() ),
-			'match'      => __( 'matches regex', RL_FSBI_Options_Framework::text_domain() ),
-			'>'          => __( 'greater than', RL_FSBI_Options_Framework::text_domain() ),
-			'>='         => __( 'greater or equal', RL_FSBI_Options_Framework::text_domain() ),
-			'<'          => __( 'less than', RL_FSBI_Options_Framework::text_domain() ),
-			'<='         => __( 'less or equal', RL_FSBI_Options_Framework::text_domain() ),
+			'equals'     => __( 'equals', RL_Options_Framework::text_domain() ),
+			'not_equals' => __( 'not equals', RL_Options_Framework::text_domain() ),
+			'in'         => __( 'in', RL_Options_Framework::text_domain() ),
+			'not_in'     => __( 'not in', RL_Options_Framework::text_domain() ),
+			'empty'      => __( 'is empty', RL_Options_Framework::text_domain() ),
+			'not_empty'  => __( 'is not empty', RL_Options_Framework::text_domain() ),
+			'truthy'     => __( 'is truthy', RL_Options_Framework::text_domain() ),
+			'falsy'      => __( 'is falsy', RL_Options_Framework::text_domain() ),
+			'contains'   => __( 'contains', RL_Options_Framework::text_domain() ),
+			'match'      => __( 'matches regex', RL_Options_Framework::text_domain() ),
+			'>'          => __( 'greater than', RL_Options_Framework::text_domain() ),
+			'>='         => __( 'greater or equal', RL_Options_Framework::text_domain() ),
+			'<'          => __( 'less than', RL_Options_Framework::text_domain() ),
+			'<='         => __( 'less or equal', RL_Options_Framework::text_domain() ),
 		];
 	}
 
@@ -734,83 +734,83 @@ class RL_FSBI_Options_Builder {
 	 */
 	public function render_page(): void {
 		if ( ! current_user_can( (string) $this->framework->get_config( 'capability' ) ) ) {
-			wp_die( esc_html__( 'You are not allowed to use the builder.', RL_FSBI_Options_Framework::text_domain() ) );
+			wp_die( esc_html__( 'You are not allowed to use the builder.', RL_Options_Framework::text_domain() ) );
 		}
 		?>
 		<div class="wrap rl-builder-wrap">
 			<div class="rl-builder" id="rl-builder">
 				<header class="rl-builder-bar">
 					<div class="rl-builder-title">
-						<h1><?php esc_html_e( 'RL Builder', RL_FSBI_Options_Framework::text_domain() ); ?></h1>
+						<h1><?php esc_html_e( 'RL Builder', RL_Options_Framework::text_domain() ); ?></h1>
 						<p class="rl-builder-sub">
 							<?php
 							printf(
 								/* translators: %s: option name */
-								esc_html__( 'Drag fields into a section, select one to edit its conditions and rules, then export the PHP for %s.', RL_FSBI_Options_Framework::text_domain() ),
+								esc_html__( 'Drag fields into a section, select one to edit its conditions and rules, then export the PHP for %s.', RL_Options_Framework::text_domain() ),
 								'<code>' . esc_html( (string) $this->framework->get_config( 'option_name' ) ) . '</code>'
 							);
 							?>
 						</p>
 					</div>
 					<div class="rl-builder-actions">
-						<div class="rl-builder-history" role="group" aria-label="<?php esc_attr_e( 'History', RL_FSBI_Options_Framework::text_domain() ); ?>">
-							<button type="button" class="button rl-builder-icon-button" data-builder-action="undo" title="<?php esc_attr_e( 'Undo (Ctrl/Cmd+Z)', RL_FSBI_Options_Framework::text_domain() ); ?>" disabled>
+						<div class="rl-builder-history" role="group" aria-label="<?php esc_attr_e( 'History', RL_Options_Framework::text_domain() ); ?>">
+							<button type="button" class="button rl-builder-icon-button" data-builder-action="undo" title="<?php esc_attr_e( 'Undo (Ctrl/Cmd+Z)', RL_Options_Framework::text_domain() ); ?>" disabled>
 								<span class="dashicons dashicons-undo" aria-hidden="true"></span>
-								<span class="screen-reader-text"><?php esc_html_e( 'Undo', RL_FSBI_Options_Framework::text_domain() ); ?></span>
+								<span class="screen-reader-text"><?php esc_html_e( 'Undo', RL_Options_Framework::text_domain() ); ?></span>
 							</button>
-							<button type="button" class="button rl-builder-icon-button" data-builder-action="redo" title="<?php esc_attr_e( 'Redo (Ctrl/Cmd+Shift+Z)', RL_FSBI_Options_Framework::text_domain() ); ?>" disabled>
+							<button type="button" class="button rl-builder-icon-button" data-builder-action="redo" title="<?php esc_attr_e( 'Redo (Ctrl/Cmd+Shift+Z)', RL_Options_Framework::text_domain() ); ?>" disabled>
 								<span class="dashicons dashicons-redo" aria-hidden="true"></span>
-								<span class="screen-reader-text"><?php esc_html_e( 'Redo', RL_FSBI_Options_Framework::text_domain() ); ?></span>
+								<span class="screen-reader-text"><?php esc_html_e( 'Redo', RL_Options_Framework::text_domain() ); ?></span>
 							</button>
 						</div>
-						<button type="button" class="button rl-builder-toggle" data-builder-action="wysiwyg" aria-pressed="false" title="<?php esc_attr_e( 'Hide the builder chrome and show only the fields as visitors will see them', RL_FSBI_Options_Framework::text_domain() ); ?>">
+						<button type="button" class="button rl-builder-toggle" data-builder-action="wysiwyg" aria-pressed="false" title="<?php esc_attr_e( 'Hide the builder chrome and show only the fields as visitors will see them', RL_Options_Framework::text_domain() ); ?>">
 							<span class="dashicons dashicons-visibility" aria-hidden="true"></span>
-							<span class="rl-builder-toggle-label"><?php esc_html_e( 'Preview page', RL_FSBI_Options_Framework::text_domain() ); ?></span>
+							<span class="rl-builder-toggle-label"><?php esc_html_e( 'Preview page', RL_Options_Framework::text_domain() ); ?></span>
 						</button>
-						<button type="button" class="button" data-builder-action="new"><?php esc_html_e( 'New', RL_FSBI_Options_Framework::text_domain() ); ?></button>
-						<button type="button" class="button" data-builder-action="load-current"><?php esc_html_e( 'Load current tabs', RL_FSBI_Options_Framework::text_domain() ); ?></button>
-						<button type="button" class="button" data-builder-action="save"><?php esc_html_e( 'Save draft', RL_FSBI_Options_Framework::text_domain() ); ?></button>
-						<button type="button" class="button button-primary" data-builder-action="export"><?php esc_html_e( 'Export PHP', RL_FSBI_Options_Framework::text_domain() ); ?></button>
-						<span class="rl-builder-dirty is-clean" data-builder-dirty aria-live="polite"><?php esc_html_e( 'All changes saved', RL_FSBI_Options_Framework::text_domain() ); ?></span>
+						<button type="button" class="button" data-builder-action="new"><?php esc_html_e( 'New', RL_Options_Framework::text_domain() ); ?></button>
+						<button type="button" class="button" data-builder-action="load-current"><?php esc_html_e( 'Load current tabs', RL_Options_Framework::text_domain() ); ?></button>
+						<button type="button" class="button" data-builder-action="save"><?php esc_html_e( 'Save draft', RL_Options_Framework::text_domain() ); ?></button>
+						<button type="button" class="button button-primary" data-builder-action="export"><?php esc_html_e( 'Export PHP', RL_Options_Framework::text_domain() ); ?></button>
+						<span class="rl-builder-dirty is-clean" data-builder-dirty aria-live="polite"><?php esc_html_e( 'All changes saved', RL_Options_Framework::text_domain() ); ?></span>
 						<span class="rl-builder-status" data-builder-status aria-live="polite"></span>
 					</div>
 				</header>
 
 				<div class="rl-builder-body">
-					<aside class="rl-builder-palette" aria-label="<?php esc_attr_e( 'Field palette', RL_FSBI_Options_Framework::text_domain() ); ?>">
-						<label class="screen-reader-text" for="rl-builder-search"><?php esc_html_e( 'Search field types', RL_FSBI_Options_Framework::text_domain() ); ?></label>
-						<input type="search" id="rl-builder-search" class="rl-builder-search" data-builder-search placeholder="<?php esc_attr_e( 'Filter field types…', RL_FSBI_Options_Framework::text_domain() ); ?>" autocomplete="off">
-						<h2><?php esc_html_e( 'Fields', RL_FSBI_Options_Framework::text_domain() ); ?></h2>
+					<aside class="rl-builder-palette" aria-label="<?php esc_attr_e( 'Field palette', RL_Options_Framework::text_domain() ); ?>">
+						<label class="screen-reader-text" for="rl-builder-search"><?php esc_html_e( 'Search field types', RL_Options_Framework::text_domain() ); ?></label>
+						<input type="search" id="rl-builder-search" class="rl-builder-search" data-builder-search placeholder="<?php esc_attr_e( 'Filter field types…', RL_Options_Framework::text_domain() ); ?>" autocomplete="off">
+						<h2><?php esc_html_e( 'Fields', RL_Options_Framework::text_domain() ); ?></h2>
 						<div class="rl-builder-palette-groups" data-builder-palette></div>
 					</aside>
 
-					<main class="rl-builder-canvas" aria-label="<?php esc_attr_e( 'Schema canvas', RL_FSBI_Options_Framework::text_domain() ); ?>">
+					<main class="rl-builder-canvas" aria-label="<?php esc_attr_e( 'Schema canvas', RL_Options_Framework::text_domain() ); ?>">
 						<div class="rl-builder-tabs" data-builder-canvas></div>
 						<div class="rl-builder-empty" data-builder-empty>
-							<p><?php esc_html_e( 'No tabs yet.', RL_FSBI_Options_Framework::text_domain() ); ?></p>
-							<button type="button" class="button" data-builder-action="add-tab"><?php esc_html_e( '+ Add tab', RL_FSBI_Options_Framework::text_domain() ); ?></button>
+							<p><?php esc_html_e( 'No tabs yet.', RL_Options_Framework::text_domain() ); ?></p>
+							<button type="button" class="button" data-builder-action="add-tab"><?php esc_html_e( '+ Add tab', RL_Options_Framework::text_domain() ); ?></button>
 						</div>
 					</main>
 
-					<aside class="rl-builder-inspector" data-builder-inspector aria-label="<?php esc_attr_e( 'Inspector', RL_FSBI_Options_Framework::text_domain() ); ?>">
-						<p class="rl-builder-hint"><?php esc_html_e( 'Select a field, section or tab to edit it.', RL_FSBI_Options_Framework::text_domain() ); ?></p>
+					<aside class="rl-builder-inspector" data-builder-inspector aria-label="<?php esc_attr_e( 'Inspector', RL_Options_Framework::text_domain() ); ?>">
+						<p class="rl-builder-hint"><?php esc_html_e( 'Select a field, section or tab to edit it.', RL_Options_Framework::text_domain() ); ?></p>
 					</aside>
 				</div>
 
 				<section class="rl-builder-export" data-builder-export hidden>
 					<div class="rl-builder-export-bar">
-						<h2><?php esc_html_e( 'Export', RL_FSBI_Options_Framework::text_domain() ); ?></h2>
+						<h2><?php esc_html_e( 'Export', RL_Options_Framework::text_domain() ); ?></h2>
 						<div class="rl-builder-export-actions">
 							<label class="rl-builder-format">
-								<span><?php esc_html_e( 'Format', RL_FSBI_Options_Framework::text_domain() ); ?></span>
+								<span><?php esc_html_e( 'Format', RL_Options_Framework::text_domain() ); ?></span>
 								<select data-builder-format>
-									<option value="calls"><?php esc_html_e( 'add_tab / add_section / add_field calls', RL_FSBI_Options_Framework::text_domain() ); ?></option>
-									<option value="filter"><?php esc_html_e( 'Tabs filter array', RL_FSBI_Options_Framework::text_domain() ); ?></option>
+									<option value="calls"><?php esc_html_e( 'add_tab / add_section / add_field calls', RL_Options_Framework::text_domain() ); ?></option>
+									<option value="filter"><?php esc_html_e( 'Tabs filter array', RL_Options_Framework::text_domain() ); ?></option>
 								</select>
 							</label>
-							<button type="button" class="button" data-builder-action="copy"><?php esc_html_e( 'Copy', RL_FSBI_Options_Framework::text_domain() ); ?></button>
-							<button type="button" class="button" data-builder-action="download"><?php esc_html_e( 'Download .php', RL_FSBI_Options_Framework::text_domain() ); ?></button>
-							<button type="button" class="button-link" data-builder-action="close-export"><?php esc_html_e( 'Close', RL_FSBI_Options_Framework::text_domain() ); ?></button>
+							<button type="button" class="button" data-builder-action="copy"><?php esc_html_e( 'Copy', RL_Options_Framework::text_domain() ); ?></button>
+							<button type="button" class="button" data-builder-action="download"><?php esc_html_e( 'Download .php', RL_Options_Framework::text_domain() ); ?></button>
+							<button type="button" class="button-link" data-builder-action="close-export"><?php esc_html_e( 'Close', RL_Options_Framework::text_domain() ); ?></button>
 						</div>
 					</div>
 					<pre class="rl-builder-code"><code data-builder-code></code></pre>

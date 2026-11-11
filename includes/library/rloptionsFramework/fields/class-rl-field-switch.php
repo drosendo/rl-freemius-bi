@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Switch field: a boolean toggle with Redux-style switch markup.
  */
-class RL_FSBI_Field_Switch implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Switch implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{

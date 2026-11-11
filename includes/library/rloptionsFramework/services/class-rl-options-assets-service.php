@@ -6,25 +6,25 @@
  * Handles admin asset enqueueing: CSS, JavaScript, and inline styles.
  * Manages CDN vs local asset strategy based on config.
  *
- * @package RL_FSBI_Options_Framework
+ * @package RL_Options_Framework
  */
 
 if (!defined('ABSPATH')) {
 	return;
 }
 
-class RL_FSBI_Options_Assets_Service {
+class RL_Options_Assets_Service {
 	/**
-	 * @var RL_FSBI_Options_Framework Framework instance for config/option access.
+	 * @var RL_Options_Framework Framework instance for config/option access.
 	 */
 	private $framework;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_FSBI_Options_Framework $framework Framework instance.
+	 * @param RL_Options_Framework $framework Framework instance.
 	 */
-	public function __construct(RL_FSBI_Options_Framework $framework) {
+	public function __construct(RL_Options_Framework $framework) {
 		$this->framework = $framework;
 	}
 

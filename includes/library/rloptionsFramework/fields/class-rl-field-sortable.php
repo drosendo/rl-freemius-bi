@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 /**
  * Drag-sortable multi-select: stores the enabled keys in display order.
  */
-class RL_FSBI_Field_Sortable implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+class RL_Field_Sortable implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	public function type(): string
 	{

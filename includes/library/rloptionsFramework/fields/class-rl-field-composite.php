@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
  * Subclasses only declare their sub-fields; rendering and sanitization are shared.
  * Values are stored as an array keyed by sub-field name, unknown keys are dropped.
  */
-abstract class RL_FSBI_Field_Composite implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
+abstract class RL_Field_Composite implements RL_Field_Interface, RL_Field_Processing_Interface
 {
 	/**
 	 * Sub-field definitions: key => [type, label, default, options, min, max, step, attrs].
@@ -209,9 +209,9 @@ abstract class RL_FSBI_Field_Composite implements RL_FSBI_Field_Interface, RL_FS
 					esc_attr($id),
 					esc_attr($name),
 					esc_attr((string) $current),
-					esc_html__('Choose Image', RL_FSBI_Options_Framework::text_domain()),
+					esc_html__('Choose Image', RL_Options_Framework::text_domain()),
 					'' === (string) $current ? ' style="display:none;"' : '',
-					esc_html__('Remove', RL_FSBI_Options_Framework::text_domain()),
+					esc_html__('Remove', RL_Options_Framework::text_domain()),
 					'' === (string) $current ? '' : sprintf('<img src="%s" style="max-width:120px;height:auto;display:block;" />', esc_url((string) $current))
 				);
 				break;
@@ -230,7 +230,7 @@ abstract class RL_FSBI_Field_Composite implements RL_FSBI_Field_Interface, RL_FS
 		if ($linkable && in_array($key, ['top', 'right', 'bottom', 'left'], true)) {
 			printf(
 				'<button type="button" class="rl-gb-link" data-rl-link aria-pressed="false" title="%1$s"><span class="dashicons dashicons-admin-links" aria-hidden="true"></span><span class="screen-reader-text">%1$s</span></button>',
-				esc_attr__('Link all sides', RL_FSBI_Options_Framework::text_domain())
+				esc_attr__('Link all sides', RL_Options_Framework::text_domain())
 			);
 		}
 
