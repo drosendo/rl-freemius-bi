@@ -990,6 +990,20 @@ bumping `Version:` means no site will ever see it.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
 
+### Unreleased - first-run auto-detection
+
+`RL_FSBI_Detection` (`includes/class-rl-fsbi-detection.php`) works the account out from its own data instead of asking for it:
+
+- **Full history**: every payment of every product in scope, paged at 100 until the API returns nothing.
+- **Lifetime gross in USD**: only rows with `type = payment` and a positive gross, each converted at its own date through the same converter the dashboards use, so detection and reporting cannot disagree about what a dollar is.
+- **Models compared**: legacy progressive (27% to $1,000, 17% to $5,000, 7% after, computed as a lifetime average), current (3.8% + 2.3% + fixed fee) and flat. Legacy wins outright when it lands within one percentage point of the rate in `balances.commission_rate`; otherwise the closest of current and flat wins, and the confidence is `100 - difference/observed*100`.
+- **Rate inference is scoped to the products being detected**: `balances` rows are filtered by `app_id IN (scope)`, so a demo or local product can never set the rate for a real one.
+- **Also detected**: currencies seen, plans and billing cycles from the synced subscriptions, active installs from the catalog, and a WordPress.org probe of each product's Freemius slug. A slug is prefilled only when the field is empty, so a manual value always wins.
+- **One-time summary**: `Setup detected` with every value, the model comparison and the warnings, plus **Accept detected values** (writes the rate only into empty settings), **Edit manually** and **Re-detect** - all plain links, because the settings form must stay the only form on the page.
+- **Unknown commission is not zero**: when no rate can be determined, `net = gross - refunds - gateway fees` and the widget carries the warning, rather than netting every month to zero.
+
+Measured on product 2228 alone: lifetime gross **$62,969.95** over **1,375** payments, currencies EUR/USD/GBP, plans 3874 and 4862, cycles 12 and 1, active installs **2,309**, `smart-variations-images` found on WordPress.org at 5.2.39. Legacy would average 7.95%, current 6.10%, and Freemius reports no rate for this product, so the model is reported as unknown with a warning instead of guessing.
+
 ### 1.4.12 (2026-11-11)
 
 **Settings could not be saved at all: an empty `number` field aborts the whole form.**

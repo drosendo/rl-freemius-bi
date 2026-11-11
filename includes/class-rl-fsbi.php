@@ -59,6 +59,7 @@ class RL_FSBI {
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-rest-api.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-cli.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-github-updater.php';
+		require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-detection.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/freemius/class-rl-fsbi-api.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'admin/class-rl-fsbi-admin.php';
 
@@ -81,6 +82,8 @@ class RL_FSBI {
 		$this->loader->add_action( 'admin_menu', $plugin_admin, 'add_plugin_admin_menu' );
 		$this->loader->add_action( 'admin_post_rl_fsbi_user_backfill', $plugin_admin, 'handle_user_backfill_action' );
 		$this->loader->add_action( 'admin_post_rl_fsbi_check_wporg', $this, 'handle_check_wporg' );
+		$this->loader->add_action( 'admin_post_rl_fsbi_detection_accept', $plugin_admin, 'handle_detection_accept' );
+		$this->loader->add_action( 'admin_post_rl_fsbi_detection_redetect', $plugin_admin, 'handle_detection_redetect' );
 		$this->loader->add_action( 'rest_api_init', $this, 'register_rest_routes' );
 
 		// Lazy callbacks only: instantiating these here would build a settings
@@ -109,6 +112,7 @@ class RL_FSBI {
 		$this->loader->add_action( 'admin_notices', $plugin_admin, 'render_kit_quota_notice' );
 		$this->loader->add_action( 'admin_notices', $plugin_admin, 'render_credential_notice' );
 		$this->loader->add_action( 'admin_notices', $plugin_admin, 'render_debug_notice' );
+		$this->loader->add_action( 'admin_notices', $plugin_admin, 'render_detection_notice' );
 		$this->loader->add_action( 'admin_notices', $plugin_admin, 'render_incomplete_upload_notice' );
 		$this->loader->add_action( 'wp_dashboard_setup', $plugin_admin, 'register_wordpress_dashboard_widget' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_sync_data', $plugin_admin, 'handle_sync_ajax' );

@@ -1416,6 +1416,11 @@ class RL_FSBI_Admin
 				$row_commission = ($row_gross + $row_vat) * ($rate / 100) + $this->get_freemius_fixed_fee($source_currency);
 				$commission += $row_commission;
 				$net += $row_gross - $row_commission - $row_gateway;
+			} else {
+				// No revenue share known: report gross minus refunds and gateway
+				// fees rather than netting to zero, and let the UI warn that
+				// commission is missing from the figure.
+				$net += $row_gross - $row_gateway;
 			}
 		}
 
@@ -3477,6 +3482,137 @@ class RL_FSBI_Admin
 			esc_html(implode(', ', $missing)),
 			esc_html__('The settings framework copy is being used instead so tooltips keep working. Re-upload the plugin folder, including assets/lib/.', 'rl-freemius-bi')
 		);
+	}
+
+	/**
+	 * One-time "Setup detected" summary, with Accept and Re-detect.
+	 *
+	 * Read-only links rather than a form: the settings form must stay the only
+	 * form on these pages.
+	 *
+	 * @return void
+	 */
+	public function render_detection_notice()
+	{
+		if (! current_user_can('manage_options') || ! $this->is_plugin_page()) {
+			return;
+		}
+
+		$summary = $this->settings->get_option(RL_FSBI_Detection::OPTION_SUMMARY, array());
+		if (! is_array($summary) || empty($summary)) {
+			return;
+		}
+
+		$accepted = (string) $this->settings->get_option(RL_FSBI_Detection::OPTION_ACCEPTED, '');
+
+		$accept_url = wp_nonce_url(add_query_arg('action', 'rl_fsbi_detection_accept', admin_url('admin-post.php')), 'rl_fsbi_detection_accept');
+		$redetect_url = wp_nonce_url(add_query_arg('action', 'rl_fsbi_detection_redetect', admin_url('admin-post.php')), 'rl_fsbi_detection_redetect');
+		$edit_url = admin_url('admin.php?page=rl-freemius-bi-settings&tab=plugin_scope');
+
+		$rows = array(
+			__('Commission model', 'rl-freemius-bi') => (string) ($summary['model_label'] ?? '—'),
+			__('Marginal rate', 'rl-freemius-bi') => number_format_i18n((float) ($summary['marginal_rate'] ?? 0), 2) . '%',
+			__('Lifetime average', 'rl-freemius-bi') => number_format_i18n((float) ($summary['lifetime_average'] ?? 0), 2) . '%',
+			__('Rate reported by Freemius', 'rl-freemius-bi') => number_format_i18n((float) ($summary['observed_rate'] ?? 0), 2) . '%',
+			__('Confidence', 'rl-freemius-bi') => number_format_i18n((float) ($summary['confidence'] ?? 0), 1) . '%',
+			__('Lifetime gross', 'rl-freemius-bi') => number_format_i18n((float) ($summary['lifetime_gross_usd'] ?? 0), 2) . ' USD',
+			__('Currencies', 'rl-freemius-bi') => implode(', ', (array) ($summary['currencies'] ?? array())),
+			__('Plans / billing cycles', 'rl-freemius-bi') => implode(', ', (array) ($summary['plans'] ?? array())) . ' / ' . implode(', ', (array) ($summary['cycles'] ?? array())),
+			__('Active installs (Freemius)', 'rl-freemius-bi') => number_format_i18n((int) ($summary['active_installs'] ?? 0)),
+		);
+
+		foreach ((array) ($summary['wporg'] ?? array()) as $plugin_id => $probe) {
+			$rows[sprintf(/* translators: %d: product id */ __('WordPress.org slug (product %d)', 'rl-freemius-bi'), (int) $plugin_id)] = ! empty($probe['found'])
+				? sprintf('%s — %s', $probe['slug'], $probe['version'])
+				: sprintf('%s — %s', $probe['slug'] ?: '—', $probe['reason'] ?? __('not found', 'rl-freemius-bi'));
+		}
+
+		$class = '' !== $accepted ? 'notice notice-success' : 'notice notice-info';
+		echo '<div class="' . esc_attr($class) . ' rl-fsbi-detection-notice"><p><strong>' . esc_html__('Setup detected', 'rl-freemius-bi') . '</strong>';
+		echo ' <span class="description">' . esc_html(sprintf(/* translators: %s: date */ __('Read on %s from your Freemius account and the WordPress.org API.', 'rl-freemius-bi'), (string) ($summary['ran_at'] ?? ''))) . '</span></p>';
+
+		echo '<table class="widefat striped" style="max-width:760px;margin:0 0 8px"><tbody>';
+		foreach ($rows as $label => $value) {
+			echo '<tr><th scope="row" style="width:38%">' . esc_html($label) . '</th><td>' . esc_html((string) $value) . '</td></tr>';
+		}
+		echo '</tbody></table>';
+
+		if (! empty($summary['comparison'])) {
+			echo '<p><strong>' . esc_html__('Model comparison', 'rl-freemius-bi') . '</strong></p><ul style="margin:0 0 8px 18px;list-style:disc">';
+			foreach ((array) $summary['comparison'] as $key => $row) {
+				echo '<li>' . esc_html(sprintf(
+					/* translators: 1: model, 2: average, 3: difference */
+					__('%1$s: lifetime average %2$s%%, %3$s points from the reported rate', 'rl-freemius-bi'),
+					(string) ($row['label'] ?? $key),
+					number_format_i18n((float) ($row['average'] ?? 0), 2),
+					number_format_i18n((float) ($row['difference'] ?? 0), 2)
+				)) . '</li>';
+			}
+			echo '</ul>';
+		}
+
+		foreach ((array) ($summary['warnings'] ?? array()) as $warning) {
+			echo '<p><span class="dashicons dashicons-warning" aria-hidden="true"></span> ' . esc_html((string) $warning) . '</p>';
+		}
+
+		echo '<p>';
+		if ('' === $accepted) {
+			echo '<a class="button button-primary" href="' . esc_url($accept_url) . '">' . esc_html__('Accept detected values', 'rl-freemius-bi') . '</a> ';
+		} else {
+			echo '<span class="dashicons dashicons-yes-alt" aria-hidden="true" style="color:#22c89b"></span> ' . esc_html__('Detected values accepted. Manual values always win.', 'rl-freemius-bi') . ' ';
+		}
+		echo '<a class="button" href="' . esc_url($edit_url) . '">' . esc_html__('Edit manually', 'rl-freemius-bi') . '</a> ';
+		echo '<a class="button" href="' . esc_url($redetect_url) . '">' . esc_html__('Re-detect', 'rl-freemius-bi') . '</a>';
+		echo '</p></div>';
+	}
+
+	/**
+	 * Apply the detected values the administrator accepted.
+	 *
+	 * Only empty settings are written: a value typed by hand is never replaced.
+	 *
+	 * @return void
+	 */
+	public function handle_detection_accept()
+	{
+		if (! current_user_can('manage_options')) {
+			wp_die(esc_html__('You are not allowed to do that.', 'rl-freemius-bi'));
+		}
+
+		check_admin_referer('rl_fsbi_detection_accept');
+
+		$summary = $this->settings->get_option(RL_FSBI_Detection::OPTION_SUMMARY, array());
+		$rate = is_array($summary) ? (float) ($summary['marginal_rate'] ?? 0) : 0.0;
+
+		if ($rate > 0 && '' === trim((string) $this->settings->get_option('rl_fsbi_fs_revenue_share', ''))) {
+			$this->settings->update_option('rl_fsbi_fs_revenue_share', (string) $rate);
+		}
+
+		$this->settings->update_option(RL_FSBI_Detection::OPTION_ACCEPTED, current_time('mysql'));
+		update_option('rl_fsbi_cache_generation', time(), false);
+
+		wp_safe_redirect(add_query_arg('rl_fsbi_detected', 'accepted', wp_get_referer() ?: admin_url('admin.php?page=rl-freemius-bi')));
+		exit;
+	}
+
+	/**
+	 * Run detection again on demand.
+	 *
+	 * @return void
+	 */
+	public function handle_detection_redetect()
+	{
+		if (! current_user_can('manage_options')) {
+			wp_die(esc_html__('You are not allowed to do that.', 'rl-freemius-bi'));
+		}
+
+		check_admin_referer('rl_fsbi_detection_redetect');
+
+		$detection = new RL_FSBI_Detection($this->settings);
+		$detection->run($this->get_selected_plugin_ids());
+
+		wp_safe_redirect(add_query_arg('rl_fsbi_detected', 'redetected', wp_get_referer() ?: admin_url('admin.php?page=rl-freemius-bi')));
+		exit;
 	}
 
 	public function render_debug_notice()
