@@ -108,6 +108,42 @@ class RL_FSBI_Admin
 	}
 
 	/**
+	 * Serve the tooltip assets from this plugin, whatever else claimed the handle.
+	 *
+	 * `tippy-css`, `popper-js` and `tippy-js` are generic handle names, and
+	 * whichever plugin registers them first wins — on a site running another RL
+	 * plugin that was a different plugin's directory, which 404s when that
+	 * plugin is absent. This runs last on our own screens, replaces the
+	 * registration and enqueues it again so the request cannot point anywhere
+	 * but here. Deregistering drops the handle from the queue, hence the
+	 * explicit re-enqueue.
+	 *
+	 * @return void
+	 */
+	public function enqueue_vendor_assets()
+	{
+		if (! $this->is_plugin_page()) {
+			return;
+		}
+
+		// The settings framework registers its stylesheet under the name it also
+		// uses for the script, so that handle is dropped and the stylesheet is
+		// served once, from here.
+		wp_deregister_style('tippy-js');
+		wp_deregister_style('tippy-css');
+		wp_register_style('tippy-css', RL_FSBI_PLUGIN_URL . 'assets/vendor/tippy/tippy.css', array(), $this->vendor_asset_version('tippy/tippy.css'));
+		wp_enqueue_style('tippy-css');
+
+		wp_deregister_script('popper-js');
+		wp_register_script('popper-js', RL_FSBI_PLUGIN_URL . 'assets/vendor/popper/popper.min.js', array(), $this->vendor_asset_version('popper/popper.min.js'), true);
+		wp_enqueue_script('popper-js');
+
+		wp_deregister_script('tippy-js');
+		wp_register_script('tippy-js', RL_FSBI_PLUGIN_URL . 'assets/vendor/tippy/tippy.umd.min.js', array('popper-js'), $this->vendor_asset_version('tippy/tippy.umd.min.js'), true);
+		wp_enqueue_script('tippy-js');
+	}
+
+	/**
 	 * Register the stylesheets for the admin area.
 	 */
 	public function enqueue_styles()
@@ -126,6 +162,22 @@ class RL_FSBI_Admin
 			$ver,
 			'all'
 		);
+	}
+
+	/**
+	 * Version stamp for a bundled vendor file.
+	 *
+	 * Using filemtime keeps the cached copy honest after an update without
+	 * hardcoding a version that can drift from the file on disk.
+	 *
+	 * @param string $relative Path under assets/vendor/.
+	 * @return string
+	 */
+	private function vendor_asset_version($relative)
+	{
+		$path = RL_FSBI_PLUGIN_DIR . 'assets/vendor/' . ltrim($relative, '/');
+
+		return file_exists($path) ? (string) filemtime($path) : $this->version;
 	}
 
 	/**
@@ -165,11 +217,6 @@ class RL_FSBI_Admin
 		if (! $this->is_plugin_page()) {
 			return;
 		}
-
-		$framework_assets = RL_FSBI_PLUGIN_URL . 'includes/library/rloptionsFramework/assets/';
-		wp_enqueue_style('tippy-css', $framework_assets . 'vendor/tippy/tippy.css', array(), '6.3.7');
-		wp_enqueue_script('popper-js', $framework_assets . 'vendor/popper/popper.min.js', array(), '2.11.8', false);
-		wp_enqueue_script('tippy-js', $framework_assets . 'vendor/tippy/tippy.umd.min.js', array('popper-js'), '6.3.7', false);
 
 		wp_enqueue_script('chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@3/dist/chart.min.js', array(), '3.9.1', false);
 		wp_enqueue_script('datatables-js', 'https://cdn.jsdelivr.net/npm/datatables.net@1/js/jquery.dataTables.min.js', array('jquery'), '1.13.4', false);

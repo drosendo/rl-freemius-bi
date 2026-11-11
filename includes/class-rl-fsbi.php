@@ -73,6 +73,7 @@ class RL_FSBI {
 	private function define_admin_hooks() {
 		$plugin_admin = new RL_FSBI_Admin( $this->get_plugin_name(), $this->get_version() );
 
+		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_vendor_assets', 20 );
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_styles' );
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'maybe_run_initial_sweep' );
