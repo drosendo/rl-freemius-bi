@@ -879,6 +879,15 @@ bumping `Version:` means no site will ever see it.
 - Every chart canvas gets `role="img"` and an `aria-label` that spells out its points, plus a **View as table** toggle that reveals the same numbers as a real table. Ten charts and nine toggles are live on the plugin dashboard; the toggle keeps `aria-expanded` in step.
 - The churn trend draws a **gap** where a month has cancellations but no recorded subscription base — which happens for any month before this site first imported subscriptions — instead of asserting a confident 0%. The card says what a gap means.
 
+**Newsletter consent is explicit and configurable.**
+- A new *Marketing Consent Required* setting decides what counts as consent before a contact is pushed to Kit or Mailchimp. Freemius records exactly two relevant fields — `is_marketing_allowed` and `is_verified` — and no consent timestamp, so the tiers are built from those:
+  - **Freemius opt-in + verified address** — the default, and the strictest consent the data can actually prove.
+  - **Opt-in + verified address + at least one payment** — narrower still, though that is a targeting choice rather than a consent one.
+  - **Opt-in only** — the previous behaviour, kept for sites that already rely on it.
+  - **Never push automatically** — CSV export only, for sites that hold their own consent records.
+- Every sync, export and bulk path now runs through one `user_passes_consent()` check instead of six copies of `! empty($user['is_marketing_allowed'])`, so a new path cannot quietly bypass the rule.
+- **Nothing deletes subscribers automatically**, and that is now enforced rather than merely true. Removing Kit contacts needs an explicit *Allow Removing Kit Subscribers* setting (off by default), then a confirmation dialog, and the server rejects both prune endpoints when the setting is off. The prune scope default changed from *any active subscriber* to *only subscribers tagged by this plugin*, because the old default could unsubscribe the whole list.
+
 ### 1.3.30 (2026-11-10)
 - **An autofilled email can no longer become a bogus Developer ID.** A vendor reported that the backfill failed after signing up, and that the browser had filled the Developer ID field with their email address. The field was a plain text input with no autocomplete hints, and the sanitizer kept only the digits — so `john1985@gmail.com` was saved as `1985`, a perfectly valid id belonging to someone else. Every request then authenticated as the wrong account, and the failure described the API rather than the field. The sanitizer now rejects non-numeric input and keeps the previous value, the backfill error names the missing or non-numeric credential, a notice on the plugin screens says the value was not saved, and the credential fields carry `autocomplete="off"` with a numeric keypad on mobile.
 

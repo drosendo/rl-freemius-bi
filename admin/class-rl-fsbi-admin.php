@@ -765,6 +765,68 @@ class RL_FSBI_Admin
 	 *
 	 * Syncs new contacts created since the last sync or CSV export checkpoint.
 	 */
+	/**
+	 * Whether a Freemius user record carries marketing consent for this site.
+	 *
+	 * Freemius exposes a single opt-in checkbox plus an address-verification
+	 * flag, so the ladder below is as strict as the data allows. The tier is a
+	 * setting; "none" refuses everything and leaves the CSV export as the only
+	 * route, which is what a site with its own consent records should choose.
+	 *
+	 * @param array|object $user Freemius user payload.
+	 * @return bool
+	 */
+	private function user_passes_consent($user)
+	{
+		$data = is_object($user) ? (array) $user : (array) $user;
+		$tier = trim((string) $this->settings->get_option('rl_fsbi_consent_field', 'verified_optin'));
+
+		if ('none' === $tier) {
+			return false;
+		}
+
+		if (empty($data['is_marketing_allowed'])) {
+			return false;
+		}
+
+		if ('optin' === $tier) {
+			return true;
+		}
+
+		if (empty($data['is_verified'])) {
+			return false;
+		}
+
+		if ('verified_optin_customer' === $tier) {
+			return $this->user_has_paid($data);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Whether a Freemius user has at least one non-refund payment on record.
+	 *
+	 * @param array $data Freemius user payload.
+	 * @return bool
+	 */
+	private function user_has_paid($data)
+	{
+		global $wpdb;
+
+		$user_id = (int) ($data['id'] ?? 0);
+		if ($user_id <= 0) {
+			return false;
+		}
+
+		$paid = (int) $wpdb->get_var($wpdb->prepare(
+			"SELECT COUNT(*) FROM {$wpdb->prefix}rl_fsbi_payments WHERE user_id = %d AND is_refund = 0",
+			$user_id
+		));
+
+		return $paid > 0;
+	}
+
 	public function sync_daily_newsletter_optins_delta(): array
 	{
 		$last_sync_utc = (string) get_option('rl_fsbi_newsletter_last_sync_utc', '');
@@ -869,7 +931,7 @@ class RL_FSBI_Admin
 				}
 
 				$total_scanned++;
-				$is_optin = ! empty($u_arr['is_marketing_allowed']);
+				$is_optin = $this->user_passes_consent($u_arr);
 				$email = sanitize_email($u_arr['email'] ?? '');
 				if (! $is_optin || empty($email)) {
 					continue;
@@ -2219,9 +2281,9 @@ class RL_FSBI_Admin
 	 */
 	private function get_kit_prune_scope()
 	{
-		$scope = trim((string) $this->settings->get_option('rl_fsbi_kit_prune_scope', 'all'));
+		$scope = trim((string) $this->settings->get_option('rl_fsbi_kit_prune_scope', 'tagged'));
 
-		return 'tagged' === $scope ? 'tagged' : 'all';
+		return 'all' === $scope ? 'all' : 'tagged';
 	}
 
 	/**
@@ -2614,6 +2676,10 @@ class RL_FSBI_Admin
 			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
 		}
 
+		if (! $this->settings->get_option('rl_fsbi_kit_prune_enabled', false)) {
+			wp_send_json_error(esc_html__('Removing Kit subscribers is switched off. Enable "Allow Removing Kit Subscribers" in Settings first.', 'rl-freemius-bi'));
+		}
+
 		$kit_key = trim((string) $this->settings->get_option('rl_fsbi_kit_api_key', ''));
 		if ('' === $kit_key) {
 			wp_send_json_error(esc_html__('Kit API key is not configured in Settings.', 'rl-freemius-bi'));
@@ -2688,6 +2754,10 @@ class RL_FSBI_Admin
 
 		if (! current_user_can('manage_options')) {
 			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		if (! $this->settings->get_option('rl_fsbi_kit_prune_enabled', false)) {
+			wp_send_json_error(esc_html__('Removing Kit subscribers is switched off. Enable "Allow Removing Kit Subscribers" in Settings first.', 'rl-freemius-bi'));
 		}
 
 		$confirm = isset($_POST['confirm']) ? sanitize_text_field(wp_unslash($_POST['confirm'])) : '';
@@ -3246,9 +3316,9 @@ class RL_FSBI_Admin
 		foreach ($users as $user) {
 			$is_optin = false;
 			if (is_array($user)) {
-				$is_optin = ! empty($user['is_marketing_allowed']);
+				$is_optin = $this->user_passes_consent($user);
 			} elseif (is_object($user)) {
-				$is_optin = ! empty($user->is_marketing_allowed);
+				$is_optin = $this->user_passes_consent($user);
 			}
 
 			if ($is_optin) {
@@ -3712,7 +3782,7 @@ class RL_FSBI_Admin
 			$email = sanitize_email($u_arr['email'] ?? '');
 			$fname = sanitize_text_field($u_arr['first'] ?? ($u_arr['first_name'] ?? ''));
 			$lname = sanitize_text_field($u_arr['last'] ?? ($u_arr['last_name'] ?? ''));
-			$is_optin = ! empty($u_arr['is_marketing_allowed']);
+			$is_optin = $this->user_passes_consent($u_arr);
 
 			// Mask email for display in logs
 			$masked_email = $email;
@@ -4102,7 +4172,7 @@ class RL_FSBI_Admin
 			$email = sanitize_email($u_arr['email'] ?? '');
 			$fname = sanitize_text_field($u_arr['first'] ?? ($u_arr['first_name'] ?? ''));
 			$lname = sanitize_text_field($u_arr['last'] ?? ($u_arr['last_name'] ?? ''));
-			$is_optin = ! empty($u_arr['is_marketing_allowed']);
+			$is_optin = $this->user_passes_consent($u_arr);
 
 			$masked_email = $email;
 			if (strpos($email, '@') !== false) {
@@ -4421,14 +4491,14 @@ class RL_FSBI_Admin
 				$created  = '';
 
 				if (is_array($user)) {
-					$is_optin = ! empty($user['is_marketing_allowed']);
+					$is_optin = $this->user_passes_consent($user);
 					$email    = sanitize_email($user['email'] ?? '');
 					$fname    = sanitize_text_field($user['first'] ?? ($user['first_name'] ?? ''));
 					$lname    = sanitize_text_field($user['last'] ?? ($user['last_name'] ?? ''));
 					$user_id  = (int) ($user['id'] ?? 0);
 					$created  = sanitize_text_field($user['created'] ?? '');
 				} elseif (is_object($user)) {
-					$is_optin = ! empty($user->is_marketing_allowed);
+					$is_optin = $this->user_passes_consent($user);
 					$email    = sanitize_email($user->email ?? '');
 					$fname    = sanitize_text_field($user->first ?? ($user->first_name ?? ''));
 					$lname    = sanitize_text_field($user->last ?? ($user->last_name ?? ''));
@@ -4930,7 +5000,7 @@ class RL_FSBI_Admin
 
 				foreach ($users as $user) {
 					$u_arr = is_array($user) ? $user : (array) $user;
-					$is_optin = ! empty($u_arr['is_marketing_allowed']);
+					$is_optin = $this->user_passes_consent($u_arr);
 					$email    = sanitize_email($u_arr['email'] ?? '');
 
 					if (! $is_optin || empty($email)) {
@@ -5189,7 +5259,7 @@ class RL_FSBI_Admin
 				foreach ($users as $user) {
 					$scanned_count++;
 					$u_arr    = (array) $user;
-					$is_optin = ! empty($u_arr['is_marketing_allowed']);
+					$is_optin = $this->user_passes_consent($u_arr);
 					$email    = sanitize_email($u_arr['email'] ?? '');
 
 					if (! $is_optin || empty($email)) {

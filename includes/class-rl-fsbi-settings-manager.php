@@ -816,6 +816,36 @@ class RL_FSBI_Settings_Manager {
 			'newsletter_settings',
 			'kit_config',
 			array(
+				'id'                => 'rl_fsbi_consent_field',
+				'type'              => 'select',
+				'label'             => esc_html__( 'Marketing Consent Required', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Which signal counts as marketing consent before a contact is pushed to your provider. Freemius records one checkbox (is_marketing_allowed) and whether the address is verified; there is no consent timestamp and no double opt-in. "Opt-in + verified address" is the strictest form of consent the Freemius data can prove, and is the default. "Paid customers only" narrows further but is a targeting choice rather than a consent one.', 'rl-freemius-bi' ),
+				'options'           => array(
+					'verified_optin'          => esc_html__( 'Freemius opt-in + verified address (recommended)', 'rl-freemius-bi' ),
+					'verified_optin_customer' => esc_html__( 'Freemius opt-in + verified address + at least one payment', 'rl-freemius-bi' ),
+					'optin'                   => esc_html__( 'Freemius opt-in only (permissive, legacy behaviour)', 'rl-freemius-bi' ),
+					'none'                    => esc_html__( 'Never push automatically — CSV export only', 'rl-freemius-bi' ),
+				),
+				'default'           => 'verified_optin',
+			)
+		);
+
+		$this->framework->add_field(
+			'newsletter_settings',
+			'kit_config',
+			array(
+				'id'                => 'rl_fsbi_kit_prune_enabled',
+				'type'              => 'toggle',
+				'label'             => esc_html__( 'Allow Removing Kit Subscribers', 'rl-freemius-bi' ),
+				'desc'              => esc_html__( 'Off by default. Nothing in this plugin deletes or unsubscribes a contact automatically, and the quota tools stay disabled until you switch this on. Every removal still asks for confirmation and is permanent in Kit.', 'rl-freemius-bi' ),
+				'default'           => 0,
+			)
+		);
+
+		$this->framework->add_field(
+			'newsletter_settings',
+			'kit_config',
+			array(
 				'id'                => 'rl_fsbi_kit_prune_scope',
 				'type'              => 'select',
 				'label'             => esc_html__( 'Prune Scope', 'rl-freemius-bi' ),
@@ -824,7 +854,7 @@ class RL_FSBI_Settings_Manager {
 					'all'    => esc_html__( 'Any active subscriber (oldest first)', 'rl-freemius-bi' ),
 					'tagged' => esc_html__( 'Only subscribers tagged by this plugin', 'rl-freemius-bi' ),
 				),
-				'default'           => 'all',
+				'default'           => 'tagged',
 				'conditions'        => array(
 					array(
 						'field'    => 'rl_fsbi_newsletter_provider',
@@ -1426,9 +1456,12 @@ class RL_FSBI_Settings_Manager {
 			? esc_html__( "Kit treats it the same as the person clicking unsubscribe: they stop receiving all email and must explicitly opt in again. Only subscribers carrying this plugin's Kit tags are eligible.", 'rl-freemius-bi' )
 			: esc_html__( 'Kit treats it the same as the person clicking unsubscribe: they stop receiving all email and must explicitly opt in again. Any active subscriber is eligible, oldest first.', 'rl-freemius-bi' );
 
+		$prune_enabled = (bool) $this->get_option( 'rl_fsbi_kit_prune_enabled', false );
+		$settings_url  = admin_url( 'admin.php?page=' . $this->framework->get_config( 'page_slug' ) . '&tab=newsletter_settings#kit_config' );
+
 		ob_start();
 		?>
-		<div class="rl-fsbi-kit-quota" data-limit="<?php echo esc_attr( (string) $limit ); ?>">
+		<div class="rl-fsbi-kit-quota" data-limit="<?php echo esc_attr( (string) $limit ); ?>" data-prune-enabled="<?php echo $prune_enabled ? '1' : '0'; ?>">
 			<style>
 				.rl-fsbi-kit-quota{background:#fff;border:1px solid #c3c4c7;border-radius:6px;padding:16px 18px;max-width:860px;margin:4px 0 8px}
 				.rl-fsbi-kit-quota-title{margin:0 0 6px;font-size:14px;line-height:1.4}
@@ -1438,6 +1471,8 @@ class RL_FSBI_Settings_Manager {
 				.rl-fsbi-kit-quota-row>span{color:#50575e}
 				.rl-fsbi-kit-quota-row>strong{text-align:right;color:#1d2327;font-variant-numeric:tabular-nums}
 				.rl-fsbi-kit-quota-actions{display:flex;align-items:center;gap:10px;margin:14px 0 4px}
+				.rl-fsbi-kit-quota-locked{font-size:12px;color:#646970;font-style:normal}
+				.rl-fsbi-kit-quota-locked a{margin-left:6px}
 				.rl-fsbi-kit-quota-actions [hidden]{display:none!important}
 				.rl-fsbi-kit-quota-actions .spinner{margin:0;float:none}
 				.rl-fsbi-kit-quota-progress{margin:14px 0 4px}
@@ -1482,12 +1517,19 @@ class RL_FSBI_Settings_Manager {
 				<button type="button" class="button" id="rl-fsbi-kit-quota-preview">
 					<?php echo esc_html__( 'Refresh from Kit', 'rl-freemius-bi' ); ?>
 				</button>
+				<?php if ( $prune_enabled ) : ?>
 				<button type="button" class="button" id="rl-fsbi-kit-quota-prune" disabled="disabled">
 					<?php echo esc_html__( 'Unsubscribe oldest batch', 'rl-freemius-bi' ); ?>
 				</button>
 				<button type="button" class="button" id="rl-fsbi-kit-quota-drain" disabled="disabled">
 					<?php echo esc_html__( 'Remove all over the limit', 'rl-freemius-bi' ); ?>
 				</button>
+				<?php else : ?>
+				<em class="rl-fsbi-kit-quota-locked">
+					<?php esc_html_e( 'Removal is switched off. Nothing here deletes a contact until you turn it on.', 'rl-freemius-bi' ); ?>
+					<a href="<?php echo esc_url( $settings_url ); ?>"><?php esc_html_e( 'Enable in Settings', 'rl-freemius-bi' ); ?></a>
+				</em>
+				<?php endif; ?>
 				<button type="button" class="button" id="rl-fsbi-kit-quota-stop" hidden>
 					<?php echo esc_html__( 'Stop', 'rl-freemius-bi' ); ?>
 				</button>
