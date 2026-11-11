@@ -990,6 +990,12 @@ bumping `Version:` means no site will ever see it.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
 
+### Unreleased - the WordPress footer no longer floats mid-page
+
+`#wpfooter` is `position: absolute; bottom: 0` against a viewport-height container, so on a page longer than the screen it landed in the middle of the cards. On this plugin's screens it is back in the flow, after the last card.
+
+Also fixed: the Recent activity card sat flush against the MRR movement card. Every Overview block now has 12px between it and the next - measured 12px at all three seams (after the KPIs, after Last 3 months, after MRR movement).
+
 ### Unreleased - cache busting that survives an FTP upload
 
 The host serves plugin assets with `Cache-Control: max-age=2592000`, so the only thing that can force a refresh is the `?ver=` query string. CSS and JS were already stamped with `filemtime()`, but an FTP upload does not always change a file's modification time, and a review ran against a browser copy from four minutes earlier.

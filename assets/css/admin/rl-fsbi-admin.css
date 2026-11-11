@@ -2654,3 +2654,25 @@ p.rl-fsbi-field-desc,
 		flex-wrap: nowrap !important;
 	}
 }
+
+/* Consistent 12px between the Overview blocks: the activity card had no top
+   margin, so it sat flush against the MRR movement card. */
+.rl-fsbi-dashboard .rl-fsbi-waterfall-card {
+	margin-bottom: 12px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-activity-card {
+	margin-top: 0;
+	margin-bottom: 0;
+}
+
+/*
+ * WordPress pins #wpfooter with position:absolute against a viewport-height
+ * container, so on a long page it floats in the middle of the content. On this
+ * plugin's screens it belongs in the flow, after the last card.
+ */
+body[class*="rl-freemius-bi"] #wpfooter {
+	position: static;
+	margin-top: 24px;
+	padding-bottom: 8px;
+}
