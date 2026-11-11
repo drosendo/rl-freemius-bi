@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.6.2  
+**Version:** 1.6.3  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -1034,6 +1034,10 @@ Four figures were still being computed twice. All four now come from `summarise_
 - **Churn trend.** The base for each month no longer uses `expires_at` as a lower bound. That field is rewritten on every sync to the current period end, which emptied the base for every earlier month and drew 0.00% churn beside five to eleven cancellations.
 
 **Upgrade routine.** A version bump now persists the commission model and rate that detection found: an account called legacy gets its marginal rate (7%) and a fixed fee of 0 without anyone clicking Accept, so the site stops reading "revenue share not set". The bump also changes the payload cache key, so month rows are rebuilt on the first load after the update rather than waiting for the next sync.
+
+### 1.6.3
+
+The tab row carries the panel's horizontal padding. The tab list used to own it, so the plugin scope sitting beside it was flush against the panel edge — 20px further right than the Sync button above it. The divider moved to the row as well, so it spans the panel instead of stopping where the tabs stop.
 
 ### 1.6.2
 

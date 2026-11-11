@@ -2971,10 +2971,25 @@ body[class*="rl-freemius-bi"] #wpfooter {
 
 /* The plugin scope sits on the tab row, pushed to the far right. On a product
    dashboard it does not exist: the page title already names the product. */
+/* The tab row carries the panel's horizontal padding, not the tab list: the tab
+   list used to own it, so the plugin scope beside it sat flush against the panel
+   edge while every other row stopped 20px short. The divider moves with it, so it
+   spans the panel instead of stopping where the tabs stop. */
 .rl-fsbi-dashboard .rl-fsbi-tabbar {
 	display: flex;
 	align-items: center;
 	gap: 12px;
+	margin: 0;
+	padding: 12px 20px;
+	border-top: 1px solid var(--fsbi-border, #2b3150);
+}
+
+.rl-fsbi-dashboard .rl-fsbi-tabbar .rl-fsbi-tabs {
+	flex: 1 1 auto;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border-top: 0;
 }
 
 .rl-fsbi-dashboard .rl-fsbi-tabbar .rl-fsbi-tabs {
