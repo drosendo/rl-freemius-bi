@@ -1213,7 +1213,11 @@ class RL_FSBI_Admin
 						wp_date('j M', current_time('timestamp'))
 					)
 					: wp_date('M', strtotime($start)),
-				'payout_status' => $month === wp_date('Y-m', strtotime('-2 months', current_time('timestamp'))) ? 'current' : ($month === wp_date('Y-m', strtotime('-1 month', current_time('timestamp'))) ? 'next' : ''),
+				// With the 10th-of-X+2 rule, on 11 November the money on its way is
+				// October's (paid 10 Dec) and the one after is November's (10 Jan).
+				'payout_status' => $month === wp_date('Y-m', strtotime('-1 month', current_time('timestamp')))
+					? 'current'
+					: ($month === wp_date('Y-m', current_time('timestamp')) ? 'next' : ''),
 			);
 		}
 
@@ -1483,6 +1487,16 @@ class RL_FSBI_Admin
 		if ('' === $type) {
 			$meta = json_decode((string) ($payment->metadata ?? ''), true);
 			$type = is_array($meta) && isset($meta['type']) ? strtolower(trim((string) $meta['type'])) : '';
+		}
+
+		// The metadata copy of the type is the API's own value; a stale or
+		// defaulted payment_type column must not turn a chargeback back into a
+		// sale, which is how one was counted in Gross and in Refunds at once.
+		$meta = json_decode((string) ($payment->metadata ?? ''), true);
+		$meta_type = is_array($meta) && isset($meta['type']) ? strtolower(trim((string) $meta['type'])) : '';
+
+		if ('' !== $meta_type && ! in_array($meta_type, array('payment', 'sale', 'purchase'), true)) {
+			return false;
 		}
 
 		if (in_array($type, array('payment', 'sale', 'purchase', ''), true)) {
@@ -1788,8 +1802,8 @@ class RL_FSBI_Admin
 			}
 		};
 
-		$push('high', (int) $retention['failed_payments'], _n('subscription with a failed payment', 'subscriptions with a failed payment', (int) $retention['failed_payments'], 'rl-freemius-bi'), '#customers');
-		$push('high', $cards_expiring, _n('renewal in the next 7 days with a failed payment', 'renewals in the next 7 days with a failed payment', $cards_expiring, 'rl-freemius-bi'), '#customers');
+		$push('high', (int) $retention['failed_payments'], _n('subscription with a failed payment', 'subscriptions with a failed payment', (int) $retention['failed_payments'], 'rl-freemius-bi'), '#retention');
+		$push('high', $cards_expiring, _n('renewal in the next 7 days with a failed payment', 'renewals in the next 7 days with a failed payment', $cards_expiring, 'rl-freemius-bi'), '#retention');
 		$push('medium', $trials_ending, _n('trial ending in the next 7 days', 'trials ending in the next 7 days', $trials_ending, 'rl-freemius-bi'), '#growth');
 		$push('medium', (int) $retention['cancellations_this_month'], _n('cancellation this month', 'cancellations this month', (int) $retention['cancellations_this_month'], 'rl-freemius-bi'), '#retention');
 
@@ -2008,8 +2022,12 @@ class RL_FSBI_Admin
 	 */
 	private function estimate_payout_date($revenue_month)
 	{
+		// Freemius pays a month's earnings on the 10th, two months later: the
+		// revenue earned in September is paid on 10 November, October on
+		// 10 December, November on 10 January. The defaults follow that rule;
+		// the settings only exist for an account with a different arrangement.
 		$day = trim((string) $this->settings->get_option('rl_fsbi_payout_day', ''));
-		$day = '' === $day ? 15 : (int) $day;
+		$day = '' === $day ? 10 : (int) $day;
 		$day = min(28, max(1, $day));
 		$lag = trim((string) $this->settings->get_option('rl_fsbi_payout_lag_months', ''));
 		$lag = '' === $lag ? 2 : (int) $lag;
@@ -4032,8 +4050,20 @@ class RL_FSBI_Admin
 			$this->settings->update_option('rl_fsbi_commission_model', $model);
 		}
 
-		if ('legacy' !== $model && $rate > 0 && '' === trim((string) $this->settings->get_option('rl_fsbi_fs_revenue_share', ''))) {
+		// Persist the rate for every model, legacy included. Leaving the setting
+		// empty on a legacy account is what made the WordPress dashboard widget
+		// read "revenue share not set" while the dashboard deducted the tiers:
+		// both now read the same setting. Under the legacy model the per-payment
+		// tiers still decide each row, so this value is the marginal rate that
+		// the settings screen shows, not a flat charge on everything.
+		if ($rate > 0 && '' === trim((string) $this->settings->get_option('rl_fsbi_fs_revenue_share', ''))) {
 			$this->settings->update_option('rl_fsbi_fs_revenue_share', (string) $rate);
+		}
+
+		// The legacy plan carries no per-transaction fee, and an empty setting
+		// would otherwise let the "current" default of EUR 0.45 apply.
+		if ('legacy' === $model && '' === trim((string) $this->settings->get_option('rl_fsbi_fs_fixed_fee', ''))) {
+			$this->settings->update_option('rl_fsbi_fs_fixed_fee', '0');
 		}
 
 		$this->settings->update_option(RL_FSBI_Detection::OPTION_ACCEPTED, current_time('mysql'));
@@ -4852,6 +4882,14 @@ class RL_FSBI_Admin
 				'active_installs' => isset($plugin['active_installs_count'])
 					? (int) $plugin['active_installs_count']
 					: (isset($plugin->active_installs_count) ? (int) $plugin->active_installs_count : 0),
+				// All-time installs, which is a different figure from the active
+				// count and from the number of rows the install crawl reached.
+				'installs_count' => isset($plugin['installs_count'])
+					? (int) $plugin['installs_count']
+					: (isset($plugin->installs_count) ? (int) $plugin->installs_count : 0),
+				'premium_installs' => isset($plugin['premium_installs_count'])
+					? (int) $plugin['premium_installs_count']
+					: (isset($plugin->premium_installs_count) ? (int) $plugin->premium_installs_count : 0),
 				'title'   => sanitize_text_field((string) $title),
 				'slug'    => sanitize_key((string) $slug),
 				'version' => ! empty($version) ? sanitize_text_field((string) $version) : $existing_version,
@@ -5134,8 +5172,20 @@ class RL_FSBI_Admin
 		// Prefer the count Freemius reports for the product; the snapshot counts
 		// install records, thousands of which are historical uninstalls.
 		$catalog_entry = $this->settings->get_option('rl_fsbi_plugins_catalog', array());
-		if ($plugin_id > 0 && is_array($catalog_entry) && ! empty($catalog_entry[(string) $plugin_id]['active_installs'])) {
-			$data['installs']['reported_active'] = (int) $catalog_entry[(string) $plugin_id]['active_installs'];
+		$entry = ($plugin_id > 0 && is_array($catalog_entry) && isset($catalog_entry[(string) $plugin_id]))
+			? $catalog_entry[(string) $plugin_id]
+			: array();
+		if (! empty($entry['active_installs'])) {
+			$data['installs']['reported_active'] = (int) $entry['active_installs'];
+		}
+		// Freemius reports the all-time install count on the product; the local
+		// table only holds the records the crawl reached, so it cannot be
+		// presented as the total.
+		if (! empty($entry['installs_count'])) {
+			$data['installs']['reported_total'] = (int) $entry['installs_count'];
+		}
+		if (! empty($entry['premium_installs'])) {
+			$data['installs']['reported_premium'] = (int) $entry['premium_installs'];
 		}
 		$coupon_rate = $this->get_balance_commission_rate($balances);
 		if ($coupon_rate <= 0) {
@@ -7788,7 +7838,12 @@ class RL_FSBI_Admin
 			}
 			$months = $this->billing_cycle_to_months($cycle_value);
 
-			if (in_array($status, array('active', 'paid', 'trialing', 'trial_ended'), true) && $months > 0) {
+			// A subscription only counts as a subscriber when it has something to
+			// renew: counting one with no renewal amount gave 190 active against a
+			// 189-subscription MRR, and the two figures sat side by side.
+			$payable = $this->get_forecast_renewal_amount($subscription) > 0;
+
+			if (in_array($status, array('active', 'paid', 'trialing', 'trial_ended'), true) && $months > 0 && $payable) {
 				$active++;
 				$active_ids[] = (int) ($subscription->id ?? 0);
 				if (1 === $months) {
@@ -9039,7 +9094,14 @@ class RL_FSBI_Admin
 			'at_risk_30d'              => $at_risk,
 			'at_risk_amount'           => round($at_risk_amount, 2),
 			'failed_payments'          => $failed,
-			'cancellations_this_month' => (int) $subscription_stats['canceled_this_month'],
+			// Counted with the same window the churn rate uses, which is the
+			// figure the card sits next to. Reading the status column's update
+			// month instead reported 0 cancellations beside a 1.6% churn rate.
+			'cancellations_this_month' => (int) $this->count_churn_window(
+				$subscriptions,
+				strtotime(wp_date('Y-m-01', $now) . ' 00:00:00'),
+				$now
+			)['cancellations'],
 			'churn_rate'               => round((float) $subscription_stats['churn_rate'], 2),
 		);
 	}

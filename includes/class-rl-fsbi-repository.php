@@ -57,7 +57,10 @@ class RL_FSBI_Repository {
 	 * @return float Total gross revenue.
 	 */
 	public function calculate_gross_revenue( $plugin_id = 0, $currency = null, $start_date = null, $end_date = null ) {
-		$query = "SELECT SUM(CAST(gross AS DECIMAL(10,2))) as total FROM {$this->wpdb->prefix}rl_fsbi_payments WHERE is_refund = 0";
+		// A chargeback is stored with a positive gross and is_refund = 0, so only
+		// filtering on is_refund counted it as a sale as well as a refund. Only
+		// rows the API calls a payment are sales.
+		$query = "SELECT SUM(CAST(gross AS DECIMAL(10,2))) as total FROM {$this->wpdb->prefix}rl_fsbi_payments WHERE is_refund = 0 AND (payment_type IS NULL OR payment_type = '' OR payment_type IN ('payment','sale','purchase'))";
 
 		if ( $plugin_id > 0 ) {
 			$query .= $this->wpdb->prepare( ' AND plugin_id = %d', $plugin_id );
@@ -89,7 +92,7 @@ class RL_FSBI_Repository {
 	 * @return float Total net revenue.
 	 */
 	public function calculate_net_revenue( $plugin_id = 0, $currency = null, $start_date = null, $end_date = null ) {
-		$query = "SELECT SUM(CAST(net AS DECIMAL(10,2))) as total FROM {$this->wpdb->prefix}rl_fsbi_payments WHERE is_refund = 0";
+		$query = "SELECT SUM(CAST(net AS DECIMAL(10,2))) as total FROM {$this->wpdb->prefix}rl_fsbi_payments WHERE is_refund = 0 AND (payment_type IS NULL OR payment_type = '' OR payment_type IN ('payment','sale','purchase'))";
 
 		if ( $plugin_id > 0 ) {
 			$query .= $this->wpdb->prepare( ' AND plugin_id = %d', $plugin_id );

@@ -152,6 +152,16 @@
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* The panels are display:contents, so these grids are themselves items of the
+   page's 2fr 1fr 1fr content grid. Without a full-width span each one is
+   squeezed into a single column and its own children crush together. */
+.rl-fsbi-content-grid .rl-fsbi-top-grid,
+.rl-fsbi-content-grid .rl-fsbi-mini-kpis,
+.rl-fsbi-content-grid .rl-fsbi-blocks {
+	grid-column: 1 / -1;
+	min-width: 0;
+}
+
 .rl-fsbi-growth-value {
 	display: flex;
 	align-items: baseline;
@@ -169,12 +179,27 @@
 	margin-top: 8px;
 }
 
+/* Eleven columns do not fit a 1000px card, and the table was running past the
+   card's edge and off the page instead of scrolling inside it. */
+.rl-fsbi-table-card {
+	overflow-x: auto;
+}
+
 .rl-fsbi-chart-table-toggle {
 	font-size: 11px !important;
-	color: var(--fsbi-muted) !important;
+	/* Muted text at 11px on the card surface failed contrast, most visibly on
+	   the WordPress.org card. Brighter ink, and the underline carries the
+	   affordance. */
+	color: #b8c2e8 !important;
 	text-decoration: underline;
+	text-underline-offset: 2px;
 	cursor: pointer;
 	padding: 0;
+}
+
+.rl-fsbi-chart-table-toggle:hover,
+.rl-fsbi-chart-table-toggle:focus-visible {
+	color: #ecf1ff !important;
 }
 
 .rl-fsbi-chart-table {
@@ -1907,7 +1932,21 @@ p.rl-fsbi-field-desc,
 }
 
 .rl-fsbi-dashboard .rl-fsbi-controls {
-	gap: 4px 6px;
+	gap: 4px 12px;
+}
+
+/* A label and its control are one unit, so a wrap can never leave "Plan:"
+   on one row and the plan selector on the next. */
+.rl-fsbi-controls .rl-fsbi-field {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+.rl-fsbi-controls .rl-fsbi-field > label,
+.rl-fsbi-controls .rl-fsbi-field > span {
+	flex: 0 0 auto;
 }
 
 .rl-fsbi-dashboard .rl-fsbi-controls select,
@@ -1937,6 +1976,10 @@ p.rl-fsbi-field-desc,
 
 .rl-fsbi-dashboard .rl-fsbi-tabs {
 	margin-top: 2px;
+	/* Pull the tab row out over the toolbar's padding so the first tab lines up
+	   with the cards below instead of sitting 11px inside them. */
+	margin-left: -11px;
+	margin-right: -10px;
 }
 
 /*
@@ -1947,6 +1990,13 @@ p.rl-fsbi-field-desc,
 .rl-fsbi-panel.is-failed > :not(.rl-fsbi-section-error):not(.rl-fsbi-skeleton),
 .rl-fsbi-panel.is-loading > :not(.rl-fsbi-section-error):not(.rl-fsbi-skeleton) {
 	display: none !important;
+}
+
+/* The card subtitle colour was set for a light card and is unreadable on the
+   dark dashboard surface. */
+.rl-fsbi-dashboard .rl-fsbi-card-sub,
+.rl-fsbi-dashboard .rl-fsbi-chart-note {
+	color: var(--fsbi-muted, #9aa4cc);
 }
 
 /* Overview: five KPI cards, equal width, wrapping to 3 then 2. */
@@ -1995,6 +2045,9 @@ p.rl-fsbi-field-desc,
 
 .rl-fsbi-kpi-delta {
 	display: block;
+	/* Reserve the line even when a card has no delta, or its sparkline sits a
+	   line higher than the card beside it. */
+	min-height: 15px;
 	margin-top: 3px;
 	font-size: 11px;
 	color: var(--fsbi-muted, #9aa4cc);

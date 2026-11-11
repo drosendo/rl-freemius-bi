@@ -2091,7 +2091,9 @@
 				data: {
 					labels: series.map((p) => p.label),
 					datasets: [{
-						data: series.map((p) => Number(p.value || 0)),
+						// A missing month is not a zero: charting it as one draws a
+						// flat line where there is no data at all.
+						data: series.map((p) => (p.value === null || p.value === undefined ? null : Number(p.value))),
 						borderColor: '#5f6bff',
 						borderWidth: 1.5,
 						pointRadius: 0,
@@ -2118,7 +2120,13 @@
 			// MRR and Churn rate are their own KPI cards now, so the mini grid
 			// carries only what those cards do not.
 			this.setText('rl-fsbi-arr', this.formatCurrency(arr, currency));
-			this.setText('rl-fsbi-arr-as-of', `Annualized from ${kpis.metric_as_of || 'selected period end'}`);
+			// "as of 11 Nov 2026" reads as a date; the raw payload timestamp does not.
+			const asOfRaw = String(kpis.metric_as_of || '');
+			const asOfDate = asOfRaw ? new Date(asOfRaw.replace(' ', 'T')) : null;
+			const asOfText = asOfDate && !Number.isNaN(asOfDate.getTime())
+				? asOfDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+				: 'the selected period end';
+			this.setText('rl-fsbi-arr-as-of', `as of ${asOfText}`);
 			this.setText('rl-fsbi-aov', kpis.aov === null || kpis.aov === undefined
 				? '—'
 				: this.formatCurrency(Number(kpis.aov), currency));
@@ -2449,7 +2457,9 @@
 				return;
 			}
 
-			const card = canvas.parentElement;
+			// A chart wrap has a fixed height, so a holder appended to it paints
+			// below the card instead of inside it.
+			const card = canvas.closest('.rl-fsbi-card') || canvas.parentElement;
 			const currency = this.getDisplayCurrency();
 			const formatValue = (value, format) => {
 				const n = Number(value || 0);
@@ -2590,13 +2600,24 @@
 			const installs = data.installs || {};
 			// Freemius reports the live install count on the product; the table only
 			// holds records, most of which are historical uninstalls.
-			const activeInstalls = Number.isFinite(Number(installs.reported_active)) && Number(installs.reported_active) > 0
-				? Number(installs.reported_active)
-				: count(installs.active);
+			const reportedActive = Number(installs.reported_active || 0);
+			const activeInstalls = reportedActive > 0 ? reportedActive : Number(installs.active || 0);
+			// All-time installs come from the product; the table's row count is
+			// what the crawl reached, not what Freemius has seen. Total is always
+			// active + uninstalled so the three numbers add up on screen.
+			const reportedTotal = Number(installs.reported_total || 0);
+			const tableUninstalled = Number(installs.uninstalled || 0);
+			const uninstalled = reportedTotal > activeInstalls
+				? reportedTotal - activeInstalls
+				: tableUninstalled;
+			const total = reportedTotal > 0 ? reportedTotal : activeInstalls + tableUninstalled;
+			const premium = Number(installs.reported_premium || 0) > 0
+				? Number(installs.reported_premium)
+				: Number(installs.premium || 0);
 			this.setText('rl-fsbi-installs-active', count(activeInstalls));
-			this.setText('rl-fsbi-installs-premium', count(installs.premium));
-			this.setText('rl-fsbi-installs-uninstalled', count(installs.uninstalled));
-			this.setText('rl-fsbi-installs-total', count(installs.total));
+			this.setText('rl-fsbi-installs-premium', count(premium));
+			this.setText('rl-fsbi-installs-uninstalled', count(uninstalled));
+			this.setText('rl-fsbi-installs-total', count(total));
 
 			this.renderCoupons(data.coupons || []);
 			this.updateWporgWidget(data.wporg || {});

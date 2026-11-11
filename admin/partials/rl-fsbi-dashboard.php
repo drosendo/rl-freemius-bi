@@ -85,6 +85,7 @@ if ( ! defined( 'WPINC' ) ) {
 
 	<div class="rl-fsbi-toolbar">
 		<div class="rl-fsbi-controls">
+			<span class="rl-fsbi-field">
 			<label for="rl-fsbi-plugin-filter"><?php echo esc_html__( 'Plugin:', 'rl-freemius-bi' ); ?></label>
 			<select id="rl-fsbi-plugin-filter" name="plugin_id"<?php echo $forced_plugin_id > 0 ? ' disabled="disabled"' : ''; ?>>
 				<?php if ( $forced_plugin_id <= 0 ) : ?>
@@ -97,7 +98,9 @@ if ( ! defined( 'WPINC' ) ) {
 			<?php if ( $forced_plugin_id > 0 ) : ?>
 				<input type="hidden" id="rl-fsbi-plugin-filter-forced" value="<?php echo esc_attr( $forced_plugin_id ); ?>" />
 			<?php endif; ?>
+			</span>
 
+			<span class="rl-fsbi-field">
 			<label for="rl-fsbi-currency-filter"><?php echo esc_html__( 'Currency:', 'rl-freemius-bi' ); ?></label>
 			<select id="rl-fsbi-currency-filter" name="currency">
 				<option value="all"><?php echo esc_html__( 'All Currencies', 'rl-freemius-bi' ); ?></option>
@@ -105,16 +108,21 @@ if ( ! defined( 'WPINC' ) ) {
 				<option value="EUR">EUR</option>
 				<option value="GBP">GBP</option>
 			</select>
+			</span>
 
-			<label for="rl-fsbi-date-range"><?php echo esc_html__( 'Date Range:', 'rl-freemius-bi' ); ?></label>
+			<span class="rl-fsbi-field">
+			<label for="rl-fsbi-start-date"><?php echo esc_html__( 'Date Range:', 'rl-freemius-bi' ); ?></label>
 			<input type="date" id="rl-fsbi-start-date" value="<?php echo esc_attr( $initial_period_start ); ?>" aria-label="<?php echo esc_attr__( 'Start date', 'rl-freemius-bi' ); ?>" />
 			<span aria-hidden="true">—</span>
 			<input type="date" id="rl-fsbi-end-date" value="<?php echo esc_attr( $initial_period_end ); ?>" aria-label="<?php echo esc_attr__( 'End date', 'rl-freemius-bi' ); ?>" />
+			</span>
 
+			<span class="rl-fsbi-field">
 			<label for="rl-fsbi-plan-filter"><?php echo esc_html__( 'Plan:', 'rl-freemius-bi' ); ?></label>
 			<select id="rl-fsbi-plan-filter" name="plan_id">
 				<option value="all"><?php echo esc_html__( 'All Plans', 'rl-freemius-bi' ); ?></option>
 			</select>
+			</span>
 
 			<button id="rl-fsbi-sync-btn" class="button button-primary"><?php echo esc_html__( 'Sync Now', 'rl-freemius-bi' ); ?></button>
 			<button id="rl-fsbi-sync-cancel-btn" class="button" type="button" hidden><?php echo esc_html__( 'Cancel Sync', 'rl-freemius-bi' ); ?></button>
@@ -151,7 +159,7 @@ if ( ! defined( 'WPINC' ) ) {
 	<div class="rl-fsbi-kpi-row" id="rl-fsbi-kpi-row">
 		<?php
 		$overview_cards = array(
-			'newsubs'   => array( __( 'New subscriptions', 'rl-freemius-bi' ), __( 'First-time paid subscriptions this month, excluding renewals and trials. Pace compares progress against the target expected by today.', 'rl-freemius-bi' ) ),
+			'newsubs'   => array( __( 'New paid (excl. reactivations)', 'rl-freemius-bi' ), __( 'First-time paid subscriptions in the period, excluding renewals and trials. A customer whose earlier subscription had already ended is a reactivation and is counted separately, because the monthly goal on the Growth tab counts new plus reactivations. Pace compares progress against the target expected by today.', 'rl-freemius-bi' ) ),
 			'mrr'       => array( __( 'MRR', 'rl-freemius-bi' ), __( 'The amount that will actually renew, monthlyised by billing cycle and converted at the rate of the day. Freemius renewal_amount is used, and amount_per_cycle (list price) only when it is missing - which would ignore kept discounts and overstate what renews.', 'rl-freemius-bi' ) ),
 			'net'       => array( __( 'Net revenue', 'rl-freemius-bi' ), __( 'Gross minus refunds, commission and gateway fees for the selected period, each converted at the rate of its own day.', 'rl-freemius-bi' ) ),
 			'churn'     => array( __( 'Churn rate', 'rl-freemius-bi' ), __( 'Cancellations in the period over the subscriber base that existed at its start.', 'rl-freemius-bi' ) ),
@@ -199,6 +207,12 @@ if ( ! defined( 'WPINC' ) ) {
 				</dl>
 			</section>
 		</div>
+
+		<div class="rl-fsbi-card">
+			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Churn Trend', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Cancellations in each month over the base that existed at its start — the same rule as the Churn Rate KPI. A gap means no subscription history was recorded for that month yet.', 'rl-freemius-bi' ); ?></div>
+			<canvas id="rl-fsbi-churn-chart"></canvas>
+		</div>
 	</section>
 
 	<div class="rl-fsbi-content-grid">
@@ -224,7 +238,7 @@ if ( ! defined( 'WPINC' ) ) {
 				<div class="rl-fsbi-card-sub" id="rl-fsbi-refunds-sub">—</div>
 			</div>
 			<div class="rl-fsbi-card rl-fsbi-growth-card">
-				<div class="rl-fsbi-card-label"><?php echo esc_html__( 'New Paid Subscriptions', 'rl-freemius-bi' ); ?></div>
+				<div class="rl-fsbi-card-label" title="<?php echo esc_attr__( 'The monthly goal counts new paid subscriptions plus reactivations: a customer whose earlier subscription had already ended is a reactivation, not a new customer.', 'rl-freemius-bi' ); ?>"><?php echo esc_html__( 'New + reactivations vs goal', 'rl-freemius-bi' ); ?></div>
 				<div class="rl-fsbi-card-value rl-fsbi-growth-value">
 					<span id="rl-fsbi-newsubs-current">—</span>
 					<span class="rl-fsbi-growth-target">/ <span id="rl-fsbi-newsubs-target">—</span></span>
@@ -399,18 +413,12 @@ if ( ! defined( 'WPINC' ) ) {
 
 		<div class="rl-fsbi-four-chart-row">
 		<div class="rl-fsbi-card">
-			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Churn Trend', 'rl-freemius-bi' ); ?></div>
-			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Cancellations in each month over the base that existed at its start — the same rule as the Churn Rate KPI. A gap means no subscription history was recorded for that month yet.', 'rl-freemius-bi' ); ?></div>
-			<canvas id="rl-fsbi-churn-chart"></canvas>
-		</div>
-
-		<div class="rl-fsbi-card">
-			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Revenue by Currency', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Gross Revenue by Currency', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-currency-chart"></canvas>
 		</div>
 
 		<div class="rl-fsbi-card">
-			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Revenue by Country', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Net Revenue by Country', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-country-chart"></canvas>
 		</div>
 
@@ -485,7 +493,6 @@ if ( ! defined( 'WPINC' ) ) {
 			</table>
 		</div>
 	</section>
-	</div>
 
 	<section class="rl-fsbi-panel" data-panel="customers" id="rl-fsbi-panel-customers" role="tabpanel" aria-labelledby="rl-fsbi-tab-customers" tabindex="0">
 	<div class="rl-fsbi-card rl-fsbi-table-card">
@@ -534,6 +541,8 @@ if ( ! defined( 'WPINC' ) ) {
 				</tfoot>
 			</table>
 		</div>
+	</div>
+	</section>
 	</div>
 
 	<!-- Mailchimp Sync Live Progress Modal -->
