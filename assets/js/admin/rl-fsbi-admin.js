@@ -1801,13 +1801,21 @@
 			const currency = this.getDisplayCurrency();
 			const summary = data.summary || {};
 			const netRevenue = Number(summary.net_revenue || 0);
-			const previousNet = Number(summary.previous_net_revenue || 0);
+			// Same basis as the Net revenue KPI: a partial period is measured
+			// against the same days of the previous month, and says so. Two
+			// figures on one screen must not disagree about the same period.
+			const comparison = data.overview?.comparison || {};
+			const previousNet = comparison.partial
+				? Number(comparison.net_previous || 0)
+				: Number(summary.previous_net_revenue || 0);
+			// The label already reads "vs 1 Oct to 11 Oct", so it is appended as is.
+			const basisPhrase = comparison.partial && comparison.label ? comparison.label : 'vs previous period';
 			const hasPrevious = previousNet !== 0;
 			const deltaPct = hasPrevious ? (((netRevenue - previousNet) / Math.abs(previousNet)) * 100) : 0;
 			const deltaSign = deltaPct > 0 ? '+' : '';
 			const comparisonText = hasPrevious
-				? `${deltaSign}${deltaPct.toFixed(1)}% vs previous period`
-				: (netRevenue > 0 ? 'no revenue in previous period' : 'no revenue in either period');
+				? `${deltaSign}${deltaPct.toFixed(1)}% ${basisPhrase}`
+				: (netRevenue > 0 ? `no revenue in ${basisPhrase.replace(/^vs /, '')}` : 'no revenue in either period');
 
 			this.setText('rl-fsbi-net-revenue', this.formatCurrency(netRevenue, currency));
 			this.setText('rl-fsbi-net-comparison', comparisonText);
@@ -1953,21 +1961,25 @@
 			const churn = Number(kpis.churn_rate || 0);
 			setKpi('churn', this.formatPercent(churn, 1), churn < 3 ? 'within target' : 'above 3% target', churn < 3 ? 'good' : 'bad');
 
-			const tc = data.trial_conversion;
-			const trialsStarted = Number(extra.trials_started ?? (typeof tc === 'object' ? (tc.total_trials || 0) : 0));
+			const trialsStarted = Number(extra.trials_started || 0);
+			const trialsConverted = Number(extra.trials_converted || 0);
 			if (!trialsStarted) {
 				// 0% and "no trials" are different facts; showing 0.0% implies a
 				// conversion problem where there were simply no trials.
 				setKpi('trialpaid', 'No trials', '', 'neutral');
 			} else {
-				const rate = typeof tc === 'object' ? Number(tc.rate || 0) : Number(tc || 0);
-				const converted = typeof tc === 'object' ? Number(tc.converted || 0) : 0;
-				setKpi('trialpaid', this.formatPercent(rate, 1), converted + ' of ' + trialsStarted + ' converted', 'neutral');
+				const rate = (trialsConverted / trialsStarted) * 100;
+				setKpi('trialpaid', this.formatPercent(rate, 1), trialsConverted + ' of ' + trialsStarted + ' converted', 'neutral');
 			}
 
 			this.renderAttention(extra.attention || []);
 			this.renderWaterfall(extra.waterfall || {}, currency);
-			this.renderSparkline('net', extra.series || []);
+
+			// One sparkline per card, each drawn from the series its figure uses.
+			const sparks = extra.series && !Array.isArray(extra.series) ? extra.series : { net: extra.series || [] };
+			['newsubs', 'mrr', 'net', 'churn', 'trialpaid'].forEach((key) => {
+				this.renderSparkline(key, sparks[key] || []);
+			});
 		},
 
 		/**

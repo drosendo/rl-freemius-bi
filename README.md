@@ -1018,6 +1018,23 @@ Deltas carry an arrow plus words ("▲ 4.2% vs previous", "behind · 1/5") so co
 
 Verified at 1280px: New subscriptions `1 | behind · 1/5`, Net revenue `249,99 € | ▼ 58.4% vs previous`, Churn `1.6%`, attention `1 subscriptions with a failed payment`, waterfall `49,99 / 41,99 / 10,27 / 81,71`, KPI cards at 3 per row. Eight tab switches including revisits produced **no dialogs and no console errors**.
 
+### Unreleased - a sparkline per KPI card
+
+The Overview cards reserved a sparkline band but only the net revenue card had a series to put in it. All five now carry six months of history, each built from the same figures as the number above it:
+
+- **New subscriptions** - first payments per month, one per subscription, renewals and refunds excluded.
+- **MRR** - the MRR snapshot at each month end, measured with `renewal_amount` and the same conversion as the card.
+- **Net revenue** - unchanged, per-payment net converted at each payment's own day.
+- **Churn rate** - the KPI's own window rule, month by month. A month whose subscriber base is zero plots **nothing**, not 0%.
+- **Trial to paid** - the conversion rate of trials *started* in that month, and nothing where no trial started.
+- **MRR before the local copy reaches** - a month that opened before the oldest stored subscription plots nothing either. The local table begins on 2026-09-09, so the MRR line starts in October rather than drawing three false zeroes.
+
+The series costs 1,047 bytes in the Overview slice (33.3 KB total). The card's "Trial to paid" figure now counts trials from the trials table instead of reading a key that was never set, so it can tell "no trials" (this period) from a real 0%.
+
+The legacy *Total Net Revenue* card at the top of the page compared the period against a whole previous month while the new KPI beside it compared the same day-span, so the two printed different percentages for the same money. Both now use the same basis and the same label (`+16.9% vs 1 Oct to 11 Oct`).
+
+Verified at 1280 and 1920: five sparklines at 306x34 and 241x34, each painting (373-539 px), cards 136px and unmoved after a five-second wait and a full tab round-trip, no console errors.
+
 ### Unreleased - the KPI cards grew without bound
 
 Chart.js writes `height: 100%` onto the canvas and measures itself from its parent. The sparkline canvas carried `height: 34px` itself, which Chart.js simply overwrote, so `100%` resolved against the card the canvas was inside - the canvas asked the card to be as tall as the canvas, and the card obliged. On a fresh load the five cards grew past the fold and kept going.

@@ -1831,16 +1831,84 @@ class RL_FSBI_Admin
 			);
 		}
 
-		// Six months of net revenue for the sparkline, oldest first.
-		$series = array();
+		// Six months of history for the five sparklines, oldest first. Each card
+		// gets the series its own figure is built from, so a shape can never
+		// contradict the number it sits under.
+		$series = array('net' => array(), 'newsubs' => array(), 'mrr' => array(), 'churn' => array(), 'trialpaid' => array());
+		$now_ts = current_time('timestamp');
+
+		// The oldest subscription on record. A month that opened before it cannot
+		// have a complete MRR snapshot, and reporting the partial one as if it were
+		// the whole truth is how a gap turns into a fake collapse.
+		$earliest_subscription = null;
+		foreach ($subscriptions as $earliest_candidate) {
+			$created_stamp = ! empty($earliest_candidate->created_at) ? strtotime((string) $earliest_candidate->created_at) : false;
+			if (false !== $created_stamp && (null === $earliest_subscription || $created_stamp < $earliest_subscription)) {
+				$earliest_subscription = $created_stamp;
+			}
+		}
+
 		for ($i = 5; $i >= 0; $i--) {
 			$month = wp_date('Y-m', strtotime('-' . $i . ' months', strtotime($end_date)));
 			$m_start = $month . '-01';
 			$m_end = wp_date('Y-m-t', strtotime($m_start));
+			$label = wp_date('M', strtotime($m_start));
 			$m_payments = $repo->get_payments($plugin_id, $m_start, $m_end, $filter_currency);
+
 			$row = $this->summarise_month_payments($m_payments, $currency, $m_start);
-			$series[] = array('label' => wp_date('M', strtotime($m_start)), 'value' => $row['net']);
+			$series['net'][] = array('label' => $label, 'value' => $row['net']);
+
+			$month_subs = array();
+			$new_count = 0;
+			foreach ($m_payments as $m_payment) {
+				if (! $this->is_sale_payment($m_payment) || $this->is_renewal_payment($m_payment)) {
+					continue;
+				}
+
+				$m_sub_id = (int) ($m_payment->subscription_id ?? 0);
+				if ($m_sub_id > 0) {
+					if (isset($month_subs[$m_sub_id])) {
+						continue;
+					}
+					$month_subs[$m_sub_id] = true;
+				}
+
+				$new_count++;
+			}
+			$series['newsubs'][] = array('label' => $label, 'value' => $new_count);
+
+			// MRR is a point-in-time figure: measure it at the close of each month,
+			// but never past today, or the last point would claim future state.
+			$mrr_as_of = strtotime($m_end) > $now_ts ? current_time('Y-m-d') : $m_end;
+			$mrr_known = null !== $earliest_subscription && $earliest_subscription <= strtotime($m_start . ' 00:00:00');
+			$mrr_point = $mrr_known ? $this->calculate_period_mrr($subscriptions, $mrr_as_of, $currency) : array('converted' => null);
+			$series['mrr'][] = array(
+				'label' => $label,
+				'value' => null === $mrr_point['converted'] ? null : round((float) $mrr_point['converted'], 2),
+			);
+
+			// The same window rule as the Churn KPI, month by month, and null where
+			// the local copy has no base yet so the line breaks instead of reading 0.
+			$churn_window = $this->count_churn_window(
+				$subscriptions,
+				strtotime($m_start . ' 00:00:00'),
+				min(strtotime($m_end . ' 23:59:59'), $now_ts)
+			);
+			$series['churn'][] = array(
+				'label' => $label,
+				'value' => $churn_window['base'] > 0 ? round((float) $churn_window['rate'], 1) : null,
+			);
+
+			// Trial to paid is a rate, so a month with no trials started has no
+			// value to plot - it is not 0%.
+			$funnel = $repo->get_trial_funnel($plugin_id, $m_start, $m_end);
+			$series['trialpaid'][] = array(
+				'label' => $label,
+				'value' => $funnel['started'] > 0 ? round((float) $funnel['rate'], 1) : null,
+			);
 		}
+
+		$period_funnel = $repo->get_trial_funnel($plugin_id, $start_date, $end_date);
 
 		return array(
 			'waterfall' => $waterfall,
@@ -1849,7 +1917,8 @@ class RL_FSBI_Admin
 			'comparison' => $comparison,
 			'day_of_month' => (int) wp_date('j', current_time('timestamp')),
 			'days_in_month' => (int) wp_date('t', current_time('timestamp')),
-			'trials_started' => isset($stats['trials']) ? (int) $stats['trials'] : 0,
+			'trials_started' => (int) $period_funnel['started'],
+			'trials_converted' => (int) $period_funnel['converted'],
 		);
 	}
 
