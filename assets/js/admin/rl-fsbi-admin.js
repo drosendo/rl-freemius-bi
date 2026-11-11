@@ -1411,7 +1411,8 @@
 			});
 		},
 
-
+		/**
+		 * Update mini-KPI cards and Portfolio Performance metrics.
 		 *
 		 * @function updateMiniKpis
 		 * @memberof FSBI
