@@ -1520,6 +1520,12 @@ class RL_FSBI_Settings_Manager {
 			delete_transient( 'rl_fsbi_wporg_' . md5( sanitize_title( (string) $slug ) ) );
 		}
 
+		// The assembled dashboard payload is cached for 15 minutes and is keyed
+		// by a generation counter, so without this the card stayed absent until
+		// the cache expired: the slug was saved but the payload still said there
+		// was none.
+		update_option( 'rl_fsbi_cache_generation', time(), false );
+
 		$message = '1';
 		if ( ! empty( $rejected ) ) {
 			$message = sprintf(
