@@ -3235,7 +3235,12 @@ class RL_FSBI_Admin
 		$period_days = max(1, (int) ceil((strtotime($end_date) - strtotime($start_date)) / DAY_IN_SECONDS) + 1);
 		$previous_end = wp_date('Y-m-d', strtotime($start_date . ' -1 day'));
 		$previous_start = wp_date('Y-m-d', strtotime($previous_end . ' -' . ($period_days - 1) . ' days'));
-		$previous_net = $repo->calculate_net_revenue($plugin_id, $currency, $previous_start, $previous_end);
+
+		// The comparison must be built the same way as the figure it compares
+		// against: per-payment net, converted at the transaction day's rate. Read
+		// straight from the stored net column instead and a product whose net is
+		// not populated reports zero, so every period looks like the first one.
+		$previous_payments = $repo->get_payments($plugin_id, $previous_start, $previous_end, $currency);
 
 		$annual_start = wp_date('Y-m-01', strtotime('-11 months', strtotime($end_date)));
 		$annual_payments = $repo->get_payments($plugin_id, $annual_start, $end_date, $currency);
@@ -3252,7 +3257,7 @@ class RL_FSBI_Admin
 			$gross_revenue,
 			$net_revenue,
 			$active_subscriptions,
-			$previous_net,
+			$previous_payments,
 			$currency
 		);
 
@@ -5337,7 +5342,7 @@ class RL_FSBI_Admin
 	/**
 	 * Build complete analytics payload for v2 dashboard.
 	 */
-	private function build_dashboard_payload($payments, $annual_payments, $subscriptions, $balances, $start_date, $end_date, $gross_revenue, $net_revenue, $active_subscriptions, $previous_net, $currency)
+	private function build_dashboard_payload($payments, $annual_payments, $subscriptions, $balances, $start_date, $end_date, $gross_revenue, $net_revenue, $active_subscriptions, $previous_payments, $currency)
 	{
 		$commission_rate = $this->get_balance_commission_rate($balances);
 		if ($commission_rate <= 0) {
@@ -5385,6 +5390,21 @@ class RL_FSBI_Admin
 		}
 		if (abs($effective_net) > 0) {
 			$net_revenue = $effective_net;
+		}
+
+		// Same source and same day-rate rule as $net_revenue above, so the two
+		// figures in the comparison are always computed alike.
+		$previous_net = 0.0;
+		$fx_converted = false;
+		foreach ($previous_payments as $previous_payment) {
+			$previous_net += (float) $this->resolve_payment_amounts_for_display($previous_payment, $commission_rate, $report_currency)['net'];
+		}
+
+		foreach ($payments as $payment) {
+			if (strtoupper((string) ($payment->currency ?? '')) !== $report_currency) {
+				$fx_converted = true;
+				break;
+			}
 		}
 
 		$expected_payout = 0.0;
@@ -5476,6 +5496,7 @@ class RL_FSBI_Admin
 					? esc_html__('Eligible for next payout cycle (10th)', 'rl-freemius-bi')
 					: esc_html__('Below 100 minimum. Balance carries over to next cycle.', 'rl-freemius-bi'),
 				'report_currency'      => $report_currency,
+				'fx_converted'         => $fx_converted,
 			),
 			'kpis' => array(
 				'mrr'                 => round($mrr, 2),

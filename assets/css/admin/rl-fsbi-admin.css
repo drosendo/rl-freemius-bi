@@ -211,6 +211,13 @@
 	color: rgba(255, 255, 255, 0.86);
 }
 
+.rl-fsbi-hero-card .rl-fsbi-fx-note {
+	margin-top: 4px;
+	font-size: 10px;
+	line-height: 1.35;
+	color: rgba(255, 255, 255, 0.66);
+}
+
 .rl-fsbi-portfolio-widget {
 	margin-top: 12px;
 	background: linear-gradient(135deg, #202846, #151a2b 72%);

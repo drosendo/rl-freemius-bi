@@ -85,6 +85,9 @@ if ( ! defined( 'WPINC' ) ) {
 			<div class="rl-fsbi-card-label"><?php echo esc_html__( 'Total Net Revenue', 'rl-freemius-bi' ); ?></div>
 			<div class="rl-fsbi-hero-value" id="rl-fsbi-net-revenue">—</div>
 			<div class="rl-fsbi-card-sub" id="rl-fsbi-net-comparison"><?php echo esc_html__( 'vs previous period', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-fx-note" id="rl-fsbi-fx-note" hidden>
+				<?php echo esc_html__( "Converted at each day's rate; small rounding differences may occur.", 'rl-freemius-bi' ); ?>
+			</div>
 		</div>
 		<div class="rl-fsbi-card">
 			<div class="rl-fsbi-card-label"><?php echo esc_html__( 'Expected Payout', 'rl-freemius-bi' ); ?></div>

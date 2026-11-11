@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.3.30  
+**Version:** 1.4.0  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -837,6 +837,12 @@ gh release create v1.3.11 /tmp/rl-freemius-bi-1.3.11.zip --target master --notes
 bumping `Version:` means no site will ever see it.
 
 ## Changelog
+
+### 1.4.0 (2026-11-11)
+
+**Revenue figures come from one source.**
+- The "vs previous period" comparison now derives its figure exactly like the headline it compares against: per-payment net, converted at the transaction day's rate. It previously read the stored `net` column, which is empty for products imported without a settled payout — so a period with 24 payments and €1,177 of gross revenue reported *"no revenue in previous period"*. Revenue momentum in the Health Score uses the corrected comparison too.
+- A note appears under the headline total when any payment was converted: *"Converted at each day's rate; small rounding differences may occur."* Per-day conversion is deliberate and unchanged; the note explains why a total can differ by a few cents from a sum taken elsewhere.
 
 ### 1.3.30 (2026-11-10)
 - **An autofilled email can no longer become a bogus Developer ID.** A vendor reported that the backfill failed after signing up, and that the browser had filled the Developer ID field with their email address. The field was a plain text input with no autocomplete hints, and the sanitizer kept only the digits — so `john1985@gmail.com` was saved as `1985`, a perfectly valid id belonging to someone else. Every request then authenticated as the wrong account, and the failure described the API rather than the field. The sanitizer now rejects non-numeric input and keeps the previous value, the backfill error names the missing or non-numeric credential, a notice on the plugin screens says the value was not saved, and the credential fields carry `autocomplete="off"` with a numeric keypad on mobile.

@@ -1349,8 +1349,8 @@
 			const summary = data.summary || {};
 			const netRevenue = Number(summary.net_revenue || 0);
 			const previousNet = Number(summary.previous_net_revenue || 0);
-			const hasPrevious = previousNet > 0;
-			const deltaPct = hasPrevious ? (((netRevenue - previousNet) / previousNet) * 100) : 0;
+			const hasPrevious = previousNet !== 0;
+			const deltaPct = hasPrevious ? (((netRevenue - previousNet) / Math.abs(previousNet)) * 100) : 0;
 			const deltaSign = deltaPct > 0 ? '+' : '';
 			const comparisonText = hasPrevious
 				? `${deltaSign}${deltaPct.toFixed(1)}% vs previous period`
@@ -1358,6 +1358,11 @@
 
 			this.setText('rl-fsbi-net-revenue', this.formatCurrency(netRevenue, currency));
 			this.setText('rl-fsbi-net-comparison', comparisonText);
+
+			const fxNote = document.getElementById('rl-fsbi-fx-note');
+			if (fxNote) {
+				fxNote.hidden = !summary.fx_converted;
+			}
 			this.setText('rl-fsbi-expected-payout', this.formatCurrency(Number(summary.expected_payout || 0), currency));
 			this.setText('rl-fsbi-payout-note', summary.payout_note || 'Based on current MRR pace');
 
