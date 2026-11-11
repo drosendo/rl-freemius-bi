@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.5.1  
+**Version:** 1.6.0  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -1034,6 +1034,21 @@ Four figures were still being computed twice. All four now come from `summarise_
 - **Churn trend.** The base for each month no longer uses `expires_at` as a lower bound. That field is rewritten on every sync to the current period end, which emptied the base for every earlier month and drew 0.00% churn beside five to eleven cancellations.
 
 **Upgrade routine.** A version bump now persists the commission model and rate that detection found: an account called legacy gets its marginal rate (7%) and a fixed fee of 0 without anyone clicking Accept, so the site stops reading "revenue share not set". The bump also changes the payload cache key, so month rows are rebuilt on the first load after the update rather than waiting for the next sync.
+
+### 1.6.0
+
+The settings screens and the dashboard stop fighting the plugins around them, and the reports read straight down the page.
+
+**Settings.**
+- **It saves again.** Updating the bundled RL Options Framework to 2.6.0 made every save fail with *"Tracked Plugins has an invalid value."* — the library rejects an array payload for any field type it does not ship, and `checkbox_list` is ours. The type now declares itself through `rl_options_framework_array_field_types`.
+- **This plugin's copy of the framework is the one that runs.** The entry point is required at plugin load so it takes part in the `plugins_loaded` arbitration 2.6.0 introduced.
+- **The plugin list is readable.** Names sat beside two badges in a ~410px column and were elided to `Smart Insigh…`; the title is above the badges now and wraps.
+- **Saving no longer dims, blurs or rounds the screen.** WP Compress Image Optimizer forces `background: rgba(17,24,39,.4) !important; backdrop-filter: blur(4px)` and `border-radius: 16px; padding: 0` on every `.swal2-popup` site-wide. Our save toast is a rectangle with its icon on the row because the toast container is reset with three classes, which beats its two whatever order the stylesheets load in.
+
+**Dashboard.**
+- **The three doughnuts are circles.** `aspect-ratio` on the canvas was applied after Chart.js had measured, so a 260x461 bitmap was stretched into a 260x260 box. The canvas now lives in a fixed square box that Chart.js measures from the start, and the legend is appended to the card rather than the box.
+- **Chart cards fill the row.** Three cards in a four-column grid left an empty slot that read as a missing card; it is three columns, with the legend beside the chart instead of below it.
+- **One filter row at 1200px.** The plugin field is gone on a product dashboard (the page title already names the product), and the last-synced stamp moved into an **i** mark inside the Sync button: hover or focus shows the time, screen readers read it, and the row keeps its line.
 
 ### 1.5.1
 
