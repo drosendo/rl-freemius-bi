@@ -2676,3 +2676,32 @@ body[class*="rl-freemius-bi"] #wpfooter {
 	margin-top: 24px;
 	padding-bottom: 8px;
 }
+
+/*
+ * One vertical rhythm for every card on every tab.
+ *
+ * The panels are display:contents, so their cards land as siblings at
+ * different nesting depths and no single margin rule could reach them all -
+ * which is how the Retention block ended up touching the churn chart. The
+ * dashboard is a column now and the gap does the work; the per-card margins
+ * that used to approximate it are set to zero so nothing doubles up.
+ */
+.rl-fsbi-dashboard {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-kpi-row,
+.rl-fsbi-dashboard .rl-fsbi-attention,
+.rl-fsbi-dashboard .rl-fsbi-recent-card,
+.rl-fsbi-dashboard .rl-fsbi-waterfall-card,
+.rl-fsbi-dashboard .rl-fsbi-activity-card,
+.rl-fsbi-dashboard .rl-fsbi-blocks,
+.rl-fsbi-dashboard .rl-fsbi-mini-kpis,
+.rl-fsbi-dashboard .rl-fsbi-top-grid,
+.rl-fsbi-dashboard .rl-fsbi-content-grid,
+.rl-fsbi-dashboard .rl-fsbi-card {
+	margin-top: 0;
+	margin-bottom: 0;
+}

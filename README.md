@@ -990,6 +990,12 @@ bumping `Version:` means no site will ever see it.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
 
+### Unreleased - one vertical rhythm for every card
+
+The panels are `display: contents`, so their cards land as siblings at different nesting depths and no single margin rule reached them all. That is how the Retention block ended up touching the churn chart while the Overview was correctly spaced.
+
+The dashboard is a flex column with a 12px gap now, and the per-card margins that used to approximate it are zeroed so nothing doubles. Measured after the change, every seam on every tab is 12px: 4 on Overview, 11 on Growth, 1 on Retention, and the single-card tabs have nothing to space. The sticky toolbar still pins at the admin bar (top 32px at 1200px of scroll).
+
 ### Unreleased - the WordPress footer no longer floats mid-page
 
 `#wpfooter` is `position: absolute; bottom: 0` against a viewport-height container, so on a page longer than the screen it landed in the middle of the cards. On this plugin's screens it is back in the flow, after the last card.
