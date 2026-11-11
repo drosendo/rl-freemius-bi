@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.6.3  
+**Version:** 1.6.4  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -881,10 +881,14 @@ through the normal Plugins screen.
 - The release lookup is cached for **6 hours** (failures for 15 minutes) because
   the unauthenticated GitHub API allows 60 requests/hour **per IP**, which shared
   hosting shares. Use **Plugins → Check again** to force a check.
-- The plugin prefers a **release asset** over GitHub's generated tag archive, so
-  the archive already contains the correct `rl-freemius-bi/` folder.
-  `upgrader_source_selection` renames the folder as a safety net if a generated
-  archive is ever used instead.
+- **Only a release asset is offered.** If a release has no
+  `rl-freemius-bi-<version>.zip` asset, no update row is shown at all. GitHub's
+  generated tag archive is not an installable package on every host: on 11 Nov
+  2026 v1.6.3 was published without its asset, the updater fell back to
+  `archive/refs/tags/v1.6.3.zip`, and WordPress answered *"The package could not
+  be installed. No valid plugins were found."* in production. A missing update
+  row is a better outcome than a failed update, so the fallback is gone; the
+  built asset is the contract.
 - The `Update URI` header declares ownership, so a WordPress.org plugin with the
   same slug can never take over update delivery.
 - An update **replaces the whole plugin folder**. Never edit files directly on the
@@ -904,6 +908,13 @@ git archive --format=zip --prefix=rl-freemius-bi/ -o /tmp/rl-freemius-bi-1.3.11.
 
 # 3. publish; the asset is what the updater downloads
 gh release create v1.3.11 /tmp/rl-freemius-bi-1.3.11.zip --target master --notes "..."
+```
+
+**The asset is not optional.** A release without `rl-freemius-bi-<version>.zip`
+delivers no update. If the release already exists, add the zip to it:
+
+```bash
+gh release upload v1.6.3 /tmp/rl-freemius-bi-1.6.3.zip
 ```
 
 **The version bump is what triggers everything.** Tagging a release without
@@ -1034,6 +1045,10 @@ Four figures were still being computed twice. All four now come from `summarise_
 - **Churn trend.** The base for each month no longer uses `expires_at` as a lower bound. That field is rewritten on every sync to the current period end, which emptied the base for every earlier month and drew 0.00% churn beside five to eleven cancellations.
 
 **Upgrade routine.** A version bump now persists the commission model and rate that detection found: an account called legacy gets its marginal rate (7%) and a fixed fee of 0 without anyone clicking Accept, so the site stops reading "revenue share not set". The bump also changes the payload cache key, so month rows are rebuilt on the first load after the update rather than waiting for the next sync.
+
+### 1.6.4
+
+The GitHub updater only offers a **release asset** now. v1.6.3 was published without its built zip, so the updater fell back to GitHub's generated tag archive and production answered *"The package could not be installed. No valid plugins were found."* — the generated archive does not unpack into an installable folder on every host. A release without `rl-freemius-bi-<version>.zip` now delivers no update at all, which is the safer failure.
 
 ### 1.6.3
 

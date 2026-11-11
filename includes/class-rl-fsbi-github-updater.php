@@ -353,15 +353,18 @@ class RL_FSBI_GitHub_Updater
 		$version = ltrim($tag, 'vV');
 		$base    = 'https://github.com/' . self::OWNER . '/' . self::REPO;
 		$asset   = $base . '/releases/download/' . $tag . '/' . self::SLUG . '-' . $version . '.zip';
-		$archive = $base . '/archive/refs/tags/' . $tag . '.zip';
 
-		// The asset is confirmed before it is offered, so an update can never
-		// point at a URL that 404s at install time.
-		$zip = $this->asset_exists($asset) ? $asset : $archive;
+		// Only the built asset is offered. GitHub's generated tag archive has been
+		// observed to unpack into a second nested folder on some hosts, and
+		// WordPress then reports "No valid plugins were found" after the download
+		// has already replaced nothing - a failed update is worse than no update.
+		if (! $this->asset_exists($asset)) {
+			return null;
+		}
 
 		return array(
 			'version'      => sanitize_text_field($version),
-			'zip'          => esc_url_raw($zip),
+			'zip'          => esc_url_raw($asset),
 			'body'         => '',
 			'published_at' => '',
 		);
@@ -447,8 +450,10 @@ class RL_FSBI_GitHub_Updater
 			}
 		}
 
+		// No asset, no update: the generated archive is not a package this plugin
+		// can rely on (see release_from_tag()).
 		if ('' === $zip) {
-			$zip = (string) ($data['zipball_url'] ?? '');
+			return null;
 		}
 
 		return array(
