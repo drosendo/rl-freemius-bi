@@ -112,6 +112,45 @@ if ( ! defined( 'WPINC' ) ) {
 		</div>
 	</div>
 
+	<div class="rl-fsbi-blocks">
+		<section class="rl-fsbi-block rl-fsbi-block--acquisition" aria-labelledby="rl-fsbi-block-acq-title">
+			<h2 class="rl-fsbi-block-title" id="rl-fsbi-block-acq-title"><?php echo esc_html__( 'Acquisition', 'rl-freemius-bi' ); ?></h2>
+			<p class="rl-fsbi-block-sub"><?php echo esc_html__( 'Who arrived in this period.', 'rl-freemius-bi' ); ?></p>
+			<dl class="rl-fsbi-block-metrics">
+				<div><dt><?php echo esc_html__( 'New customers', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-acq-new">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Reactivations', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-acq-reactivation">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Free-to-paid conversion', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-acq-conversion">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Sales origin', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-acq-origin">—</dd></div>
+			</dl>
+		</section>
+
+		<section class="rl-fsbi-block rl-fsbi-block--retention" aria-labelledby="rl-fsbi-block-ret-title">
+			<h2 class="rl-fsbi-block-title" id="rl-fsbi-block-ret-title"><?php echo esc_html__( 'Retention', 'rl-freemius-bi' ); ?></h2>
+			<p class="rl-fsbi-block-sub"><?php echo esc_html__( 'Who stayed, and who needs attention.', 'rl-freemius-bi' ); ?></p>
+			<dl class="rl-fsbi-block-metrics">
+				<div><dt><?php echo esc_html__( 'Active subscriptions', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-active">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Renewals due (30 days)', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-upcoming">—</dd></div>
+				<div><dt><?php echo esc_html__( 'At-risk renewals', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Renewals due in the next 30 days on subscriptions that carry a failed payment or an outstanding balance.', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo esc_attr__( 'Renewals due in the next 30 days on subscriptions that carry a failed payment or an outstanding balance.', 'rl-freemius-bi' ); ?>"><span class="dashicons dashicons-info"></span></span></dt><dd id="rl-fsbi-ret-atrisk">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Failed payments', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Active subscriptions that have ever recorded a failed payment.', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo esc_attr__( 'Active subscriptions that have ever recorded a failed payment.', 'rl-freemius-bi' ); ?>"><span class="dashicons dashicons-info"></span></span></dt><dd id="rl-fsbi-ret-failed">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Cancellations this month', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-cancellations">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Churn rate', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-churn">—</dd></div>
+			</dl>
+		</section>
+
+		<section class="rl-fsbi-block rl-fsbi-block--revenue" aria-labelledby="rl-fsbi-block-rev-title">
+			<h2 class="rl-fsbi-block-title" id="rl-fsbi-block-rev-title"><?php echo esc_html__( 'Revenue', 'rl-freemius-bi' ); ?></h2>
+			<p class="rl-fsbi-block-sub"><?php echo esc_html__( 'What the period earned.', 'rl-freemius-bi' ); ?></p>
+			<dl class="rl-fsbi-block-metrics">
+				<div><dt><?php echo esc_html__( 'MRR', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-mrr">—</dd></div>
+				<div><dt><?php echo esc_html__( 'ARR', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-arr">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Gross', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-gross">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Refunds', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-refunds">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Fees', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-fees">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Net', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-net">—</dd></div>
+			</dl>
+		</section>
+	</div>
+
 	<?php
 	$health_tooltip_text = esc_attr__( "Health Score (0–100) measures SaaS stability:\n• Refunds (max 30 pts): 30 pts if <5%, penalized if ≥5%\n• Churn (max 25 pts): 25 pts if <3%, penalized if ≥3%\n• Revenue Momentum (max 20 pts): 20 pts if growing vs previous period\n• Trial Conversion (max 25 pts): only scored when the product runs trials; otherwise the other criteria are scaled to fill 100", 'rl-freemius-bi' );
 	$health_tooltip_html = esc_attr( '<div style="text-align:left;line-height:1.45;font-size:12px;padding:2px 4px;"><strong style="display:block;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:4px;">Health Score (0–100) Breakdown</strong><div style="margin-bottom:4px;">• <strong>Refund Control (30 pts):</strong> 30 pts if &lt;5%, penalized if &ge;5%</div><div style="margin-bottom:4px;">• <strong>Subscriber Churn (25 pts):</strong> 25 pts if &lt;3%, penalized if &ge;3%</div><div style="margin-bottom:4px;">• <strong>Trial Conversion (25 pts):</strong> 25 pts if &gt;25%, or direct %</div><div>• <strong>Revenue Momentum (20 pts):</strong> 20 pts if growing vs previous period</div></div>' );
@@ -304,6 +343,18 @@ if ( ! defined( 'WPINC' ) ) {
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Freemius Sales Volume (Daily, Last 90 Days)', 'rl-freemius-bi' ); ?></div>
 			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Number of payment events recorded per day. This is Freemius billing activity, not WordPress.org install counts.', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-wporg-chart"></canvas>
+		</div>
+
+		<div class="rl-fsbi-card rl-fsbi-installs-widget">
+			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Freemius Installs', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Install records reported to Freemius by the plugin itself. WordPress.org shows a different population and is never combined with this figure.', 'rl-freemius-bi' ); ?></div>
+			<dl class="rl-fsbi-block-metrics">
+				<div><dt><?php echo esc_html__( 'Active', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-installs-active">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Premium', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-installs-premium">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Uninstalled', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-installs-uninstalled">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Total records', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-installs-total">—</dd></div>
+			</dl>
+			<p class="rl-fsbi-card-sub rl-fsbi-wporg-note"><?php echo esc_html__( 'WordPress.org install data is not fetched by this plugin.', 'rl-freemius-bi' ); ?></p>
 		</div>
 	</div>
 

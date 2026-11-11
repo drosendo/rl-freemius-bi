@@ -374,6 +374,94 @@
 	grid-column: span 3;
 }
 
+.rl-fsbi-installs-widget {
+	grid-column: span 3;
+}
+
+.rl-fsbi-wporg-note {
+	margin: 10px 0 0;
+	font-size: 11px;
+	font-style: italic;
+}
+
+/* Acquisition / Retention / Revenue */
+.rl-fsbi-blocks {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 12px;
+	margin-top: 12px;
+}
+
+.rl-fsbi-block {
+	background: radial-gradient(circle at top left, #222946, #141a29 70%);
+	border: 1px solid var(--fsbi-border);
+	border-radius: 12px;
+	padding: 16px 18px;
+	box-shadow: 0 10px 30px rgba(8, 10, 20, 0.28);
+}
+
+.rl-fsbi-block-title {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--fsbi-muted);
+}
+
+.rl-fsbi-block-sub {
+	margin: 4px 0 12px;
+	font-size: 12px;
+	color: var(--fsbi-muted);
+}
+
+.rl-fsbi-block-metrics {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px 14px;
+	margin: 0;
+}
+
+.rl-fsbi-block-metrics > div {
+	min-width: 0;
+}
+
+.rl-fsbi-block-metrics dt {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 11px;
+	line-height: 1.3;
+	color: var(--fsbi-muted);
+}
+
+.rl-fsbi-block-metrics dt .dashicons {
+	font-size: 13px;
+	width: 13px;
+	height: 13px;
+	opacity: 0.7;
+}
+
+.rl-fsbi-block-metrics dd {
+	margin: 2px 0 0;
+	font-size: 17px;
+	font-weight: 650;
+	color: var(--fsbi-text);
+	overflow-wrap: anywhere;
+}
+
+.rl-fsbi-block--acquisition .rl-fsbi-block-title {
+	color: #63d3f0;
+}
+
+.rl-fsbi-block--retention .rl-fsbi-block-title {
+	color: var(--fsbi-warning);
+}
+
+.rl-fsbi-block--revenue .rl-fsbi-block-title {
+	color: var(--fsbi-accent-2);
+}
+
 .rl-fsbi-forecast-row,
 .rl-fsbi-four-chart-row {
 	grid-column: 1 / -1;
@@ -928,6 +1016,10 @@
 
 @media (max-width: 900px) {
 	.rl-fsbi-top-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.rl-fsbi-blocks {
 		grid-template-columns: 1fr;
 	}
 

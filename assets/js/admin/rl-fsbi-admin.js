@@ -1303,6 +1303,7 @@
 			this.updatePageHeader(data);
 			this.updateTopCards(data);
 			this.updateGrowthKpi(data);
+			this.updateBlocks(data);
 			this.updateMiniKpis(data);
 			this.updateMiniStats(data);
 			this.updateTrialPanel(data);
@@ -1716,6 +1717,65 @@
 		 * @param {boolean} fill - Whether to fill area under curves.
 		 * @returns {void}
 		 */
+		/**
+		 * Render the Acquisition / Retention / Revenue blocks.
+		 *
+		 * @function updateBlocks
+		 * @memberof FSBI
+		 * @param {Object} data - Analytics payload containing the blocks object.
+		 * @returns {void}
+		 */
+		updateBlocks: function(data) {
+			const blocks = data.blocks || {};
+			const acq = blocks.acquisition || {};
+			const ret = blocks.retention || {};
+			const rev = blocks.revenue || {};
+			const currency = this.getDisplayCurrency();
+			const count = (v) => Number(v || 0).toLocaleString();
+			const money = (v) => this.formatCurrency(Number(v || 0), currency);
+
+			this.setText('rl-fsbi-acq-new', count(acq.new_customers));
+			this.setText('rl-fsbi-acq-reactivation', count(acq.reactivations));
+
+			const trials = Number(acq.trials || 0);
+			this.setText(
+				'rl-fsbi-acq-conversion',
+				trials > 0 ? `${this.formatPercent(Number(acq.conversion_rate || 0), 1)} (${count(acq.conversions)}/${count(trials)})` : 'No trials'
+			);
+
+			const origins = acq.origins || {};
+			const originLabels = Array.isArray(origins.labels) ? origins.labels : [];
+			this.setText(
+				'rl-fsbi-acq-origin',
+				originLabels.length ? originLabels[0] : 'Unknown'
+			);
+
+			this.setText('rl-fsbi-ret-active', count(ret.active));
+			this.setText('rl-fsbi-ret-upcoming', count(ret.upcoming_30d));
+
+			const atRisk = Number(ret.at_risk_30d || 0);
+			this.setText(
+				'rl-fsbi-ret-atrisk',
+				atRisk > 0 ? `${count(atRisk)} · ${money(ret.at_risk_amount)}` : count(0)
+			);
+			this.setText('rl-fsbi-ret-failed', count(ret.failed_payments));
+			this.setText('rl-fsbi-ret-cancellations', count(ret.cancellations_this_month));
+			this.setText('rl-fsbi-ret-churn', this.formatPercent(Number(ret.churn_rate || 0), 2));
+
+			this.setText('rl-fsbi-rev-mrr', money(rev.mrr));
+			this.setText('rl-fsbi-rev-arr', money(rev.arr));
+			this.setText('rl-fsbi-rev-gross', money(rev.gross));
+			this.setText('rl-fsbi-rev-refunds', money(rev.refunds));
+			this.setText('rl-fsbi-rev-fees', money(rev.fees));
+			this.setText('rl-fsbi-rev-net', money(rev.net));
+
+			const installs = data.installs || {};
+			this.setText('rl-fsbi-installs-active', count(installs.active));
+			this.setText('rl-fsbi-installs-premium', count(installs.premium));
+			this.setText('rl-fsbi-installs-uninstalled', count(installs.uninstalled));
+			this.setText('rl-fsbi-installs-total', count(installs.total));
+		},
+
 		/**
 		 * Render the new-paid-subscriptions target card.
 		 *

@@ -1164,13 +1164,16 @@ class RL_FSBI_Admin
 		$count  = 50;
 
 		while (true) {
+			// No filter: filtering to 'uninstalled' stored only sites that had
+			// already gone, so every install looked uninstalled and the active
+			// population was invisible. The unfiltered collection carries both
+			// states and each row says which it is.
 			$installs = $api->retrieve_installs(
 				$plugin_id,
 				0,
 				array(
 					'count'  => $count,
 					'offset' => $offset,
-					'filter' => 'uninstalled',
 				)
 			);
 
@@ -3303,6 +3306,7 @@ class RL_FSBI_Admin
 		$data['trial_funnel']  = $this->resolve_trial_funnel($repo, $plugin_id, $start_date, $end_date, $data);
 		$data['churn_reasons'] = $repo->get_churn_reasons($plugin_id, $this->resolve_churn_window_start($end_date));
 		$data['uninstalls']    = $repo->count_uninstalls($plugin_id, $start_date, $end_date);
+		$data['installs']      = $repo->get_install_snapshot($plugin_id);
 
 		$plugin_title = '';
 		$plugin_version = '';
@@ -5530,6 +5534,11 @@ class RL_FSBI_Admin
 		$churn_trend = $this->build_churn_trend_series($subscriptions);
 		$new_subscriptions = $this->build_new_subscription_series($annual_payments, $subscriptions);
 
+		$ended_index   = $this->build_ended_subscription_index($subscriptions);
+		$period_split  = $this->classify_first_payments($payments, $ended_index);
+		$sales_origin  = $this->build_sales_origin_series($payments);
+		$retention     = $this->build_retention_snapshot($subscriptions, $subscription_stats);
+
 		$currency_distribution = $this->build_distribution_series($payments, 'currency', 'gross', $commission_rate, $report_currency);
 		$country_distribution = $this->build_distribution_series($payments, 'country_code', 'net', $commission_rate, $report_currency);
 		$plan_distribution = $this->build_plan_distribution_series($subscriptions);
@@ -5611,6 +5620,27 @@ class RL_FSBI_Admin
 				'daily_sales_volume'   => $daily_sales_volume,
 			),
 			'growth' => $new_subscriptions,
+			// Three audiences need three paragraphs, not one number soup:
+			// who arrived, who stayed, what it earned.
+			'blocks' => array(
+				'acquisition' => array(
+					'new_customers'   => $period_split['new'],
+					'reactivations'   => $period_split['reactivation'],
+					'trials'          => $trial_count,
+					'conversions'     => $converted_trials,
+					'conversion_rate' => round($trial_rate, 2),
+					'origins'         => $sales_origin,
+				),
+				'retention' => $retention,
+				'revenue' => array(
+					'mrr'     => round($mrr, 2),
+					'arr'     => round($arr, 2),
+					'gross'   => round($gross_revenue, 2),
+					'refunds' => round(abs($refund_total), 2),
+					'fees'    => round($fees_total, 2),
+					'net'     => round($net_revenue, 2),
+				),
+			),
 			'table' => $monthly_table,
 
 			// Compatibility keys kept for existing integrations.
@@ -6464,36 +6494,7 @@ class RL_FSBI_Admin
 			$re_counts[$key]  = 0;
 		}
 
-		// When each subscription ended, per user, so a returning customer can be
-		// told apart from a first-time one.
-		$ended_by_user = array();
-		foreach ($subscriptions as $subscription) {
-			$user_id = isset($subscription->user_id) ? (int) $subscription->user_id : 0;
-			if ($user_id <= 0) {
-				continue;
-			}
-
-			$meta   = json_decode((string) ($subscription->metadata ?? ''), true);
-			$status = strtolower((string) ($subscription->status ?? ''));
-
-			$ended = false;
-			if (! empty($subscription->expires_at)) {
-				$ended = strtotime((string) $subscription->expires_at);
-			}
-			if (is_array($meta) && ! empty($meta['canceled_at'])) {
-				$canceled = strtotime((string) $meta['canceled_at']);
-				$ended    = $ended ? min($ended, $canceled) : $canceled;
-			} elseif (in_array($status, array('cancelled', 'canceled'), true) && ! empty($subscription->updated_at)) {
-				$canceled = strtotime((string) $subscription->updated_at);
-				$ended    = $ended ? min($ended, $canceled) : $canceled;
-			}
-
-			if (false === $ended) {
-				continue;
-			}
-
-			$ended_by_user[$user_id][(int) $subscription->subscription_id] = $ended;
-		}
+		$ended_by_user = $this->build_ended_subscription_index($subscriptions);
 
 		$seen_subscriptions = array();
 
@@ -6555,6 +6556,206 @@ class RL_FSBI_Admin
 			'current_total' => (int) ($total ? $total[count($total) - 1] : 0),
 			'current_new'  => (int) ($new_counts[$current] ?? 0),
 			'current_reactivation' => (int) ($re_counts[$current] ?? 0),
+		);
+	}
+
+	/**
+	 * Renewal load, payment trouble and cancellations for the retention block.
+	 *
+	 * @param array $subscriptions     Subscription rows.
+	 * @param array $subscription_stats Result of calculate_subscription_stats().
+	 * @return array
+	 */
+	private function build_retention_snapshot($subscriptions, $subscription_stats)
+	{
+		$now      = current_time('timestamp');
+		$horizon  = strtotime('+30 days', $now);
+		$upcoming = 0;
+		$at_risk  = 0;
+		$at_risk_amount = 0.0;
+		$failed   = 0;
+
+		foreach ($subscriptions as $subscription) {
+			$status = strtolower((string) ($subscription->status ?? ''));
+			if (! in_array($status, array('active', 'paid', 'trialing', 'trial_ended'), true)) {
+				continue;
+			}
+
+			$failed_count = isset($subscription->failed_payments) ? (int) $subscription->failed_payments : 0;
+			if ($failed_count > 0) {
+				$failed++;
+			}
+
+			$renewal_at = ! empty($subscription->next_renewal)
+				? strtotime((string) $subscription->next_renewal)
+				: (! empty($subscription->expires_at) ? strtotime((string) $subscription->expires_at) : false);
+
+			if (false === $renewal_at || $renewal_at < $now || $renewal_at > $horizon) {
+				continue;
+			}
+
+			$upcoming++;
+
+			$outstanding = isset($subscription->outstanding_balance) ? (float) $subscription->outstanding_balance : 0.0;
+			if ($failed_count > 0 || $outstanding > 0) {
+				$at_risk++;
+				$at_risk_amount += isset($subscription->renewal_amount) ? (float) $subscription->renewal_amount : 0.0;
+			}
+		}
+
+		return array(
+			'renewals'                 => (int) ($subscription_stats['monthly'] + $subscription_stats['annual']),
+			'active'                   => (int) $subscription_stats['active'],
+			'upcoming_30d'             => $upcoming,
+			'at_risk_30d'              => $at_risk,
+			'at_risk_amount'           => round($at_risk_amount, 2),
+			'failed_payments'          => $failed,
+			'cancellations_this_month' => (int) $subscription_stats['canceled_this_month'],
+			'churn_rate'               => round((float) $subscription_stats['churn_rate'], 2),
+		);
+	}
+
+	/**
+	 * Map user id to the end timestamps of their finished subscriptions.
+	 *
+	 * A first payment from a user who already has an ended subscription is a
+	 * reactivation, not a new customer.
+	 *
+	 * @param array $subscriptions Subscription rows.
+	 * @return array<int,array<int,int>>
+	 */
+	private function build_ended_subscription_index($subscriptions)
+	{
+		$ended_by_user = array();
+
+		foreach ($subscriptions as $subscription) {
+			$user_id = isset($subscription->user_id) ? (int) $subscription->user_id : 0;
+			if ($user_id <= 0) {
+				continue;
+			}
+
+			$meta   = json_decode((string) ($subscription->metadata ?? ''), true);
+			$status = strtolower((string) ($subscription->status ?? ''));
+
+			$ended = false;
+			if (! empty($subscription->expires_at)) {
+				$ended = strtotime((string) $subscription->expires_at);
+			}
+			if (is_array($meta) && ! empty($meta['canceled_at'])) {
+				$canceled = strtotime((string) $meta['canceled_at']);
+				$ended    = $ended ? min($ended, $canceled) : $canceled;
+			} elseif (in_array($status, array('cancelled', 'canceled'), true) && ! empty($subscription->updated_at)) {
+				$canceled = strtotime((string) $subscription->updated_at);
+				$ended    = $ended ? min($ended, $canceled) : $canceled;
+			}
+
+			if (false === $ended) {
+				continue;
+			}
+
+			$ended_by_user[$user_id][(int) $subscription->subscription_id] = $ended;
+		}
+
+		return $ended_by_user;
+	}
+
+	/**
+	 * Split the first payments in a set into new customers and reactivations.
+	 *
+	 * @param array $payments      Payment rows for the window.
+	 * @param array $ended_by_user Index from build_ended_subscription_index().
+	 * @return array{new:int,reactivation:int}
+	 */
+	private function classify_first_payments($payments, $ended_by_user)
+	{
+		$new = 0;
+		$reactivation = 0;
+		$seen = array();
+
+		foreach ($payments as $payment) {
+			if ($this->is_refund_payment($payment) || $this->is_renewal_payment($payment)) {
+				continue;
+			}
+
+			$subscription_key = (int) ($payment->subscription_id ?? 0);
+			if ($subscription_key > 0) {
+				if (isset($seen[$subscription_key])) {
+					continue;
+				}
+				$seen[$subscription_key] = true;
+			}
+
+			$paid_at = strtotime((string) $payment->transaction_date);
+			$user_id = (int) ($payment->user_id ?? 0);
+			$is_returning = false;
+
+			if ($user_id > 0 && ! empty($ended_by_user[$user_id])) {
+				foreach ($ended_by_user[$user_id] as $prior_id => $ended_at) {
+					if ($prior_id !== $subscription_key && $ended_at < $paid_at) {
+						$is_returning = true;
+						break;
+					}
+				}
+			}
+
+			if ($is_returning) {
+				$reactivation++;
+			} else {
+				$new++;
+			}
+		}
+
+		return array('new' => $new, 'reactivation' => $reactivation);
+	}
+
+	/**
+	 * Bucket payments by the checkout entry point recorded on them.
+	 *
+	 * Freemius records a numeric `source` enum, which is not an origin, so only
+	 * campaign or referral fields count. Everything else is honestly unknown.
+	 *
+	 * @param array $payments Payment rows.
+	 * @return array{labels:array,values:array,unknown:int}
+	 */
+	private function build_sales_origin_series($payments)
+	{
+		$bucket = array();
+		$unknown = 0;
+		$keys = array('utm_source', 'utm_medium', 'utm_campaign', 'checkout_origin', 'referrer', 'landing_page');
+
+		foreach ($payments as $payment) {
+			if ($this->is_refund_payment($payment) || $this->is_renewal_payment($payment)) {
+				continue;
+			}
+
+			$meta = ! empty($payment->metadata) ? json_decode((string) $payment->metadata, true) : array();
+			$label = '';
+
+			if (is_array($meta)) {
+				foreach ($keys as $key) {
+					if (! empty($meta[$key]) && is_string($meta[$key])) {
+						$label = $key . ': ' . $meta[$key];
+						break;
+					}
+				}
+			}
+
+			if ('' === $label) {
+				$unknown++;
+				continue;
+			}
+
+			$label = mb_substr($label, 0, 60);
+			$bucket[$label] = ($bucket[$label] ?? 0) + 1;
+		}
+
+		arsort($bucket);
+		$bucket = array_slice($bucket, 0, 6, true);
+
+		return array(
+			'labels' => array_keys($bucket),
+			'values' => array_values($bucket),
+			'unknown' => $unknown,
 		);
 	}
 

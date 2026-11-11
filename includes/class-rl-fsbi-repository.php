@@ -773,6 +773,36 @@ class RL_FSBI_Repository {
 	}
 
 	/**
+	 * Snapshot of Freemius install records for a scope.
+	 *
+	 * These are Freemius installations only. WordPress.org install counts are a
+	 * different source and are never mixed with them.
+	 *
+	 * @param int $plugin_id Plugin ID or 0 for all.
+	 * @return array{total:int,active:int,premium:int,uninstalled:int}
+	 */
+	public function get_install_snapshot( $plugin_id = 0 ) {
+		$table = $this->wpdb->prefix . 'rl_fsbi_installs';
+		$where = $plugin_id > 0 ? $this->wpdb->prepare( ' WHERE plugin_id = %d', $plugin_id ) : '';
+
+		$row = $this->wpdb->get_row(
+			"SELECT COUNT(*) AS total,
+				SUM(CASE WHEN is_active = 1 AND is_uninstalled = 0 THEN 1 ELSE 0 END) AS active,
+				SUM(CASE WHEN is_premium = 1 AND is_uninstalled = 0 THEN 1 ELSE 0 END) AS premium,
+				SUM(CASE WHEN is_uninstalled = 1 THEN 1 ELSE 0 END) AS uninstalled
+			FROM {$table}{$where}",
+			ARRAY_A
+		);
+
+		return array(
+			'total'       => isset( $row['total'] ) ? (int) $row['total'] : 0,
+			'active'      => isset( $row['active'] ) ? (int) $row['active'] : 0,
+			'premium'     => isset( $row['premium'] ) ? (int) $row['premium'] : 0,
+			'uninstalled' => isset( $row['uninstalled'] ) ? (int) $row['uninstalled'] : 0,
+		);
+	}
+
+	/**
 	 * Install IDs that need their uninstall reason fetched.
 	 *
 	 * @param int $plugin_id Plugin ID.
