@@ -2467,7 +2467,7 @@
 			if (!Array.isArray(coupons) || !coupons.length) {
 				const row = document.createElement('tr');
 				const cell = document.createElement('td');
-				cell.colSpan = 6;
+				cell.colSpan = 8;
 				cell.textContent = 'No coupon redemptions in this period.';
 				row.appendChild(cell);
 				body.appendChild(row);
@@ -2475,34 +2475,46 @@
 			}
 
 			const currency = this.getDisplayCurrency();
+			const statusLabels = { active: 'Active', expired: 'Expired', exhausted: 'Exhausted', inactive: 'Inactive' };
 
 			coupons.forEach((coupon) => {
 				const row = document.createElement('tr');
+				const limit = coupon.limit === null || coupon.limit === undefined ? 'Unlimited' : Number(coupon.limit).toLocaleString();
 
 				const cells = [
 					coupon.code || '—',
-					Number(coupon.uses || 0).toLocaleString(),
-					this.formatCurrency(Number(coupon.revenue || 0), currency),
-					coupon.discount || '—',
+					coupon.discount ? String(coupon.discount) : '—',
+					statusLabels[coupon.status] || 'Unknown',
+					`${Number(coupon.uses || 0).toLocaleString()} / ${limit}`,
 					coupon.remaining === null || coupon.remaining === undefined ? 'Unlimited' : Number(coupon.remaining).toLocaleString(),
 					coupon.expires ? String(coupon.expires).slice(0, 10) : 'No expiry',
+					this.formatCurrency(Number(coupon.revenue || 0), currency),
+					Number(coupon.discount_given || 0) > 0 ? this.formatCurrency(Number(coupon.discount_given), currency) : '—',
 				];
 
 				cells.forEach((value, index) => {
 					const cell = document.createElement('td');
-					cell.textContent = value;
-					if (index === 0) {
+
+					if (0 === index) {
 						const badge = document.createElement('code');
 						badge.textContent = value;
-						cell.textContent = '';
 						cell.appendChild(badge);
-						if (!Number(coupon.is_active)) {
-							const off = document.createElement('span');
-							off.className = 'rl-fsbi-coupon-inactive';
-							off.textContent = 'inactive';
-							cell.appendChild(off);
+
+						if (coupon.known === false) {
+							const unknown = document.createElement('span');
+							unknown.className = 'rl-fsbi-coupon-inactive';
+							unknown.textContent = 'definition unavailable';
+							cell.appendChild(unknown);
 						}
+					} else if (2 === index) {
+						const tag = document.createElement('span');
+						tag.className = 'rl-fsbi-coupon-status rl-fsbi-coupon-status--' + (coupon.status || 'unknown');
+						tag.textContent = value;
+						cell.appendChild(tag);
+					} else {
+						cell.textContent = value;
 					}
+
 					row.appendChild(cell);
 				});
 

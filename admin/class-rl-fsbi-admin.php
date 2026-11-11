@@ -3523,6 +3523,8 @@ class RL_FSBI_Admin
 			$coupon_rate = $this->get_legacy_commission_rate($annual_payments, $payments);
 		}
 
+		$this->ensure_coupon_definitions($plugin_id);
+
 		$data['coupons']       = $this->build_coupon_report(
 			$payments,
 			$this->collect_cached_coupon_definitions($plugin_id),
@@ -6737,15 +6739,18 @@ class RL_FSBI_Admin
 			}
 
 			if (! isset($usage[$coupon_id])) {
-				$usage[$coupon_id] = array('uses' => 0, 'revenue' => 0.0);
+				$usage[$coupon_id] = array('uses' => 0, 'revenue' => 0.0, 'gross' => 0.0);
 			}
 
 			if ($this->is_refund_payment($payment)) {
 				continue;
 			}
 
+			$amounts = $this->resolve_payment_amounts_for_display($payment, $commission_rate, $report_currency);
+
 			$usage[$coupon_id]['uses']++;
-			$usage[$coupon_id]['revenue'] += (float) $this->resolve_payment_amounts_for_display($payment, $commission_rate, $report_currency)['net'];
+			$usage[$coupon_id]['revenue'] += (float) $amounts['net'];
+			$usage[$coupon_id]['gross']   += (float) $amounts['gross'];
 		}
 
 		$definitions = array();
@@ -6757,6 +6762,7 @@ class RL_FSBI_Admin
 		// in the selected range does not belong in this table, and its lifetime
 		// redemption count would read as if it happened now.
 		$report = array();
+		$now    = current_time('timestamp');
 
 		foreach ($usage as $coupon_id => $totals) {
 			if ($totals['uses'] <= 0) {
@@ -6765,28 +6771,54 @@ class RL_FSBI_Admin
 
 			$definition = $definitions[$coupon_id] ?? array();
 
+			$type   = (string) ($definition['discount_type'] ?? '');
+			$value  = isset($definition['discount']) ? (float) $definition['discount'] : 0.0;
+
 			$discount_label = '';
-			if (! empty($definition['discount']) && (float) $definition['discount'] > 0) {
-				$discount_label = 'percentage' === ($definition['discount_type'] ?? '')
-					? rtrim(rtrim(number_format((float) $definition['discount'], 2, '.', ''), '0'), '.') . '%'
-					: number_format((float) $definition['discount'], 2);
+			if ($value > 0) {
+				$discount_label = 'percentage' === $type
+					? rtrim(rtrim(number_format($value, 2, '.', ''), '0'), '.') . '%'
+					: $value;
 			}
 
-			$remaining = null;
-			if (isset($definition['redemptions_limit']) && null !== $definition['redemptions_limit']) {
-				$remaining = max(0, (int) $definition['redemptions_limit'] - (int) ($definition['redemptions'] ?? 0));
+			// Discount given is derived from the amount actually charged: for a
+			// percentage coupon the undiscounted price is gross / (1 - rate).
+			$discount_given = 0.0;
+			if ($value > 0) {
+				if ('percentage' === $type && $value < 100) {
+					$discount_given = $totals['gross'] * ($value / (100 - $value));
+				} elseif ('percentage' !== $type) {
+					$discount_given = $value * $totals['uses'];
+				}
+			}
+
+			$limit     = array_key_exists('redemptions_limit', $definition) ? $definition['redemptions_limit'] : null;
+			$remaining = null === $limit ? null : max(0, (int) $limit - (int) ($definition['redemptions'] ?? 0));
+			$expires   = (string) ($definition['end_date'] ?? '');
+			$is_active = (int) ($definition['is_active'] ?? 0);
+
+			$status = 'active';
+			if (! $is_active) {
+				$status = 'inactive';
+			} elseif ('' !== $expires && strtotime($expires) !== false && strtotime($expires) < $now) {
+				$status = 'expired';
+			} elseif (null !== $remaining && $remaining <= 0) {
+				$status = 'exhausted';
 			}
 
 			$report[] = array(
-				'id'        => $coupon_id,
-				'code'      => (string) ($definition['code'] ?? ('Coupon #' . $coupon_id)),
-				'uses'      => (int) $totals['uses'],
-				'revenue'   => round((float) $totals['revenue'], 2),
-				'discount'  => $discount_label,
-				'remaining' => $remaining,
-				'expires'   => (string) ($definition['end_date'] ?? ''),
-				'is_active' => (int) ($definition['is_active'] ?? 0),
-				'known'     => ! empty($definition),
+				'id'             => $coupon_id,
+				'code'           => (string) ($definition['code'] ?? ('Coupon #' . $coupon_id)),
+				'discount'       => $discount_label,
+				'status'         => $status,
+				'uses'           => (int) $totals['uses'],
+				'limit'          => null === $limit ? null : (int) $limit,
+				'remaining'      => $remaining,
+				'expires'        => $expires,
+				'revenue'        => round((float) $totals['revenue'], 2),
+				'discount_given' => round($discount_given, 2),
+				'is_active'      => $is_active,
+				'known'          => ! empty($definition),
 			);
 		}
 
@@ -6798,39 +6830,46 @@ class RL_FSBI_Admin
 	}
 
 	/**
-	 * Plans that have data, for the toolbar filter.
+	 * Make sure coupon definitions exist for a scope, fetching them if needed.
 	 *
-	 * @param int $plugin_id Optional plugin scope.
-	 * @return array<int,array{id:int,name:string}>
+	 * The definitions used to arrive only on a full sync, so a site that
+	 * upgraded saw every coupon as "Coupon #id" until the next crawl. They are
+	 * now fetched on demand and cached, with a short failure lock so a broken
+	 * API key cannot turn every dashboard load into an outbound request.
+	 *
+	 * @param int $plugin_id Plugin scope, 0 for all tracked plugins.
+	 * @return void
 	 */
-	private function get_plans_for_filter($plugin_id = 0)
+	private function ensure_coupon_definitions($plugin_id)
 	{
-		global $wpdb;
-
-		$subscriptions_table = $wpdb->prefix . 'rl_fsbi_subscriptions';
-		$plans_table         = $wpdb->prefix . 'rl_fsbi_plans';
-
-		$query = "SELECT DISTINCT s.plan_id, p.plan_name
-			FROM {$subscriptions_table} s
-			LEFT JOIN {$plans_table} p ON p.plan_id = s.plan_id
-			WHERE s.plan_id > 0";
-
-		if ($plugin_id > 0) {
-			$query .= $wpdb->prepare(' AND s.plugin_id = %d', $plugin_id);
+		$plugin_id = (int) $plugin_id;
+		if ($plugin_id > 0 && ! empty($this->collect_cached_coupon_definitions($plugin_id))) {
+			return;
 		}
 
-		$query .= ' ORDER BY p.plan_name ASC, s.plan_id ASC';
-
-		$plans = array();
-		foreach ((array) $wpdb->get_results($query) as $row) {
-			$name = trim((string) ($row->plan_name ?? ''));
-			$plans[] = array(
-				'id'   => (int) $row->plan_id,
-				'name' => '' !== $name ? $name : 'Plan ' . (int) $row->plan_id,
-			);
+		if ($plugin_id <= 0) {
+			global $wpdb;
+			$has_any = (bool) $wpdb->get_var("SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE 'rl_fsbi_coupons\_%' LIMIT 1");
+			if ($has_any) {
+				return;
+			}
 		}
 
-		return $plans;
+		if (get_transient('rl_fsbi_coupon_fetch_lock')) {
+			return;
+		}
+
+		$api = $this->get_api_client();
+		if (! $api) {
+			return;
+		}
+
+		set_transient('rl_fsbi_coupon_fetch_lock', 1, HOUR_IN_SECONDS);
+
+		$targets = $plugin_id > 0 ? array($plugin_id) : $this->get_selected_plugin_ids();
+		foreach ($targets as $target) {
+			$this->sync_coupons((int) $target, $api);
+		}
 	}
 
 	/**
@@ -6945,6 +6984,8 @@ class RL_FSBI_Admin
 
 		$mrr_snapshot = $this->calculate_period_mrr($subscriptions, $end_date, $currency);
 
+		$this->ensure_coupon_definitions($plugin_id);
+
 		$coupons = $this->build_coupon_report(
 			$payments,
 			$this->collect_cached_coupon_definitions($plugin_id),
@@ -7003,6 +7044,42 @@ class RL_FSBI_Admin
 				);
 			}, $coupons),
 		);
+	}
+
+	/**
+	 * Plans that have data, for the toolbar filter.
+	 *
+	 * @param int $plugin_id Optional plugin scope.
+	 * @return array<int,array{id:int,name:string}>
+	 */
+	private function get_plans_for_filter($plugin_id = 0)
+	{
+		global $wpdb;
+
+		$subscriptions_table = $wpdb->prefix . 'rl_fsbi_subscriptions';
+		$plans_table         = $wpdb->prefix . 'rl_fsbi_plans';
+
+		$query = "SELECT DISTINCT s.plan_id, p.plan_name
+			FROM {$subscriptions_table} s
+			LEFT JOIN {$plans_table} p ON p.plan_id = s.plan_id
+			WHERE s.plan_id > 0";
+
+		if ($plugin_id > 0) {
+			$query .= $wpdb->prepare(' AND s.plugin_id = %d', $plugin_id);
+		}
+
+		$query .= ' ORDER BY p.plan_name ASC, s.plan_id ASC';
+
+		$plans = array();
+		foreach ((array) $wpdb->get_results($query) as $row) {
+			$name = trim((string) ($row->plan_name ?? ''));
+			$plans[] = array(
+				'id'   => (int) $row->plan_id,
+				'name' => '' !== $name ? $name : 'Plan ' . (int) $row->plan_id,
+			);
+		}
+
+		return $plans;
 	}
 
 	/**

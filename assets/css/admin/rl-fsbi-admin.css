@@ -252,6 +252,35 @@
 	font-size: 11px;
 }
 
+.rl-fsbi-coupon-status {
+	display: inline-block;
+	padding: 1px 8px;
+	border-radius: 999px;
+	font-size: 10px;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	border: 1px solid transparent;
+}
+
+.rl-fsbi-coupon-status--active {
+	color: #8ef0c8;
+	border-color: rgba(34, 200, 155, 0.5);
+	background: rgba(34, 200, 155, 0.14);
+}
+
+.rl-fsbi-coupon-status--expired,
+.rl-fsbi-coupon-status--exhausted {
+	color: #ffb3bd;
+	border-color: rgba(255, 90, 114, 0.45);
+	background: rgba(255, 90, 114, 0.12);
+}
+
+.rl-fsbi-coupon-status--inactive {
+	color: var(--fsbi-muted);
+	border-color: rgba(154, 164, 204, 0.4);
+	background: rgba(154, 164, 204, 0.1);
+}
+
 .rl-fsbi-coupon-inactive {
 	margin-left: 6px;
 	font-size: 10px;

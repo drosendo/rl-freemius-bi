@@ -378,21 +378,23 @@ if ( ! defined( 'WPINC' ) ) {
 
 	<div class="rl-fsbi-card rl-fsbi-coupons-card">
 		<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Coupons', 'rl-freemius-bi' ); ?></div>
-		<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Redemptions and the net revenue they brought in for the selected period, alongside the discount, remaining uses and expiry of each code.', 'rl-freemius-bi' ); ?></div>
+		<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Redemptions in the selected period with the coupon definition as Freemius reports it. Uses counts this period; the limit, remaining and expiry are the coupon\'s own. Discount given is derived from the amount actually charged.', 'rl-freemius-bi' ); ?></div>
 		<div class="rl-fsbi-table-wrap">
 			<table class="rl-fsbi-coupons-table">
 				<thead>
 					<tr>
 						<th scope="col"><?php echo esc_html__( 'Code', 'rl-freemius-bi' ); ?></th>
-						<th scope="col"><?php echo esc_html__( 'Uses', 'rl-freemius-bi' ); ?></th>
-						<th scope="col"><?php echo esc_html__( 'Revenue', 'rl-freemius-bi' ); ?></th>
 						<th scope="col"><?php echo esc_html__( 'Discount', 'rl-freemius-bi' ); ?></th>
+						<th scope="col"><?php echo esc_html__( 'Status', 'rl-freemius-bi' ); ?></th>
+						<th scope="col"><?php echo esc_html__( 'Uses / limit', 'rl-freemius-bi' ); ?></th>
 						<th scope="col"><?php echo esc_html__( 'Remaining', 'rl-freemius-bi' ); ?></th>
 						<th scope="col"><?php echo esc_html__( 'Expiry', 'rl-freemius-bi' ); ?></th>
+						<th scope="col"><?php echo esc_html__( 'Revenue', 'rl-freemius-bi' ); ?></th>
+						<th scope="col"><?php echo esc_html__( 'Discount given', 'rl-freemius-bi' ); ?></th>
 					</tr>
 				</thead>
 				<tbody id="rl-fsbi-coupons-body">
-					<tr><td colspan="6"><?php echo esc_html__( 'No coupon redemptions in this period.', 'rl-freemius-bi' ); ?></td></tr>
+					<tr><td colspan="8"><?php echo esc_html__( 'No coupon redemptions in this period.', 'rl-freemius-bi' ); ?></td></tr>
 				</tbody>
 			</table>
 		</div>
