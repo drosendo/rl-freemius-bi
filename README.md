@@ -990,6 +990,21 @@ bumping `Version:` means no site will ever see it.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
 
+### Unreleased - compact sticky header (phase 1, step 4a)
+
+The controls were sized for a wide page, so at 1280px the plan selector wrapped to a second row and the sticky header took a fifth of the viewport. Controls now use a 28px rhythm with smaller type, the date fields are narrower and the tab bar is tighter.
+
+| Viewport | Before | After |
+| --- | --- | --- |
+| 1024px | 166px | **107px** |
+| 1200px | 166px | **98px** |
+| 1280px | 163px | **98px** |
+| 1920px | 132px | **75px** |
+
+No horizontal overflow at any of them; the plan selector gives way before the date range, because a date range is a filter every tab needs.
+
+**A panel that is reloading or has failed now hides its own content.** `.rl-fsbi-panel.is-loading` and `.is-failed` hide every child except the skeleton or the error box, so stale figures never sit under a spinner or an error message - which is exactly what happened during the forced-500 test, where the previous values stayed visible beneath the failure notice. Verified on the overview panel: its content reports `grid` normally, `none` while `is-loading` and `none` while `is-failed`, and returns to `grid` afterwards.
+
 ### Unreleased - per-tab payload slices (phase 1, step 3)
 
 The dashboard no longer asks for everything at once. The AJAX handler takes a `section` parameter (default `all` for older callers) and each tab requests only its own slice:

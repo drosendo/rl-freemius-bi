@@ -1457,6 +1457,8 @@
 				+ '<span class="rl-fsbi-skeleton-bar"></span>';
 			panel.insertBefore(wrap, panel.firstChild);
 			panel.setAttribute('aria-busy', 'true');
+			// Old values must not show under a loading panel.
+			panel.classList.add('is-loading');
 		},
 
 		/**
@@ -1475,6 +1477,7 @@
 
 			panel.querySelectorAll('.rl-fsbi-skeleton').forEach((el) => el.remove());
 			panel.removeAttribute('aria-busy');
+			panel.classList.remove('is-loading');
 		},
 
 		/**
@@ -1530,12 +1533,15 @@
 			retry.textContent = window.rlFsbiAdmin?.i18nRetry || 'Retry';
 			retry.addEventListener('click', () => {
 				box.remove();
+				panel.classList.remove('is-failed');
 				this.loadSection(section);
 			});
 
 			box.appendChild(text);
 			box.appendChild(retry);
 			panel.insertBefore(box, panel.firstChild);
+			// Stale figures under an error read as "this is the current data".
+			panel.classList.add('is-failed');
 		},
 
 		/**
@@ -1694,6 +1700,7 @@
 				this.sectionCache[answered + '::' + this.filterSignature()] = payload.data;
 			}
 			this.clearSectionSkeleton(answered);
+			document.querySelector('.rl-fsbi-panel[data-panel="' + answered + '"]')?.classList.remove('is-failed');
 			document.querySelector('.rl-fsbi-tab[data-tab="' + answered + '"]')?.classList.remove('is-stale');
 			this.tabLoading = null;
 

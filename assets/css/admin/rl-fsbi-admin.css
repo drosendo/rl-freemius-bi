@@ -1810,3 +1810,119 @@ p.rl-fsbi-field-desc,
 	background: var(--fsbi-warning, #f4b942);
 	vertical-align: middle;
 }
+
+/*
+ * Compact sticky header (~100px instead of ~163px).
+ *
+ * The controls were sized for a wide page, so at 1280px the plan selector
+ * wrapped onto a second row and the header grew. Shrinking the controls to a
+ * 32px rhythm and letting the date fields share one group keeps everything on
+ * a single row down to 1024px, which is what the sticky behaviour needs: a
+ * header that eats a fifth of the viewport is worse than no header.
+ */
+.rl-fsbi-dashboard .rl-fsbi-toolbar {
+	padding: 8px 12px 0;
+	border-radius: 8px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls {
+	gap: 6px 8px;
+	align-items: center;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls label {
+	font-size: 11px;
+	letter-spacing: 0;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls select,
+.rl-fsbi-dashboard .rl-fsbi-controls input {
+	flex: 0 1 auto;
+	min-height: 30px;
+	height: 30px;
+	line-height: 28px;
+	font-size: 12px;
+	padding: 0 6px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls select {
+	min-width: 96px;
+	max-width: 190px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls input[type="date"] {
+	width: 130px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls > button {
+	min-height: 30px;
+	height: 30px;
+	line-height: 28px;
+	font-size: 12px;
+	padding: 0 10px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-last-synced {
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+@media (max-width: 1200px) {
+	/* Below this the plan selector is the first thing to give way, not the
+	   dates: a date range is a filter every tab needs. */
+	.rl-fsbi-dashboard .rl-fsbi-controls select {
+		min-width: 84px;
+		max-width: 150px;
+	}
+
+	.rl-fsbi-dashboard .rl-fsbi-controls input[type="date"] {
+		width: 118px;
+	}
+}
+
+/* Trim the last few pixels: 30px controls plus a 8px rhythm still left the
+   header at 121px, and a sticky header should not exceed ~10% of the viewport. */
+.rl-fsbi-dashboard .rl-fsbi-toolbar {
+	padding: 6px 10px 0;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls {
+	gap: 4px 6px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls select,
+.rl-fsbi-dashboard .rl-fsbi-controls input,
+.rl-fsbi-dashboard .rl-fsbi-controls > button {
+	min-height: 28px;
+	height: 28px;
+	line-height: 26px;
+	font-size: 11.5px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls select {
+	min-width: 84px;
+	max-width: 150px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls input[type="date"] {
+	width: 114px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-tab {
+	padding: 6px 11px;
+	font-size: 12px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-tabs {
+	margin-top: 2px;
+}
+
+/*
+ * A panel that is reloading or has failed hides its own old content, so stale
+ * numbers never sit under a spinner or an error. The error box and skeleton are
+ * appended as children of the panel, so they survive the hidden children.
+ */
+.rl-fsbi-panel.is-failed > :not(.rl-fsbi-section-error):not(.rl-fsbi-skeleton),
+.rl-fsbi-panel.is-loading > :not(.rl-fsbi-section-error):not(.rl-fsbi-skeleton) {
+	display: none !important;
+}
