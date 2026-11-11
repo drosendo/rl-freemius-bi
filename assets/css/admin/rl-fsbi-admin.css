@@ -2996,14 +2996,21 @@ body[class*="rl-freemius-bi"] #wpfooter {
 	color: var(--fsbi-muted, #9aa4cc);
 }
 
+/* Same control as the filters above it: an unstyled select fell back to the
+   WordPress default, so it was the only square, grey-bordered box in the bar. */
 .rl-fsbi-dashboard .rl-fsbi-tabbar-scope select {
-	min-height: 28px;
-	height: 28px;
-	line-height: 26px;
-	font-size: 12px;
-	min-width: 168px;
-	max-width: 220px;
-	padding: 0 26px 0 8px;
+	box-sizing: border-box;
+	min-height: 40px;
+	height: 40px;
+	line-height: 38px;
+	font-size: 13px;
+	min-width: 190px;
+	max-width: 240px;
+	padding: 0 32px 0 10px;
+	border: 1px solid #cfd7e8;
+	border-radius: 8px;
+	background-color: #fff;
+	color: #1e1e1e;
 }
 
 @media (max-width: 900px) {

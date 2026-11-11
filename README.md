@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.6.1  
+**Version:** 1.6.2  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -1034,6 +1034,10 @@ Four figures were still being computed twice. All four now come from `summarise_
 - **Churn trend.** The base for each month no longer uses `expires_at` as a lower bound. That field is rewritten on every sync to the current period end, which emptied the base for every earlier month and drew 0.00% churn beside five to eleven cancellations.
 
 **Upgrade routine.** A version bump now persists the commission model and rate that detection found: an account called legacy gets its marginal rate (7%) and a fixed fee of 0 without anyone clicking Accept, so the site stops reading "revenue share not set". The bump also changes the payload cache key, so month rows are rebuilt on the first load after the update rather than waiting for the next sync.
+
+### 1.6.2
+
+The plugin scope select on the tab row is the same control as the filters above it - 40px tall, 8px corners, 13px text, the same border - instead of the WordPress default box, which was the only square, grey-bordered element in the bar.
 
 ### 1.6.1
 
