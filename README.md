@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.4.4  
+**Version:** 1.4.5  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -971,6 +971,16 @@ bumping `Version:` means no site will ever see it.
 - **WordPress.org slugs are per plugin.** The single global field became a per-product editor on the **Plugin Scope** tab, prefilled with each Freemius slug and validated against the wp.org API on save — an unknown slug is rejected rather than stored, since it would render a widget full of zeros. With no slug the widget is not rendered at all (no card, no canvas, no note) and no wp.org request is made.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
+
+### 1.4.5 (2026-11-11)
+
+**A saved WordPress.org slug now shows up immediately.**
+- The dashboard payload is cached for 15 minutes, so saving a slug and reloading kept returning the payload built when there was none: the widget stayed absent and the Freemius Installs card still carried the old *"WordPress.org install data is not fetched by this plugin"* line. Saving the **Plugin Scope** form now bumps the payload cache generation (and clears that slug's snapshot transient), so the next page load rebuilds from the new setting.
+- The stale note was removed outright. It described a limitation that no longer exists — the plugin does fetch wp.org installs, for every product that has a slug.
+
+**The date range no longer renders as a bare dash.**
+- The two `<input type="date">` fields were emitted empty and filled only by JavaScript, so any load where the bundle did not run showed *"Date Range: —"*. They now render the current month server-side, in the site timezone, and are labelled for screen readers.
+- The resolved period is part of the analytics payload (`period.start` / `period.end`), and the dashboard adopts it if the inputs are still blank, so the toolbar always shows the range the numbers were computed for.
 
 ### 1.4.4 (2026-11-11)
 
