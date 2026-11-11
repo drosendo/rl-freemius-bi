@@ -4707,16 +4707,32 @@ class RL_FSBI_Admin
 			$end_date = $start_date;
 		}
 
+		// A tab asks for its own slice. 'all' keeps the previous behaviour for any
+		// caller that predates sections.
+		$section_raw = isset($_POST['section']) ? sanitize_text_field(wp_unslash($_POST['section'])) : 'all';
+		$sections    = array_values(array_unique(array_filter(array_map('sanitize_key', explode(',', $section_raw)))));
+		if (empty($sections) || in_array('all', $sections, true)) {
+			$sections = array('all');
+		}
+
+		// Which optional blocks this slice needs. Each one is skipped outright
+		// rather than computed and discarded.
+		$needs = static function ($key) use ($sections) {
+			return in_array('all', $sections, true) || in_array($key, $sections, true);
+		};
+
 		// The assembled payload is the expensive part: several passes over every
 		// payment in the period, each needing an FX rate lookup. It only changes
 		// when the sync writes new rows, and the generation counter is bumped
-		// there, so the cache cannot serve stale figures after an import.
+		// there, so the cache cannot serve stale figures after an import. The
+		// section list is part of the key, so each slice caches on its own.
 		$payload_cache_key = 'rl_fsbi_dash_' . md5(implode('|', array(
 			$plugin_id,
 			(string) $currency,
 			$plan_filter,
 			$start_date,
 			$end_date,
+			implode(',', $sections),
 			(int) get_option('rl_fsbi_cache_generation', 1),
 			// Included so a code update cannot serve a payload assembled by the
 			// previous version, which may not contain the newest keys.
@@ -4781,17 +4797,19 @@ class RL_FSBI_Admin
 			$currency
 		);
 
-		$data['payments'] = array_map(
+		// Only the customers work list renders payment rows, and they are the bulk
+		// of the payload, so no other slice carries them.
+		$data['payments'] = $needs('customers') ? array_map(
 			function ($payment) {
 				return (array) $payment;
 			},
 			$payments
-		);
+		) : array();
 
-		$data['trial_funnel']  = $this->resolve_trial_funnel($repo, $plugin_id, $start_date, $end_date, $data);
-		$data['churn_reasons'] = $repo->get_churn_reasons($plugin_id, $this->resolve_churn_window_start($end_date));
-		$data['uninstalls']    = $repo->count_uninstalls($plugin_id, $start_date, $end_date);
-		$data['installs']      = $repo->get_install_snapshot($plugin_id);
+		$data['trial_funnel']  = $needs('growth') ? $this->resolve_trial_funnel($repo, $plugin_id, $start_date, $end_date, $data) : null;
+		$data['churn_reasons'] = $needs('retention') ? $repo->get_churn_reasons($plugin_id, $this->resolve_churn_window_start($end_date)) : array();
+		$data['uninstalls']    = $needs('retention') ? $repo->count_uninstalls($plugin_id, $start_date, $end_date) : 0;
+		$data['installs']      = $needs('growth') ? $repo->get_install_snapshot($plugin_id) : array();
 		// Prefer the count Freemius reports for the product; the snapshot counts
 		// install records, thousands of which are historical uninstalls.
 		$catalog_entry = $this->settings->get_option('rl_fsbi_plugins_catalog', array());
@@ -4803,19 +4821,21 @@ class RL_FSBI_Admin
 			$coupon_rate = $this->get_legacy_commission_rate($annual_payments, $payments);
 		}
 
-		$this->ensure_coupon_definitions($plugin_id);
+		if ($needs('marketing')) {
+			$this->ensure_coupon_definitions($plugin_id);
+		}
 
-		$data['coupons']       = $this->build_coupon_report(
+		$data['coupons']       = $needs('marketing') ? $this->build_coupon_report(
 			$payments,
 			$this->collect_cached_coupon_definitions($plugin_id),
 			$coupon_rate,
 			$this->settings->get_option('rl_fsbi_conversion_currency', 'EUR')
-		);
-		$data['plans']         = $this->get_plans_for_filter($plugin_id);
+		) : array();
+		$data['plans']         = $needs('growth') || $needs('retention') ? $this->get_plans_for_filter($plugin_id) : array();
 		// No slug means this product is not on WordPress.org: no widget, and no
 		// outbound request to look up figures nobody asked to see.
 		$wporg_slug = $plugin_id > 0 ? $this->settings->get_wporg_slug($plugin_id) : '';
-		$data['wporg'] = '' !== $wporg_slug ? $this->get_wporg_snapshot($wporg_slug) : null;
+		$data['wporg'] = ($needs('wporg') && '' !== $wporg_slug) ? $this->get_wporg_snapshot($wporg_slug) : null;
 		$data['plan_filter']   = $plan_filter;
 
 		$last_sync_utc = (string) $this->settings->get_option('rl_fsbi_last_sync_at_utc', (string) get_option('rl_fsbi_last_sync_at_utc', ''));
@@ -4876,6 +4896,7 @@ class RL_FSBI_Admin
 		$data['marketing_optins_updated'] = (string) get_option($cache_key . '_updated', '');
 		$data['newsletter_provider']      = $provider;
 		$data['from_cache']               = false;
+		$data['sections']                 = $sections;
 
 		// Payment rows are not rendered by the dashboard and are large enough to
 		// bloat an option row, so they are left out of the cached copy.

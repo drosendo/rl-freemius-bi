@@ -1752,3 +1752,61 @@ p.rl-fsbi-field-desc,
 		top: 46px;
 	}
 }
+
+/* Per-panel skeleton: the tab that is loading shows it, the rest stay usable. */
+.rl-fsbi-skeleton {
+	padding: 16px 18px;
+}
+
+.rl-fsbi-skeleton-bar {
+	display: block;
+	height: 12px;
+	margin: 0 0 10px;
+	border-radius: 4px;
+	background: linear-gradient(90deg, rgba(154, 164, 204, 0.12) 25%, rgba(154, 164, 204, 0.24) 37%, rgba(154, 164, 204, 0.12) 63%);
+	background-size: 400% 100%;
+	animation: rl-fsbi-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.rl-fsbi-skeleton-bar.is-short {
+	width: 60%;
+}
+
+@keyframes rl-fsbi-skeleton-shimmer {
+	0% { background-position: 100% 50%; }
+	100% { background-position: 0 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.rl-fsbi-skeleton-bar {
+		animation: none;
+	}
+}
+
+/* A failed slice explains itself in place, with a Retry, and leaves the rest. */
+.rl-fsbi-section-error {
+	margin: 0 0 12px;
+	padding: 12px 14px;
+	border: 1px solid #4b1d24;
+	border-left: 3px solid #ff5a72;
+	border-radius: 6px;
+	background: #2a1a20;
+}
+
+.rl-fsbi-section-error-text {
+	margin: 0 0 8px;
+	color: #ffd7dc;
+	font-size: 13px;
+}
+
+/* Tabs whose slice is out of date after a filter change. */
+.rl-fsbi-tab.is-stale::after {
+	content: "";
+	display: inline-block;
+	width: 5px;
+	height: 5px;
+	margin-left: 6px;
+	border-radius: 50%;
+	background: var(--fsbi-warning, #f4b942);
+	vertical-align: middle;
+}

@@ -463,6 +463,22 @@
 				}
 			});
 
+			// Switching tabs reuses whatever that tab already loaded with the same
+			// filters. Only an unknown or invalidated slice costs a request.
+			// Set first: getFilters() reads currentTab, so the load started below
+			// must already know which slice it is asking for.
+			this.currentTab = wanted;
+
+			if (!this.tabLoading) {
+				const cached = this.cachedSection(wanted);
+				if (cached) {
+					this.hasRenderedData = true;
+					this.renderDashboard(cached);
+				} else if (this.hasRenderedData) {
+					this.loadSection(wanted);
+				}
+			}
+
 			// Arrow-key activation must keep the URL honest without pushing a
 			// history entry per keystroke, so it rewrites the current entry.
 			if (focus && window.location.hash !== '#' + wanted) {
@@ -554,18 +570,26 @@
 			document.getElementById('rl-fsbi-mc-modal-close-x')?.addEventListener('click', closeMcModal);
 
 			document.getElementById('rl-fsbi-currency-filter')?.addEventListener('change', function() {
+				self.invalidateSections();
+				self.tabLoading = self.currentTab || 'overview';
 				self.loadData();
 			});
 
 			document.getElementById('rl-fsbi-plan-filter')?.addEventListener('change', function() {
+				self.invalidateSections();
+				self.tabLoading = self.currentTab || 'overview';
 				self.loadData();
 			});
 
 			document.getElementById('rl-fsbi-start-date')?.addEventListener('change', function() {
+				self.invalidateSections();
+				self.tabLoading = self.currentTab || 'overview';
 				self.loadData();
 			});
 
 			document.getElementById('rl-fsbi-end-date')?.addEventListener('change', function() {
+				self.invalidateSections();
+				self.tabLoading = self.currentTab || 'overview';
 				self.loadData();
 			});
 
@@ -715,6 +739,7 @@
 			}
 
 			return {
+				section: this.currentTab || 'overview',
 				plugin_id: pluginId,
 				currency: document.getElementById('rl-fsbi-currency-filter')?.value || 'all',
 				plan_id: document.getElementById('rl-fsbi-plan-filter')?.value || 'all',
@@ -861,6 +886,7 @@
 				}
 			}
 
+			this.lastFailedSection = null;
 			fetch(rlFsbiAdmin.ajaxUrl, {
 				method: 'POST',
 				headers: {
@@ -1388,6 +1414,178 @@
 		 * @memberof FSBI
 		 * @returns {void}
 		 */
+		/**
+		 * Load one tab's slice, showing a skeleton in that panel only.
+		 *
+		 * @function loadSection
+		 * @memberof FSBI
+		 * @param {string} section Tab slug.
+		 * @returns {void}
+		 */
+		loadSection: function(section) {
+			this.showSectionSkeleton(section);
+			this.tabLoading = section;
+			this.loadData();
+		},
+
+		/**
+		 * Replace a panel's contents with a skeleton while its slice loads.
+		 *
+		 * @function showSectionSkeleton
+		 * @memberof FSBI
+		 * @param {string} section Tab slug.
+		 * @returns {void}
+		 */
+		showSectionSkeleton: function(section) {
+			const panel = document.querySelector('.rl-fsbi-panel[data-panel="' + section + '"]');
+			if (!panel) {
+				return;
+			}
+
+			const existing = panel.querySelector('.rl-fsbi-skeleton');
+			if (existing) {
+				return;
+			}
+
+			const wrap = document.createElement('div');
+			wrap.className = 'rl-fsbi-skeleton';
+			wrap.setAttribute('role', 'status');
+			wrap.setAttribute('aria-live', 'polite');
+			wrap.innerHTML = '<span class="screen-reader-text">' + (window.rlFsbiAdmin?.i18nLoading || 'Loading section…') + '</span>'
+				+ '<span class="rl-fsbi-skeleton-bar"></span>'
+				+ '<span class="rl-fsbi-skeleton-bar is-short"></span>'
+				+ '<span class="rl-fsbi-skeleton-bar"></span>';
+			panel.insertBefore(wrap, panel.firstChild);
+			panel.setAttribute('aria-busy', 'true');
+		},
+
+		/**
+		 * Remove a panel's skeleton.
+		 *
+		 * @function clearSectionSkeleton
+		 * @memberof FSBI
+		 * @param {string} section Tab slug.
+		 * @returns {void}
+		 */
+		clearSectionSkeleton: function(section) {
+			const panel = document.querySelector('.rl-fsbi-panel[data-panel="' + section + '"]');
+			if (!panel) {
+				return;
+			}
+
+			panel.querySelectorAll('.rl-fsbi-skeleton').forEach((el) => el.remove());
+			panel.removeAttribute('aria-busy');
+		},
+
+		/**
+		 * Route a failed request to the panel it belonged to.
+		 *
+		 * @function failSection
+		 * @memberof FSBI
+		 * @param {string} message Message for the user.
+		 * @param {number} status  HTTP status, 0 when there was no response.
+		 * @returns {void}
+		 */
+		failSection: function(message, status) {
+			const section = this.tabLoading || this.currentTab || 'overview';
+			this.showSectionError(section, message);
+			this.tabLoading = null;
+			if (window.console && console.warn) {
+				console.warn('[RL FSBI] action=rl_fsbi_get_dashboard_data section=' + section + ' status=' + status);
+			}
+		},
+
+		/**
+		 * Report a failed slice inside its own panel, with a Retry button.
+		 *
+		 * One failing request must never blank the whole dashboard: the other
+		 * tabs keep working and the user can retry this one.
+		 *
+		 * @function showSectionError
+		 * @memberof FSBI
+		 * @param {string} section Tab slug.
+		 * @param {string} message Message to show.
+		 * @returns {void}
+		 */
+		showSectionError: function(section, message) {
+			const panel = document.querySelector('.rl-fsbi-panel[data-panel="' + section + '"]');
+			if (!panel) {
+				return;
+			}
+
+			this.clearSectionSkeleton(section);
+			panel.querySelectorAll('.rl-fsbi-section-error').forEach((el) => el.remove());
+
+			const box = document.createElement('div');
+			box.className = 'rl-fsbi-section-error';
+			box.setAttribute('role', 'alert');
+
+			const text = document.createElement('p');
+			text.className = 'rl-fsbi-section-error-text';
+			text.textContent = message;
+
+			const retry = document.createElement('button');
+			retry.type = 'button';
+			retry.className = 'button';
+			retry.textContent = window.rlFsbiAdmin?.i18nRetry || 'Retry';
+			retry.addEventListener('click', () => {
+				box.remove();
+				this.loadSection(section);
+			});
+
+			box.appendChild(text);
+			box.appendChild(retry);
+			panel.insertBefore(box, panel.firstChild);
+		},
+
+		/**
+		 * Drop every cached slice and mark the other tabs stale.
+		 *
+		 * A filter change makes all cached payloads wrong, but only the active
+		 * tab is refetched: the others reload when next opened, which keeps a
+		 * date change to one request instead of one per tab.
+		 *
+		 * @function invalidateSections
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
+		invalidateSections: function() {
+			this.sectionCache = {};
+			const active = this.currentTab || 'overview';
+			document.querySelectorAll('.rl-fsbi-tab').forEach((tab) => {
+				tab.classList.toggle('is-stale', tab.getAttribute('data-tab') !== active);
+			});
+		},
+
+		/**
+		 * Signature of everything that changes a payload.
+		 *
+		 * Two loads with the same signature can share a cached slice; anything
+		 * else invalidates it.
+		 *
+		 * @function filterSignature
+		 * @memberof FSBI
+		 * @returns {string}
+		 */
+		filterSignature: function() {
+			const f = this.getFilters();
+			return [f.plugin_id, f.currency, f.plan_id, f.start_date, f.end_date].join('|');
+		},
+
+		/**
+		 * Cached payload for the active tab, or null when absent or stale.
+		 *
+		 * @function cachedSection
+		 * @memberof FSBI
+		 * @param {string} section Tab slug.
+		 * @returns {Object|null}
+		 */
+		cachedSection: function(section) {
+			const key = section + '::' + this.filterSignature();
+			const hit = this.sectionCache && this.sectionCache[key];
+			return hit || null;
+		},
+
 		loadData: function() {
 			const self = this;
 			const filters = this.getFilters();
@@ -1418,6 +1616,7 @@
 				body: new URLSearchParams({
 					action: 'rl_fsbi_get_dashboard_data',
 					nonce: rlFsbiAdmin.nonce,
+					section: filters.section,
 					...filters,
 				}),
 			})
@@ -1428,11 +1627,11 @@
 				self.hideLoading();
 
 				if (error && 'AbortError' === error.name) {
-					alert('The analytics request timed out after 45 seconds. Nothing was lost — reload the page, and check the server error log if it happens again.');
+					self.failSection('This section timed out after 45 seconds. Retry, and check the server error log if it keeps happening.', 0);
 					return;
 				}
 
-				alert('Failed to load dashboard data.');
+				self.failSection('Could not reach the server. Retry, and check the server error log if it keeps happening.', 0);
 			})
 			.finally(() => {
 				if (null !== timeoutId) {
@@ -1477,15 +1676,26 @@
 				}
 
 				console.error('[RL FSBI] dashboard request failed', response.status, String(raw).slice(0, 500));
-				alert('Could not load dashboard data (HTTP ' + response.status + ').');
+				this.failSection('Could not load this section (HTTP ' + response.status + '). The rest of the dashboard still works.', response.status);
 				return;
 			}
 
 			if (!payload.success) {
 				this.hideLoading();
-				alert('Error: ' + (payload.data || 'The server rejected the request.'));
+				this.failSection(payload.data || 'The server rejected the request.', 0);
 				return;
 			}
+
+			// Remember which tab this answered so its panel stops showing a
+			// skeleton and the slice can be reused instead of refetched.
+			const answered = (payload.data && payload.data.sections && payload.data.sections[0]) || this.tabLoading || 'overview';
+			if (payload.data && typeof payload.data === 'object') {
+				this.sectionCache = this.sectionCache || {};
+				this.sectionCache[answered + '::' + this.filterSignature()] = payload.data;
+			}
+			this.clearSectionSkeleton(answered);
+			document.querySelector('.rl-fsbi-tab[data-tab="' + answered + '"]')?.classList.remove('is-stale');
+			this.tabLoading = null;
 
 			if (this.hasRenderedData) {
 				this.markRefreshing(false);

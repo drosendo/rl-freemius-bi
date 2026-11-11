@@ -990,6 +990,29 @@ bumping `Version:` means no site will ever see it.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
 
+### Unreleased - per-tab payload slices (phase 1, step 3)
+
+The dashboard no longer asks for everything at once. The AJAX handler takes a `section` parameter (default `all` for older callers) and each tab requests only its own slice:
+
+- **Skipped, not discarded**: `coupons` and the coupon definition fetch only for `marketing`, the WordPress.org snapshot only for `wporg`, the trial funnel and install snapshot only for `growth`, churn reasons and uninstalls only for `retention`, plans only for `growth`/`retention`.
+- **Payment rows only for `customers`** - they are the bulk of the payload and nothing else renders them.
+- **The cache key includes the slice**, so each tab caches separately and a slice is never served to the wrong tab.
+
+On the client a slice is cached against a filter signature (`plugin | currency | plan | start | end`): switching back to a tab reuses it, and a filter change clears the cache and marks the other tabs stale (a dot on the tab) while refetching **only** the active one.
+
+A failing request is confined to its own panel: an inline message with a **Retry** button replaces that panel's content, the other tabs keep working, and the action plus HTTP status are logged for matching against the PHP error log. Previously one 500 emptied the whole page.
+
+Skeletons are per panel, with a `prefers-reduced-motion` fallback, not a page-covering spinner.
+
+Measured after-only, from the cached transients (`LENGTH(option_value)`), product 2228 with all currencies:
+
+| Slice | Bytes | payment rows | coupon rows | wp.org |
+| --- | --- | --- | --- | --- |
+| overview | 31,795 | 0 | 0 | null |
+| growth | 32,128 | 0 | 0 | null |
+
+Both slices are heavier than they look because the shared core (KPI, charts, blocks, monthly table) is needed by every tab; what sections remove is the tail plus the payment rows. There is no before figure: the pre-D handler exited through `wp_send_json_success()`, so its payload could not be captured in-process without adding code, and the baseline was deliberately not guessed.
+
 ### Unreleased - sticky header and hash-routed tabs (phase 1, step 2)
 
 The toolbar is now sticky and carries a tab bar underneath it: Overview, Growth, Retention, Customers, Marketing, and WordPress.org **only when the product has a wp.org slug** - that tab is not rendered for a product without one, so no wp.org figure can ever sit beside a Freemius figure by accident.
