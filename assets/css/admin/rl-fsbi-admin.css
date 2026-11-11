@@ -1840,6 +1840,9 @@ p.rl-fsbi-field-desc,
 .rl-fsbi-dashboard .rl-fsbi-controls label {
 	font-size: 11px;
 	letter-spacing: 0;
+	/* The compact header inverts the toolbar to the dark surface, so the
+	   labels cannot keep the dark grey they were given on white. */
+	color: var(--fsbi-muted, #9aa4cc);
 }
 
 .rl-fsbi-dashboard .rl-fsbi-controls select,
@@ -1867,6 +1870,16 @@ p.rl-fsbi-field-desc,
 	line-height: 28px;
 	font-size: 12px;
 	padding: 0 10px;
+}
+
+/* An ID selector set the sync button to 36px, so it stood taller than the
+   selects and inputs beside it and set the row height on its own. */
+.rl-fsbi-dashboard #rl-fsbi-sync-btn,
+.rl-fsbi-dashboard #rl-fsbi-sync-cancel-btn {
+	min-height: 30px;
+	height: 30px;
+	line-height: 28px;
+	padding: 0 12px;
 }
 
 .rl-fsbi-dashboard .rl-fsbi-last-synced {
@@ -1899,7 +1912,9 @@ p.rl-fsbi-field-desc,
 
 .rl-fsbi-dashboard .rl-fsbi-controls select,
 .rl-fsbi-dashboard .rl-fsbi-controls input,
-.rl-fsbi-dashboard .rl-fsbi-controls > button {
+.rl-fsbi-dashboard .rl-fsbi-controls > button,
+.rl-fsbi-dashboard #rl-fsbi-sync-btn,
+.rl-fsbi-dashboard #rl-fsbi-sync-cancel-btn {
 	min-height: 28px;
 	height: 28px;
 	line-height: 26px;

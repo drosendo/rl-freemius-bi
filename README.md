@@ -1018,6 +1018,12 @@ Deltas carry an arrow plus words ("▲ 4.2% vs previous", "behind · 1/5") so co
 
 Verified at 1280px: New subscriptions `1 | behind · 1/5`, Net revenue `249,99 € | ▼ 58.4% vs previous`, Churn `1.6%`, attention `1 subscriptions with a failed payment`, waterfall `49,99 / 41,99 / 10,27 / 81,71`, KPI cards at 3 per row. Eight tab switches including revisits produced **no dialogs and no console errors**.
 
+### Unreleased - the sticky header's labels were unreadable
+
+The compact header inverts the toolbar to the dark surface but left the field labels in the dark grey they were given on white, so "Plugin:", "Currency:", "Date Range:" and "Plan:" were all but invisible against `#111521` - which read as though the controls were overlapping their own labels. The labels now use the muted text colour of the theme.
+
+The Sync button also kept a `min-height: 36px` from an ID rule and stood 8px taller than every control beside it, setting the row height on its own. Everything in the row is 28px now and the header is 67px.
+
 ### Unreleased - the Overview tab is now five cards, one list and one chart
 
 Everything else that used to sit under the KPI row has left the tab:
