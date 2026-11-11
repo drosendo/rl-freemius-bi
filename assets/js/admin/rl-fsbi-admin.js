@@ -1953,6 +1953,13 @@
 				setKpi('trialpaid', this.formatPercent(rate, 1), trialsConverted + ' of ' + trialsStarted + ' converted', 'neutral');
 			}
 
+			// The sticky header's height depends on how the filters wrap, so the
+			// scroll offset is measured rather than guessed.
+			this.measureStickyHeader();
+
+			this.renderRecentMonths(extra);
+			this.renderActivity(extra.recent_activity || []);
+
 			this.renderAttention(extra.attention || []);
 			this.renderWaterfall(extra.waterfall || {}, currency);
 
@@ -1964,6 +1971,81 @@
 		},
 
 		/**
+		 * The compact three-month table, the next payout and what renews next.
+		 *
+		 * @function renderRecentMonths
+		 * @memberof FSBI
+		 * @param {Object} extra Overview payload.
+		 * @returns {void}
+		 */
+		renderRecentMonths: function(extra) {
+			const body = document.getElementById('rl-fsbi-recent-body');
+			const currency = this.getDisplayCurrency();
+			const months = Array.isArray(extra.recent_months) ? extra.recent_months : [];
+			const labels = { settled: 'Settled', current: 'Current', next: 'Next', future: 'Not yet' };
+
+			if (body) {
+				body.innerHTML = months.length
+					? months.map((month) => {
+						const status = labels[month.payout_status] || labels.settled;
+						const payout = Number(month.payout_total || 0) > 0
+							? this.formatCurrency(Number(month.payout_total || 0), currency)
+							: '—';
+						return `<tr>
+							<td>${month.period || month.month}</td>
+							<td>${this.formatCurrency(Number(month.gross || 0), currency)}</td>
+							<td>${this.formatCurrency(Number(month.net || 0), currency)}</td>
+							<td><span class="rl-fsbi-payout-status is-${month.payout_status || 'settled'}">${status}</span> ${payout}</td>
+						</tr>`;
+					}).join('')
+					: '<tr><td colspan="4">No payments in the last three months.</td></tr>';
+			}
+
+			const nextPayout = document.getElementById('rl-fsbi-next-payout');
+			if (nextPayout) {
+				const payout = extra.next_payout || {};
+				nextPayout.textContent = Number(payout.amount || 0) > 0
+					? `Next payout ${this.formatCurrency(Number(payout.amount || 0), currency)}${payout.date ? ' on ' + payout.date : ''}`
+					: 'No payout scheduled yet';
+			}
+
+			const renewals = document.getElementById('rl-fsbi-renewals-due');
+			if (renewals) {
+				const due = extra.renewals_due || {};
+				const count = Number(due.count || 0);
+				renewals.textContent = count > 0
+					? `${count} renewal${count === 1 ? '' : 's'} due in 30 days · ${this.formatCurrency(Number(due.amount || 0), currency)}`
+					: 'No renewals due in 30 days';
+			}
+		},
+
+		/**
+		 * The last five payments, labelled the way the waterfall labels them.
+		 *
+		 * @function renderActivity
+		 * @memberof FSBI
+		 * @param {Array} items Activity entries.
+		 * @returns {void}
+		 */
+		renderActivity: function(items) {
+			const list = document.getElementById('rl-fsbi-activity-list');
+			if (!list) {
+				return;
+			}
+			const currency = this.getDisplayCurrency();
+			const names = { new: 'New', renewal: 'Renewal', reactivation: 'Reactivation' };
+
+			list.innerHTML = items.length
+				? items.map((item) => `<li>
+						<span class="rl-fsbi-activity-date">${item.date || ''}</span>
+						<span class="rl-fsbi-activity-country">${item.country || '—'}</span>
+						<span class="rl-fsbi-activity-kind is-${item.kind}">${names[item.kind] || item.kind}</span>
+						<strong class="rl-fsbi-activity-amount">${this.formatCurrency(Number(item.amount || 0), currency)}</strong>
+					</li>`).join('')
+				: '<li class="rl-fsbi-activity-empty">No payments in this period.</li>';
+		},
+
+		/**
 		 * Draw the attention list, most urgent first, capped at five.
 		 *
 		 * @function renderAttention
@@ -1971,6 +2053,31 @@
 		 * @param {Array} items Attention entries.
 		 * @returns {void}
 		 */
+		/**
+		 * Publish the sticky header height so scroll targets can clear it.
+		 *
+		 * @function measureStickyHeader
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
+		measureStickyHeader: function() {
+			const bar = document.querySelector('.rl-fsbi-toolbar');
+			if (!bar) {
+				return;
+			}
+			document.documentElement.style.setProperty('--rl-fsbi-sticky-h', Math.round(bar.getBoundingClientRect().height) + 'px');
+
+			if (!this.stickyHeaderBound) {
+				this.stickyHeaderBound = true;
+				window.addEventListener('resize', () => {
+					const el = document.querySelector('.rl-fsbi-toolbar');
+					if (el) {
+						document.documentElement.style.setProperty('--rl-fsbi-sticky-h', Math.round(el.getBoundingClientRect().height) + 'px');
+					}
+				});
+			}
+		},
+
 		renderAttention: function(items) {
 			const box = document.getElementById('rl-fsbi-attention');
 			const list = document.getElementById('rl-fsbi-attention-list');
@@ -3422,96 +3529,78 @@
 
 			const tbody = table.querySelector('tbody');
 			const tableData = data.table || {};
-			const rows = tableData.rows || [];
+			const months = Array.isArray(tableData.months) ? tableData.months : [];
 			const totals = tableData.totals || {};
-			const reportCurrency = this.getDisplayCurrency();
+			const reportCurrency = tableData.report_currency || this.getDisplayCurrency();
 
 			this.monthlyTableData = tableData;
 
 			// DataTables must be torn down BEFORE the rows are rebuilt. Rewriting
 			// the tbody of a live instance makes it write _DT_CellIndex onto rows
 			// it no longer owns, which raises "Incorrect column count" as a modal
-			// alert. The destroy that used to live at the end of this function ran
-			// after the damage.
+			// alert.
 			if (window.jQuery && window.jQuery.fn && window.jQuery.fn.DataTable && window.jQuery.fn.DataTable.isDataTable(table)) {
 				window.jQuery(table).DataTable().destroy();
 			}
 
 			tbody.innerHTML = '';
 
-			if (!rows.length) {
+			const statusLabels = {
+				settled: 'Settled',
+				current: 'Current',
+				next: 'Next',
+				future: 'Not yet',
+			};
+
+			if (!months.length) {
 				tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;">No monthly data for selected filters.</td></tr>';
 			} else {
-				rows.forEach((row) => {
+				months.forEach((month) => {
 					const tr = document.createElement('tr');
-					if (row.is_next_payout) {
-						tr.classList.add('rl-fsbi-month-next');
-					}
-					if (row.is_current_payout) {
-						tr.classList.add('rl-fsbi-month-current');
-					}
+					tr.classList.add('rl-fsbi-month-' + (month.payout_status || 'settled'));
 
-					const payoutTotalText = Number(row.payout_total || 0) > 0
-						? this.formatCurrency(Number(row.payout_total || 0), reportCurrency)
-						: 'Carryover';
-					const badges = [
-						row.show_period_badges && row.is_next_payout ? `<span class="rl-fsbi-month-badge rl-fsbi-badge-next">NEXT PAYOUT ${payoutTotalText}</span>` : '',
-						row.show_period_badges && row.is_current_payout ? `<span class="rl-fsbi-month-badge rl-fsbi-badge-current">CURRENT PAYOUT ${payoutTotalText}</span>` : '',
-					].join('');
+					// The per-currency split is what the month was made of before
+					// conversion. Collapsed by default: the month's own figures are the
+					// answer, the split is how it was reached.
+					const splitId = 'rl-fsbi-split-' + month.month;
+					const splitRows = (month.split || []).map((c) => `
+						<tr>
+							<td>${c.currency}</td>
+							<td>${Number(c.new || 0)} / ${Number(c.renewals || 0)}</td>
+							<td>${this.formatCurrency(Number(c.gross || 0), c.currency)}</td>
+							<td class="rl-fsbi-negative">${this.formatCurrency(Number(c.refunds || 0), c.currency)}</td>
+							<td>${this.formatCurrency(Number(c.fees || 0), c.currency)}</td>
+							<td>${this.formatCurrency(Number(c.net || 0), c.currency)}</td>
+							<td colspan="2" class="rl-fsbi-split-converted">= ${this.formatCurrency(Number(c.gross_converted || 0), reportCurrency)} gross</td>
+						</tr>`).join('');
 
-					const periodCell = row.show_period_badges
-						? `${row.period || row.month || ''} ${badges}`
+					const split = splitRows
+						? `<div class="rl-fsbi-month-split" id="${splitId}" hidden>
+								<table><thead><tr>
+									<th>Ccy</th><th>New / Ren.</th><th>Gross</th><th>Refunds</th><th>Fees</th><th>Net</th><th colspan="2">Converted</th>
+								</tr></thead><tbody>${splitRows}</tbody></table>
+							</div>`
 						: '';
 
-					const subsCell = [
-						`<span class="rl-fsbi-subs-pill rl-fsbi-subs-new">${Number(row.new || 0)} NEW</span>`,
-						`<span class="rl-fsbi-subs-pill rl-fsbi-subs-renew">${Number(row.renewals || 0)} RENEWALS</span>`,
-					].join('');
+					const toggle = (month.split || []).length > 1
+						? `<button type="button" class="rl-fsbi-split-toggle" aria-expanded="false" aria-controls="${splitId}" data-target="${splitId}">${month.split.length} currencies</button>`
+						: '';
 
-					let payoutCell = '';
-					if (row.show_payout) {
-						const nativeBreakdown = row.payout_breakdown_native || {};
-						const payoutBreakdown = Object.entries(row.payout_breakdown || {})
-							.filter(([, value]) => Number(value || 0) > 0)
-							.map(([code, value]) => {
-								const isConverted = code !== reportCurrency;
-								const nativeVal = nativeBreakdown[code];
-								const formattedVal = this.formatCurrency(Number(value || 0), reportCurrency);
-								const nativeFormatted = (nativeVal !== undefined && nativeVal !== null)
-									? this.formatCurrency(Number(nativeVal || 0), code)
-									: '';
-
-								let iconHtml = '';
-								if (isConverted) {
-									const tooltip = nativeFormatted
-										? `Converted from ${nativeFormatted} into ${reportCurrency}`
-										: `Conversion Value (${code} \u2192 ${reportCurrency})`;
-
-									iconHtml = ` <span class="rl-fsbi-fx-indicator" title="${tooltip}" data-tippy-content="${tooltip}"><svg class="rl-fsbi-fx-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg></span>`;
-								}
-
-								return `<div class="rl-fsbi-payout-line ${isConverted ? 'rl-fsbi-payout-converted' : ''}"><span class="rl-fsbi-payout-code">${code}${iconHtml}</span><strong>${formattedVal}</strong></div>`;
-							})
-							.join('');
-
-						if (payoutBreakdown) {
-							payoutCell = `${payoutBreakdown}<div class="rl-fsbi-payout-total">PAYOUT: ${this.formatCurrency(Number(row.payout_total || 0), reportCurrency)}</div>`;
-						} else {
-							payoutCell = '<span class="rl-fsbi-payout-carry">Below threshold, carryover.</span>';
-						}
-					}
-
-					const rowCurrency = row.currency || reportCurrency;
+					const status = statusLabels[month.payout_status] || statusLabels.settled;
+					const payoutAmount = Number(month.payout_total || 0) > 0
+						? this.formatCurrency(Number(month.payout_total || 0), reportCurrency)
+						: '—';
+					const payoutDate = month.payout_label ? `<small>${month.payout_label}</small>` : '';
 
 					tr.innerHTML = [
-						`<td>${periodCell}</td>`,
-						`<td>${subsCell}</td>`,
-						`<td>${this.formatCurrency(Number(row.gross || 0), rowCurrency)}</td>`,
-						`<td class="rl-fsbi-negative">${this.formatCurrency(Number(row.refunds || 0), rowCurrency)}</td>`,
-						`<td>${this.formatCurrency(Number(row.fees || 0), rowCurrency)}</td>`,
-						`<td class="${Number(row.net || 0) >= 0 ? 'rl-fsbi-positive' : 'rl-fsbi-negative'}">${this.formatCurrency(Number(row.net || 0), rowCurrency)}</td>`,
-						`<td><strong>${rowCurrency}</strong></td>`,
-						`<td>${payoutCell || '-'}</td>`,
+						`<td>${month.period || month.month}${toggle}${split}</td>`,
+						`<td>${Number(month.new || 0)}</td>`,
+						`<td>${Number(month.renewals || 0)}</td>`,
+						`<td>${this.formatCurrency(Number(month.gross || 0), reportCurrency)}</td>`,
+						`<td class="rl-fsbi-negative">${this.formatCurrency(Number(month.refunds || 0), reportCurrency)}</td>`,
+						`<td>${this.formatCurrency(Number(month.fees || 0), reportCurrency)}</td>`,
+						`<td class="${Number(month.net || 0) >= 0 ? 'rl-fsbi-positive' : 'rl-fsbi-negative'}">${this.formatCurrency(Number(month.net || 0), reportCurrency)}</td>`,
+						`<td><span class="rl-fsbi-payout-status is-${month.payout_status || 'settled'}">${status}</span> <strong>${payoutAmount}</strong>${payoutDate}</td>`,
 					].join('');
 
 					tbody.appendChild(tr);
@@ -3531,7 +3620,7 @@
 
 			// An empty slice shows its message row instead of an instance with no
 			// rows, which DataTables rejects as a column-count mismatch.
-			if (window.jQuery && window.jQuery.fn && window.jQuery.fn.DataTable && rows.length) {
+			if (window.jQuery && window.jQuery.fn && window.jQuery.fn.DataTable && months.length) {
 				this.dataTable = window.jQuery(table).DataTable({
 					pageLength: Number.parseInt(rlFsbiAdmin.tableRows || 25, 10),
 					ordering: false,
@@ -3541,14 +3630,22 @@
 				});
 			}
 
-			if (typeof window.tippy === 'function') {
-				try {
-					window.tippy('.rl-fsbi-fx-indicator', {
-						theme: 'light-border',
-						placement: 'top',
-						arrow: true,
-					});
-				} catch (e) {}
+			// Delegated so it survives DataTables paging and re-renders.
+			if (!this.monthSplitBound) {
+				this.monthSplitBound = true;
+				document.addEventListener('click', (event) => {
+					const button = event.target.closest('.rl-fsbi-split-toggle');
+					if (!button) {
+						return;
+					}
+					const target = document.getElementById(button.dataset.target || '');
+					if (!target) {
+						return;
+					}
+					const open = target.hidden;
+					target.hidden = !open;
+					button.setAttribute('aria-expanded', open ? 'true' : 'false');
+				});
 			}
 		},
 

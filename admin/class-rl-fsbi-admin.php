@@ -1849,6 +1849,7 @@ class RL_FSBI_Admin
 		// gets the series its own figure is built from, so a shape can never
 		// contradict the number it sits under.
 		$series = array('net' => array(), 'newsubs' => array(), 'mrr' => array(), 'churn' => array(), 'trialpaid' => array());
+		$recent_months_payments = array();
 		$now_ts = current_time('timestamp');
 
 		// The oldest subscription on record. A month that opened before it cannot
@@ -1868,6 +1869,9 @@ class RL_FSBI_Admin
 			$m_end = wp_date('Y-m-t', strtotime($m_start));
 			$label = wp_date('M', strtotime($m_start));
 			$m_payments = $repo->get_payments($plugin_id, $m_start, $m_end, $filter_currency);
+			if ($i <= 2) {
+				$recent_months_payments = array_merge($recent_months_payments, $m_payments);
+			}
 
 			$row = $this->summarise_month_payments($m_payments, $currency, $m_start);
 			$series['net'][] = array('label' => $label, 'value' => $row['net']);
@@ -1924,6 +1928,75 @@ class RL_FSBI_Admin
 
 		$period_funnel = $repo->get_trial_funnel($plugin_id, $start_date, $end_date);
 
+		// The compact table and the full breakdown are built by one function, so
+		// a month cannot read one figure here and another there.
+		$recent_table = $this->build_monthly_breakdown($recent_months_payments, $currency, 0.0, 3);
+		$recent_months = array_slice((array) ($recent_table['months'] ?? array()), 0, 3);
+		$next_payout = array();
+		foreach ($recent_months as $month_entry) {
+			if ('current' === ($month_entry['payout_status'] ?? '')) {
+				$next_payout = array(
+					'amount' => (float) ($month_entry['payout_total'] ?? 0),
+					'date' => (string) ($month_entry['payout_label'] ?? ''),
+					'month' => (string) ($month_entry['period'] ?? ''),
+				);
+			}
+		}
+
+		// What renews in the next 30 days, valued in the reporting currency.
+		$renewals_due = 0;
+		$renewals_due_amount = 0.0;
+		$in_thirty_days = strtotime('+30 days', $now_ts);
+		foreach ($subscriptions as $sub) {
+			$due_at = ! empty($sub->next_renewal) ? strtotime((string) $sub->next_renewal) : false;
+			if (false === $due_at || $due_at < $now_ts || $due_at > $in_thirty_days) {
+				continue;
+			}
+			$renewals_due++;
+			$renewals_due_amount += $this->convert_currency_amount(
+				$this->get_forecast_renewal_amount($sub),
+				strtoupper((string) ($sub->currency ?? $currency)),
+				$currency,
+				(string) ($sub->next_renewal ?: '')
+			);
+		}
+
+		// The last five payments of the period, with the same new / renewal /
+		// reactivation rule the MRR movement uses.
+		$recent_activity = array();
+		$activity_payments = array_values(array_filter($payments, function ($payment) use ($start_ts, $end_ts) {
+			$at = strtotime((string) ($payment->transaction_date ?? ''));
+			return false !== $at && $at >= $start_ts && $at <= $end_ts && $this->is_sale_payment($payment);
+		}));
+		usort($activity_payments, function ($a, $b) {
+			return strtotime((string) $b->transaction_date) <=> strtotime((string) $a->transaction_date);
+		});
+		foreach (array_slice($activity_payments, 0, 5) as $payment) {
+			$amount = $this->convert_currency_amount(
+				abs((float) ($payment->gross ?? 0)),
+				strtoupper((string) ($payment->currency ?? $currency)),
+				$currency,
+				(string) ($payment->transaction_date ?? '')
+			);
+			$kind = $this->is_renewal_payment($payment) ? 'renewal' : 'new';
+			if ('new' === $kind) {
+				$user_id = (int) ($payment->user_id ?? 0);
+				foreach ((array) ($ended_by_user[$user_id] ?? array()) as $prior_id => $ended_at) {
+					if ($prior_id !== (int) ($payment->subscription_id ?? 0) && $ended_at < strtotime((string) $payment->transaction_date)) {
+						$kind = 'reactivation';
+						break;
+					}
+				}
+			}
+			$recent_activity[] = array(
+				'date'    => wp_date('j M', strtotime((string) $payment->transaction_date)),
+				'country' => strtoupper((string) ($payment->country_code ?? '—')),
+				'kind'    => $kind,
+				'amount'  => round($amount, 2),
+				'currency' => $currency,
+			);
+		}
+
 		return array(
 			'waterfall' => $waterfall,
 			'attention' => array_slice($attention, 0, 5),
@@ -1931,6 +2004,10 @@ class RL_FSBI_Admin
 			'comparison' => $comparison,
 			'day_of_month' => (int) wp_date('j', current_time('timestamp')),
 			'days_in_month' => (int) wp_date('t', current_time('timestamp')),
+			'recent_months' => $recent_months,
+			'next_payout' => $next_payout,
+			'renewals_due' => array('count' => (int) $renewals_due, 'amount' => round((float) $renewals_due_amount, 2)),
+			'recent_activity' => $recent_activity,
 			'trials_started' => (int) $period_funnel['started'],
 			'trials_converted' => (int) $period_funnel['converted'],
 		);
@@ -9578,6 +9655,93 @@ class RL_FSBI_Admin
 			}
 		}
 
+		// One row per month for the report table: amounts converted into the
+		// report currency, counts summed across every currency (a month with an
+		// EUR and a USD renewal has two renewals, not one per row), the
+		// per-currency detail kept alongside so it can be expanded, and the
+		// payout state according to the month X -> 10th of X+2 rule.
+		// Grouped so each month can be summarised by the one function that knows
+		// how commission, VAT and gateway fees are netted. Reading the currency
+		// buckets instead produced gross minus gateway with no commission in it,
+		// which is why the table's net disagreed with the KPI above it.
+		$payments_by_month = array();
+		foreach ($payments as $payment) {
+			$by_month = substr((string) ($payment->transaction_date ?? ''), 0, 7);
+			if ('' === $by_month) {
+				continue;
+			}
+			$payments_by_month[$by_month][] = $payment;
+		}
+
+		$month_rows = array();
+		foreach (array_reverse($months, true) as $month_key => $stats) {
+			$sum_gross = 0.0;
+			$sum_refunds = 0.0;
+			$sum_fees = 0.0;
+			$sum_net = 0.0;
+			$sum_new = 0;
+			$sum_renewals = 0;
+			$sum_sales = 0;
+			$split = array();
+
+			foreach ($stats['currencies'] as $currency_code => $bucket) {
+				$sum_gross += (float) $bucket['gross_converted'];
+				$sum_refunds += (float) $bucket['refunds_converted'];
+				$sum_fees += (float) $bucket['fees_converted'];
+				$sum_net += (float) $bucket['net_converted'];
+				$sum_new += (int) $bucket['new'];
+				$sum_renewals += (int) $bucket['renewals'];
+				$sum_sales += (int) $bucket['subscriptions'];
+
+				$split[] = array(
+					'currency'   => $currency_code,
+					'gross'      => round((float) $bucket['gross'], 2),
+					'refunds'    => round((float) $bucket['refunds'], 2),
+					'fees'       => round((float) $bucket['fees'], 2),
+					'net'        => round((float) $bucket['net'], 2),
+					'gross_converted' => round((float) $bucket['gross_converted'], 2),
+					'new'        => (int) $bucket['new'],
+					'renewals'   => (int) $bucket['renewals'],
+				);
+			}
+
+			$now_month = gmdate('Y-m');
+			if ($month_key === gmdate('Y-m', strtotime('-1 month'))) {
+				$payout_status = 'current';
+			} elseif ($month_key === $now_month) {
+				$payout_status = 'next';
+			} elseif (strtotime($month_key . '-01') > strtotime($now_month . '-01')) {
+				$payout_status = 'future';
+			} else {
+				$payout_status = 'settled';
+			}
+			$payout_date = $this->estimate_payout_date($month_key);
+
+			$month_summary = $this->summarise_month_payments(
+				$payments_by_month[$month_key] ?? array(),
+				$report_currency,
+				$month_key . '-01'
+			);
+
+			$month_rows[] = array(
+				'month'         => $month_key,
+				'period'        => gmdate('m/Y', strtotime($month_key . '-01')),
+				'new'           => $sum_new,
+				'renewals'      => $sum_renewals,
+				'sales'         => $sum_sales,
+				'gross'         => (float) $month_summary['gross'],
+				'refunds'       => (float) $month_summary['refunds'],
+				'fees'          => (float) $month_summary['gateway'],
+				'net'           => (float) $month_summary['net'],
+				'commission'    => (float) $month_summary['commission'],
+				'payout_status' => $payout_status,
+				'payout_total'  => round((float) ($stats['payout_total'] ?? 0), 2),
+				'payout_date'   => (string) ($payout_date['date'] ?? ''),
+				'payout_label'  => (string) ($payout_date['label'] ?? ''),
+				'split'         => $split,
+			);
+		}
+
 		$current_payout_amount = isset($months[$current_payout_month]['payout_total']) ? (float) $months[$current_payout_month]['payout_total'] : 0.0;
 		$current_payout_eligible = ! empty($months[$current_payout_month]['payout_eligible']);
 		$next_payout_amount = isset($months[$next_payout_month]['payout_total']) ? (float) $months[$next_payout_month]['payout_total'] : 0.0;
@@ -9585,6 +9749,8 @@ class RL_FSBI_Admin
 
 		return array(
 			'rows' => $rows,
+			'months' => $month_rows,
+			'report_currency' => $report_currency,
 			'current_payout_amount' => round($current_payout_amount, 2),
 			'current_payout_eligible' => $current_payout_eligible,
 			'next_payout_amount' => round($next_payout_amount, 2),

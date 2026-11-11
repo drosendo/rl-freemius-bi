@@ -86,17 +86,25 @@ if ( ! defined( 'WPINC' ) ) {
 	<div class="rl-fsbi-toolbar">
 		<div class="rl-fsbi-controls">
 			<span class="rl-fsbi-field">
-			<label for="rl-fsbi-plugin-filter"><?php echo esc_html__( 'Plugin:', 'rl-freemius-bi' ); ?></label>
-			<select id="rl-fsbi-plugin-filter" name="plugin_id"<?php echo $forced_plugin_id > 0 ? ' disabled="disabled"' : ''; ?>>
-				<?php if ( $forced_plugin_id <= 0 ) : ?>
-					<option value="all"><?php echo esc_html__( 'All Plugins', 'rl-freemius-bi' ); ?></option>
-				<?php endif; ?>
-				<?php foreach ( $plugins_catalog as $plugin_id => $plugin_title ) : ?>
-					<option value="<?php echo esc_attr( $plugin_id ); ?>"<?php selected( (int) $plugin_id, $forced_plugin_id ); ?>><?php echo esc_html( $plugin_title ); ?></option>
-				<?php endforeach; ?>
-			</select>
 			<?php if ( $forced_plugin_id > 0 ) : ?>
+				<?php // A locked product is not a control: a disabled select renders grey on
+				// grey and reads as broken. It is named in plain text instead. ?>
+				<span class="rl-fsbi-field-label"><?php echo esc_html__( 'Plugin', 'rl-freemius-bi' ); ?></span>
+				<span class="rl-fsbi-locked-plugin"><?php
+					$forced_title = isset( $plugins_catalog[ (string) $forced_plugin_id ] )
+						? $plugins_catalog[ (string) $forced_plugin_id ]
+						: sprintf( __( 'Plugin #%d', 'rl-freemius-bi' ), $forced_plugin_id );
+					echo esc_html( $forced_title );
+				?></span>
 				<input type="hidden" id="rl-fsbi-plugin-filter-forced" value="<?php echo esc_attr( $forced_plugin_id ); ?>" />
+			<?php else : ?>
+				<label for="rl-fsbi-plugin-filter"><?php echo esc_html__( 'Plugin:', 'rl-freemius-bi' ); ?></label>
+				<select id="rl-fsbi-plugin-filter" name="plugin_id">
+					<option value="all"><?php echo esc_html__( 'All Plugins', 'rl-freemius-bi' ); ?></option>
+					<?php foreach ( $plugins_catalog as $plugin_id => $plugin_title ) : ?>
+						<option value="<?php echo esc_attr( $plugin_id ); ?>"><?php echo esc_html( $plugin_title ); ?></option>
+					<?php endforeach; ?>
+				</select>
 			<?php endif; ?>
 			</span>
 
@@ -117,16 +125,18 @@ if ( ! defined( 'WPINC' ) ) {
 			<input type="date" id="rl-fsbi-end-date" value="<?php echo esc_attr( $initial_period_end ); ?>" aria-label="<?php echo esc_attr__( 'End date', 'rl-freemius-bi' ); ?>" />
 			</span>
 
-			<span class="rl-fsbi-field">
-			<label for="rl-fsbi-plan-filter"><?php echo esc_html__( 'Plan:', 'rl-freemius-bi' ); ?></label>
-			<select id="rl-fsbi-plan-filter" name="plan_id">
-				<option value="all"><?php echo esc_html__( 'All Plans', 'rl-freemius-bi' ); ?></option>
-			</select>
-			</span>
+			<span class="rl-fsbi-controls-right">
+				<span class="rl-fsbi-field">
+				<label for="rl-fsbi-plan-filter"><?php echo esc_html__( 'Plan:', 'rl-freemius-bi' ); ?></label>
+				<select id="rl-fsbi-plan-filter" name="plan_id">
+					<option value="all"><?php echo esc_html__( 'All Plans', 'rl-freemius-bi' ); ?></option>
+				</select>
+				</span>
 
-			<button id="rl-fsbi-sync-btn" class="button button-primary"><?php echo esc_html__( 'Sync Now', 'rl-freemius-bi' ); ?></button>
-			<button id="rl-fsbi-sync-cancel-btn" class="button" type="button" hidden><?php echo esc_html__( 'Cancel Sync', 'rl-freemius-bi' ); ?></button>
-			<span class="rl-fsbi-last-synced" id="rl-fsbi-last-synced" title="<?php echo esc_attr__( 'When the local copy of your Freemius data was last refreshed, in the site timezone.', 'rl-freemius-bi' ); ?>"></span>
+				<button id="rl-fsbi-sync-btn" class="button"><?php echo esc_html__( 'Sync Now', 'rl-freemius-bi' ); ?></button>
+				<button id="rl-fsbi-sync-cancel-btn" class="button" type="button" hidden><?php echo esc_html__( 'Cancel Sync', 'rl-freemius-bi' ); ?></button>
+				<span class="rl-fsbi-last-synced" id="rl-fsbi-last-synced" title="<?php echo esc_attr__( 'When the local copy of your Freemius data was last refreshed, in the site timezone.', 'rl-freemius-bi' ); ?>"></span>
+			</span>
 		</div>
 
 		<?php
@@ -134,7 +144,9 @@ if ( ! defined( 'WPINC' ) ) {
 			'overview'  => __( 'Overview', 'rl-freemius-bi' ),
 			'growth'    => __( 'Growth', 'rl-freemius-bi' ),
 			'retention' => __( 'Retention', 'rl-freemius-bi' ),
-			'customers' => __( 'Customers', 'rl-freemius-bi' ),
+			'revenue'   => __( 'Revenue & Payouts', 'rl-freemius-bi' ),
+			// No Customers tab until there is a real customer list to put in it:
+			// an empty tab is worse than an absent one.
 			'marketing' => __( 'Marketing', 'rl-freemius-bi' ),
 		);
 		// WordPress.org data is never mixed with Freemius figures, so it gets its
@@ -184,12 +196,47 @@ if ( ! defined( 'WPINC' ) ) {
 		<ul class="rl-fsbi-attention-list" id="rl-fsbi-attention-list"></ul>
 	</div>
 
+	<div class="rl-fsbi-card rl-fsbi-recent-card">
+		<div class="rl-fsbi-recent-head">
+			<div>
+				<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Last 3 months', 'rl-freemius-bi' ); ?></div>
+				<div class="rl-fsbi-card-sub"><?php echo esc_html__( 'Converted into your reporting currency. Freemius pays a month on the 10th, two months later.', 'rl-freemius-bi' ); ?></div>
+			</div>
+			<a class="rl-fsbi-recent-link" href="#growth" data-tab-link="growth"><?php echo esc_html__( 'View 12 months →', 'rl-freemius-bi' ); ?></a>
+		</div>
+		<div class="rl-fsbi-recent-scroll">
+			<table class="rl-fsbi-recent-table">
+				<thead>
+					<tr>
+						<th><?php echo esc_html__( 'Month', 'rl-freemius-bi' ); ?></th>
+						<th><?php echo esc_html__( 'Gross', 'rl-freemius-bi' ); ?></th>
+						<th><?php echo esc_html__( 'Net', 'rl-freemius-bi' ); ?></th>
+						<th><?php echo esc_html__( 'Payout', 'rl-freemius-bi' ); ?></th>
+					</tr>
+				</thead>
+				<tbody id="rl-fsbi-recent-body">
+					<tr><td colspan="4"><?php echo esc_html__( 'Loading…', 'rl-freemius-bi' ); ?></td></tr>
+				</tbody>
+			</table>
+		</div>
+		<div class="rl-fsbi-recent-foot">
+			<span id="rl-fsbi-next-payout">—</span>
+			<span id="rl-fsbi-renewals-due">—</span>
+		</div>
+	</div>
+
 	<div class="rl-fsbi-card rl-fsbi-waterfall-card">
 		<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'MRR movement', 'rl-freemius-bi' ); ?></div>
 		<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'New is first-time subscriptions, reactivation is a customer whose earlier subscription had ended, churn is what stopped during the period. Expansion and contraction are not shown: they need plan-change history Freemius does not expose, and deriving them from amount deltas would report coupons or currency swings as expansion.', 'rl-freemius-bi' ); ?></div>
 		<div class="rl-fsbi-waterfall" id="rl-fsbi-waterfall" role="img" aria-label="<?php echo esc_attr__( 'MRR movement for the selected period: new, reactivation, churn and net change.', 'rl-freemius-bi' ); ?>"></div>
 	</div>
 
+
+	<div class="rl-fsbi-card rl-fsbi-activity-card">
+		<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Recent activity', 'rl-freemius-bi' ); ?></div>
+		<div class="rl-fsbi-card-sub"><?php echo esc_html__( 'The last five payments in the selected period.', 'rl-freemius-bi' ); ?></div>
+		<ul class="rl-fsbi-activity-list" id="rl-fsbi-activity-list"></ul>
+	</div>
 
 	</section>
 
@@ -494,12 +541,12 @@ if ( ! defined( 'WPINC' ) ) {
 		</div>
 	</section>
 
-	<section class="rl-fsbi-panel" data-panel="customers" id="rl-fsbi-panel-customers" role="tabpanel" aria-labelledby="rl-fsbi-tab-customers" tabindex="0">
+	<section class="rl-fsbi-panel" data-panel="revenue" id="rl-fsbi-panel-revenue" role="tabpanel" aria-labelledby="rl-fsbi-tab-revenue" tabindex="0">
 	<div class="rl-fsbi-card rl-fsbi-table-card">
 		<div class="rl-fsbi-card-header-flex">
 			<div>
 				<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Monthly Revenue Breakdown', 'rl-freemius-bi' ); ?></div>
-				<div class="rl-fsbi-card-sub"><?php echo esc_html__( '12-month rolling revenue, subscription activity, and payout history.', 'rl-freemius-bi' ); ?></div>
+				<div class="rl-fsbi-card-sub"><?php echo esc_html__( 'One row per month, converted into your reporting currency. Expand a month to see the per-currency split before conversion. Payout status follows Freemius: a month is paid on the 10th, two months later.', 'rl-freemius-bi' ); ?></div>
 			</div>
 			<div class="rl-fsbi-export-actions">
 				<button type="button" id="rl-fsbi-export-monthly-csv" class="button rl-fsbi-export-btn" title="<?php echo esc_attr__( 'Export last 12 months to CSV', 'rl-freemius-bi' ); ?>">
@@ -516,27 +563,27 @@ if ( ! defined( 'WPINC' ) ) {
 			<table id="rl-fsbi-monthly-table" class="display">
 				<thead>
 					<tr>
-						<th><?php echo esc_html__( 'Period', 'rl-freemius-bi' ); ?></th>
-						<th><?php echo esc_html__( 'Subscriptions', 'rl-freemius-bi' ); ?></th>
-						<th><?php echo esc_html__( 'Gross', 'rl-freemius-bi' ); ?></th>
+						<th><?php echo esc_html__( 'Month', 'rl-freemius-bi' ); ?></th>
+						<th title="<?php echo esc_attr__( 'First payments in the month, across every currency, excluding renewals.', 'rl-freemius-bi' ); ?>"><?php echo esc_html__( 'New', 'rl-freemius-bi' ); ?></th>
+						<th title="<?php echo esc_attr__( 'Renewals in the month, across every currency.', 'rl-freemius-bi' ); ?>"><?php echo esc_html__( 'Renewals', 'rl-freemius-bi' ); ?></th>
+						<th title="<?php echo esc_attr__( 'Tax-exclusive sales, converted into the reporting currency at each payment day\'s rate.', 'rl-freemius-bi' ); ?>"><?php echo esc_html__( 'Gross', 'rl-freemius-bi' ); ?></th>
 						<th><?php echo esc_html__( 'Refunds', 'rl-freemius-bi' ); ?></th>
 						<th><?php echo esc_html__( 'Fees', 'rl-freemius-bi' ); ?></th>
 						<th><?php echo esc_html__( 'Net', 'rl-freemius-bi' ); ?></th>
-						<th><?php echo esc_html__( 'Currency', 'rl-freemius-bi' ); ?></th>
-						<th><?php echo esc_html__( 'Payout', 'rl-freemius-bi' ); ?></th>
+						<th title="<?php echo esc_attr__( 'Freemius pays a month\'s earnings on the 10th, two months later: September is paid on 10 November, October on 10 December, November on 10 January.', 'rl-freemius-bi' ); ?>"><?php echo esc_html__( 'Payout', 'rl-freemius-bi' ); ?></th>
 					</tr>
 				</thead>
 				<tbody></tbody>
 				<tfoot>
 					<tr>
-						<th><?php echo esc_html__( 'Total (12m Converted)', 'rl-freemius-bi' ); ?></th>
+						<th><?php echo esc_html__( 'Total (12m, converted)', 'rl-freemius-bi' ); ?></th>
+						<th>—</th>
 						<th>—</th>
 						<th id="rl-fsbi-total-gross">—</th>
 						<th id="rl-fsbi-total-refunds">—</th>
 						<th id="rl-fsbi-total-fees">—</th>
 						<th id="rl-fsbi-total-net">—</th>
 						<th id="rl-fsbi-total-currency">—</th>
-						<th>—</th>
 					</tr>
 				</tfoot>
 			</table>

@@ -699,8 +699,8 @@ class RL_FSBI_Settings_Manager {
 				'id'      => 'rl_fsbi_payout_day',
 				'type'    => 'text',
 				'label'   => esc_html__( 'Payout Day of Month', 'rl-freemius-bi' ),
-				'desc'    => esc_html__( 'The Freemius API exposes no payout schedule, so payout dates on the dashboard are estimates calculated from this rule. Day of the month you are normally paid (1-28).', 'rl-freemius-bi' ),
-				'default' => 15,
+				'desc'    => esc_html__( 'Freemius pays a month\'s earnings on the 10th, two months later, and the dashboard labels its payouts on that rule. Change this only if your account is paid on another day (1-28).', 'rl-freemius-bi' ),
+				'default' => 10,
 				'min'     => 1,
 				'max'     => 28,
 			)

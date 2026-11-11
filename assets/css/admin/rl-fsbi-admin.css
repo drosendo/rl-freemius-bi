@@ -185,6 +185,91 @@
 	overflow-x: auto;
 }
 
+/* One row per month, with the per-currency split folded away under it. */
+.rl-fsbi-split-toggle {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 1px 8px;
+	border: 1px solid var(--fsbi-border, #2b3150);
+	border-radius: 999px;
+	background: rgba(95, 107, 255, 0.12);
+	color: #b8c2e8;
+	font-size: 10px;
+	line-height: 1.6;
+	cursor: pointer;
+}
+
+.rl-fsbi-split-toggle:hover,
+.rl-fsbi-split-toggle:focus-visible {
+	background: rgba(95, 107, 255, 0.22);
+	color: #ecf1ff;
+}
+
+.rl-fsbi-month-split {
+	margin-top: 8px;
+	padding: 8px 10px;
+	border-left: 2px solid var(--fsbi-border, #2b3150);
+	background: rgba(9, 12, 22, 0.5);
+	border-radius: 0 6px 6px 0;
+}
+
+.rl-fsbi-month-split table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+
+.rl-fsbi-month-split th {
+	text-align: left;
+	padding: 3px 8px 5px 0;
+	color: var(--fsbi-muted, #9aa4cc);
+	font-size: 9px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+.rl-fsbi-month-split td {
+	padding: 3px 8px 3px 0;
+	color: var(--fsbi-text, #e7ebff);
+	white-space: nowrap;
+}
+
+.rl-fsbi-split-converted {
+	color: var(--fsbi-muted, #9aa4cc) !important;
+}
+
+.rl-fsbi-payout-status {
+	display: inline-block;
+	padding: 1px 7px;
+	border-radius: 999px;
+	font-size: 9px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	font-weight: 700;
+	vertical-align: 1px;
+}
+
+.rl-fsbi-payout-status.is-settled {
+	background: rgba(34, 200, 155, 0.16);
+	color: #5fe3bb;
+}
+
+.rl-fsbi-payout-status.is-current {
+	background: rgba(95, 107, 255, 0.2);
+	color: #a9b2ff;
+}
+
+.rl-fsbi-payout-status.is-next {
+	background: rgba(244, 185, 66, 0.16);
+	color: #f4b942;
+}
+
+.rl-fsbi-payout-status.is-future {
+	background: rgba(154, 164, 204, 0.14);
+	color: #9aa4cc;
+}
+
 .rl-fsbi-chart-table-toggle {
 	font-size: 11px !important;
 	/* Muted text at 11px on the card surface failed contrast, most visibly on
@@ -2176,4 +2261,312 @@ p.rl-fsbi-field-desc,
 
 @media (max-width: 900px) {
 	.rl-fsbi-waterfall-row { grid-template-columns: 90px minmax(0, 1fr) 88px; }
+}
+
+/*
+ * Header and filter bar.
+ *
+ * The row was cramped: 28px controls, 6px between everything, and a plan
+ * selector that could wrap away from its own label. The groups are now
+ * separated, the controls are a comfortable height, and Plan / Sync / Last
+ * synced sit together at the far right.
+ */
+.rl-fsbi-dashboard .rl-fsbi-toolbar {
+	padding: 0;
+	border-radius: 8px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls {
+	padding: 16px 20px;
+	gap: 12px 24px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-field {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-field > label,
+.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-field-label {
+	flex: 0 0 auto;
+	white-space: nowrap;
+	font-size: 12px;
+	color: var(--fsbi-muted, #9aa4cc);
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-controls-right {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px 18px;
+	margin-left: auto;
+}
+
+/* 40px high, like the date inputs, with room for the arrow so the selected
+   option never runs under it. */
+.rl-fsbi-dashboard .rl-fsbi-controls select,
+.rl-fsbi-dashboard .rl-fsbi-controls input,
+.rl-fsbi-dashboard #rl-fsbi-sync-btn,
+.rl-fsbi-dashboard #rl-fsbi-sync-cancel-btn {
+	height: 40px;
+	min-height: 40px;
+	line-height: 38px;
+	font-size: 13px;
+	box-sizing: border-box;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls select {
+	padding: 0 32px 0 10px;
+	min-width: 150px;
+	max-width: 240px;
+}
+
+.rl-fsbi-dashboard #rl-fsbi-currency-filter {
+	min-width: 160px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls input[type="date"] {
+	width: 145px;
+	padding: 0 10px;
+}
+
+.rl-fsbi-dashboard #rl-fsbi-sync-btn,
+.rl-fsbi-dashboard #rl-fsbi-sync-cancel-btn {
+	padding: 0 16px;
+	border-radius: 8px;
+}
+
+/* A locked product is named in plain text rather than shown as a dead
+   control greyed out against a dark bar. */
+.rl-fsbi-locked-plugin {
+	display: inline-block;
+	max-width: 340px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	padding: 9px 12px;
+	border: 1px solid var(--fsbi-border, #2b3150);
+	border-radius: 8px;
+	background: rgba(95, 107, 255, 0.12);
+	color: var(--fsbi-text, #e7ebff);
+	font-size: 13px;
+	font-weight: 600;
+}
+
+/* The tab row is its own band under the filters, not a strip glued to them. */
+.rl-fsbi-dashboard .rl-fsbi-tabs {
+	margin: 0;
+	padding: 12px 20px;
+	border-top: 1px solid var(--fsbi-border, #2b3150);
+	border-bottom: 0;
+	gap: 4px;
+	overflow-x: auto;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-tab {
+	padding: 0 12px 12px;
+	border-bottom: 4px solid transparent;
+	border-radius: 4px 4px 0 0;
+	font-size: 13px;
+	line-height: 1.4;
+	background: transparent;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-tab[aria-selected="true"] {
+	border-bottom-color: var(--fsbi-accent, #5f6bff);
+}
+
+/* Content starts clear of the tabs, and scroll targets clear of the sticky
+   header whatever height it ends up at. */
+.rl-fsbi-dashboard .rl-fsbi-panel {
+	scroll-margin-top: calc(var(--rl-fsbi-sticky-h, 120px) + 8px);
+}
+
+.rl-fsbi-dashboard .rl-fsbi-content-grid {
+	margin-top: 16px;
+}
+
+/* A panel is display:contents, so the gap before the first card lives on the
+   card row itself. */
+.rl-fsbi-dashboard .rl-fsbi-kpi-row {
+	margin-top: 16px;
+}
+
+/* The locked-product badge and the right-hand group are the two wide items
+   that decide how many rows the filter bar needs. Trimming them keeps the
+   header to two rows at 1280 and three at 1024 instead of four. */
+.rl-fsbi-locked-plugin {
+	max-width: 220px;
+	padding: 8px 10px;
+	font-size: 12.5px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-controls-right {
+	gap: 10px 14px;
+}
+
+@media (max-width: 1200px) {
+	.rl-fsbi-dashboard .rl-fsbi-controls {
+		padding: 14px;
+		gap: 10px 16px;
+	}
+
+	.rl-fsbi-dashboard .rl-fsbi-controls input[type="date"] {
+		width: 132px;
+	}
+}
+
+/* Trim enough width to keep the bar on fewer rows without shrinking below the
+   40px control height the design calls for. */
+.rl-fsbi-dashboard .rl-fsbi-controls {
+	gap: 12px 20px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-field {
+	gap: 6px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls select {
+	min-width: 132px;
+	max-width: 200px;
+}
+
+.rl-fsbi-dashboard #rl-fsbi-currency-filter {
+	min-width: 160px;
+	max-width: 170px;
+}
+
+.rl-fsbi-locked-plugin {
+	max-width: 190px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-last-synced {
+	font-size: 11px;
+	max-width: 150px;
+	white-space: normal;
+	line-height: 1.25;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-controls-right {
+	gap: 10px 12px;
+}
+
+/* Overview: the compact three-month table sits between the attention box and
+   the MRR movement card. */
+.rl-fsbi-dashboard .rl-fsbi-recent-card,
+.rl-fsbi-dashboard .rl-fsbi-activity-card {
+	margin-bottom: 12px;
+}
+
+.rl-fsbi-recent-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 10px;
+}
+
+.rl-fsbi-recent-link {
+	font-size: 12px;
+	color: #b8c2e8;
+	text-decoration: none;
+	white-space: nowrap;
+	padding-top: 2px;
+}
+
+.rl-fsbi-recent-link:hover,
+.rl-fsbi-recent-link:focus-visible {
+	color: #ecf1ff;
+	text-decoration: underline;
+}
+
+.rl-fsbi-recent-scroll {
+	overflow-x: auto;
+}
+
+.rl-fsbi-recent-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+
+.rl-fsbi-recent-table th {
+	padding: 0 10px 6px 0;
+	text-align: left;
+	color: var(--fsbi-muted, #9aa4cc);
+	font-size: 9px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	font-weight: 600;
+}
+
+.rl-fsbi-recent-table td {
+	padding: 7px 10px 7px 0;
+	color: var(--fsbi-text, #e7ebff);
+	border-top: 1px solid rgba(43, 49, 80, 0.7);
+	white-space: nowrap;
+}
+
+.rl-fsbi-recent-foot {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 20px;
+	margin-top: 10px;
+	font-size: 12px;
+	color: var(--fsbi-muted, #9aa4cc);
+}
+
+.rl-fsbi-activity-list {
+	list-style: none;
+	margin: 10px 0 0;
+	padding: 0;
+	display: grid;
+	gap: 6px;
+}
+
+.rl-fsbi-activity-list li {
+	display: grid;
+	grid-template-columns: 62px 44px 1fr auto;
+	align-items: center;
+	gap: 10px;
+	padding: 7px 0;
+	border-top: 1px solid rgba(43, 49, 80, 0.7);
+	font-size: 12px;
+}
+
+.rl-fsbi-activity-list li:first-child {
+	border-top: 0;
+}
+
+.rl-fsbi-activity-date {
+	color: var(--fsbi-muted, #9aa4cc);
+}
+
+.rl-fsbi-activity-country {
+	color: var(--fsbi-muted, #9aa4cc);
+	letter-spacing: 0.06em;
+}
+
+.rl-fsbi-activity-kind {
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: #b8c2e8;
+}
+
+.rl-fsbi-activity-kind.is-renewal {
+	color: #22c89b;
+}
+
+.rl-fsbi-activity-kind.is-reactivation {
+	color: #f4b942;
+}
+
+.rl-fsbi-activity-amount {
+	color: var(--fsbi-text, #e7ebff);
 }
