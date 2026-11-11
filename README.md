@@ -1002,7 +1002,7 @@ The dashboard stops being a wall of cards and becomes a tool. Five themes, in th
 
 **It loads in pieces.** Each tab fetches its own payload slice on first open and caches it, so switching back does not refetch. A filter change refetches the active tab and marks the rest stale. A slice that fails renders an inline error with **Retry** in that panel only, and the panel's stale content is hidden while the error or the reload is showing - old figures never sit under an error message. Payment rows, coupons and WordPress.org work are skipped entirely for the tabs that do not render them.
 
-**It says what it means.** The Overview tab is five KPI cards (new subscriptions against target with a pace verdict, MRR, net revenue, churn, trial to paid), each with a delta and a sparkline; a *Needs attention* box capped at five and absent when empty; and MRR movement as New / Reactivation / Churn only. MRR movement is monthlyised by billing cycle, MRR reads `renewal_amount` rather than list price, trial to paid says "No trials" when there were none, and a partial month is compared with the same days of the previous month (`vs 1 Oct to 11 Oct`) instead of with a whole one.
+**It says what it means.** The Overview tab is five KPI cards (new subscriptions against target with a pace verdict, MRR, net revenue, churn, trial to paid), each with a delta and a six-month sparkline; a *Needs attention* box capped at five and absent when empty; and MRR movement as New / Reactivation / Churn only - nothing else. Every other widget moved to the tab it belongs to, or was deleted where it restated a card above it. MRR movement is monthlyised by billing cycle, MRR reads `renewal_amount` rather than list price, trial to paid says "No trials" when there were none, and a partial month is compared with the same days of the previous month (`vs 1 Oct to 11 Oct`) instead of with a whole one.
 
 **Also fixed:** the fixed per-transaction commission fee was being charged under the legacy plan, which has none - Oct commission was 66.31 where the tiers give 58.71; DataTables was rebuilt while still initialised, producing a "Incorrect column count" dialog on every revisit; and the full-screen overlay no longer covers a dashboard that already has figures on it.
 
@@ -1017,6 +1017,29 @@ The Overview tab now opens with what a seller needs to act on rather than a wall
 Deltas carry an arrow plus words ("▲ 4.2% vs previous", "behind · 1/5") so colour never carries the meaning alone.
 
 Verified at 1280px: New subscriptions `1 | behind · 1/5`, Net revenue `249,99 € | ▼ 58.4% vs previous`, Churn `1.6%`, attention `1 subscriptions with a failed payment`, waterfall `49,99 / 41,99 / 10,27 / 81,71`, KPI cards at 3 per row. Eight tab switches including revisits produced **no dialogs and no console errors**.
+
+### Unreleased - the Overview tab is now five cards, one list and one chart
+
+Everything else that used to sit under the KPI row has left the tab:
+
+| Was on Overview | Now |
+| --- | --- |
+| Total Net Revenue (value + delta + FX note) | **Removed**: it restated the Net revenue card in the row above, with the same figure and the same comparison. |
+| Expected Payout, Refunds Breakdown, New Paid Subscriptions | Growth |
+| Mini-KPIs: ARR, Avg Order Value, Refund Rate, Health Score | Growth |
+| Mini-KPIs: MRR, Churn Rate | **Removed**: both are their own cards in the row above. |
+| Acquisition block | Growth, without "Free-to-paid conversion", which is the Trial to paid card. |
+| Revenue block | Growth, without "MRR", which is the MRR card. |
+| Retention block | Retention tab, without "Churn rate", which is the Churn rate card. |
+| Portfolio Performance widget | **Removed from the product dashboard.** It lives on the WordPress dashboard widget, which is where a portfolio view belongs. |
+
+The Retention tab was a "coming in the next step" placeholder until now; it carries the Retention block and nothing else, so that tab is thinner than the rest and makes no request for data it does not draw.
+
+Overview measures 1,441px tall at 1536px wide, down from 2,244px, and its panel holds exactly three children: the KPI row, the Needs attention box and the MRR movement card.
+
+Grid rules followed the content: the four-column top grid that sized a wide hero card is now `--3` (three equal columns), the mini-KPI grid is four tiles rather than six, and the block grid auto-fits whatever number of blocks a panel contains. Verified across all six tabs and revisits: panels show and hide correctly, every moved card fills with its figure (payout 709,22 €, refunds "No refunds", new paid 2/5, ARR 9.686,52 €, AOV 41,67 €, refund rate 0.0%, health 87, acquisition 1 new / 1 reactivation / unknown origin, revenue 282,10 / 0,00 / 12,36 / 249,99, retention 190 / 15 / 0 / 1 / 0), with **no dialogs, no console errors and no page errors**.
+
+"1 subscriptions with a failed payment" now reads "1 subscription with a failed payment" - the attention labels are pluralised.
 
 ### Unreleased - a sparkline per KPI card
 

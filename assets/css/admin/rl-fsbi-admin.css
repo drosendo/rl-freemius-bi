@@ -146,6 +146,12 @@
 	grid-template-columns: 2fr 1fr 1fr 1.15fr;
 }
 
+/* Once the duplicate net revenue hero left the row, the growth cards are three
+   equal columns rather than a wide card and three narrow ones. */
+.rl-fsbi-top-grid--3 {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .rl-fsbi-growth-value {
 	display: flex;
 	align-items: baseline;
@@ -351,7 +357,7 @@
 }
 
 .rl-fsbi-mini-kpis {
-	grid-template-columns: repeat(6, minmax(130px, 1fr));
+	grid-template-columns: repeat(4, minmax(130px, 1fr));
 	margin-top: 12px;
 }
 
@@ -605,7 +611,7 @@
 /* Acquisition / Retention / Revenue */
 .rl-fsbi-blocks {
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 	gap: 12px;
 	margin-top: 12px;
 }
@@ -1217,7 +1223,7 @@
 	}
 
 	.rl-fsbi-mini-kpis {
-		grid-template-columns: repeat(3, minmax(120px, 1fr));
+		grid-template-columns: repeat(2, minmax(120px, 1fr));
 	}
 
 	.rl-fsbi-content-grid {
@@ -1236,7 +1242,8 @@
 }
 
 @media (max-width: 900px) {
-	.rl-fsbi-top-grid {
+	.rl-fsbi-top-grid,
+	.rl-fsbi-top-grid--3 {
 		grid-template-columns: 1fr;
 	}
 

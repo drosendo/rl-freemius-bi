@@ -1800,25 +1800,6 @@
 		updateTopCards: function(data) {
 			const currency = this.getDisplayCurrency();
 			const summary = data.summary || {};
-			const netRevenue = Number(summary.net_revenue || 0);
-			// Same basis as the Net revenue KPI: a partial period is measured
-			// against the same days of the previous month, and says so. Two
-			// figures on one screen must not disagree about the same period.
-			const comparison = data.overview?.comparison || {};
-			const previousNet = comparison.partial
-				? Number(comparison.net_previous || 0)
-				: Number(summary.previous_net_revenue || 0);
-			// The label already reads "vs 1 Oct to 11 Oct", so it is appended as is.
-			const basisPhrase = comparison.partial && comparison.label ? comparison.label : 'vs previous period';
-			const hasPrevious = previousNet !== 0;
-			const deltaPct = hasPrevious ? (((netRevenue - previousNet) / Math.abs(previousNet)) * 100) : 0;
-			const deltaSign = deltaPct > 0 ? '+' : '';
-			const comparisonText = hasPrevious
-				? `${deltaSign}${deltaPct.toFixed(1)}% ${basisPhrase}`
-				: (netRevenue > 0 ? `no revenue in ${basisPhrase.replace(/^vs /, '')}` : 'no revenue in either period');
-
-			this.setText('rl-fsbi-net-revenue', this.formatCurrency(netRevenue, currency));
-			this.setText('rl-fsbi-net-comparison', comparisonText);
 
 			const fxNote = document.getElementById('rl-fsbi-fx-note');
 			if (fxNote) {
@@ -2134,22 +2115,16 @@
 			const mrr = Number(kpis.mrr_converted ?? kpis.mrr ?? 0);
 			const arr = Number(kpis.arr_converted ?? kpis.arr ?? (mrr * 12));
 
-			this.setText('rl-fsbi-mrr', this.formatCurrency(mrr, currency));
+			// MRR and Churn rate are their own KPI cards now, so the mini grid
+			// carries only what those cards do not.
 			this.setText('rl-fsbi-arr', this.formatCurrency(arr, currency));
-			this.setText('rl-fsbi-mrr-as-of', `As of ${kpis.metric_as_of || 'selected period end'}`);
 			this.setText('rl-fsbi-arr-as-of', `Annualized from ${kpis.metric_as_of || 'selected period end'}`);
 			this.setText('rl-fsbi-aov', kpis.aov === null || kpis.aov === undefined
 				? '—'
 				: this.formatCurrency(Number(kpis.aov), currency));
 			this.setText('rl-fsbi-refund-rate', this.formatPercent(Number(kpis.refund_rate || 0), 1));
-			this.setText('rl-fsbi-churn-rate', this.formatPercent(Number(kpis.churn_rate || 0), 1));
 			this.setText('rl-fsbi-health-score', String(Math.round(Number(kpis.health_score || 0))));
 			this.updateHealthTooltip(kpis);
-			this.setText('rl-fsbi-portfolio-revenue', this.formatCurrency(Number(data.summary?.net_revenue || 0), currency));
-			this.setText('rl-fsbi-portfolio-mrr', this.formatCurrency(mrr, currency));
-			this.setText('rl-fsbi-portfolio-arr', this.formatCurrency(arr, currency));
-			this.setText('rl-fsbi-portfolio-subs', Number(kpis.active_subscriptions || 0).toLocaleString());
-			this.setText('rl-fsbi-portfolio-health', `${Math.round(Number(kpis.health_score || 0))}/100`);
 		},
 
 		/**
@@ -2586,12 +2561,8 @@
 			this.setText('rl-fsbi-acq-new', count(acq.new_customers));
 			this.setText('rl-fsbi-acq-reactivation', count(acq.reactivations));
 
-			const trials = Number(acq.trials || 0);
-			this.setText(
-				'rl-fsbi-acq-conversion',
-				trials > 0 ? `${this.formatPercent(Number(acq.conversion_rate || 0), 1)} (${count(acq.conversions)}/${count(trials)})` : 'No trials'
-			);
-
+			// Free-to-paid and Churn rate are not repeated here: the Trial to paid
+			// and Churn rate cards already state them for the same period.
 			const origins = acq.origins || {};
 			const originLabels = Array.isArray(origins.labels) ? origins.labels : [];
 			this.setText(
@@ -2609,9 +2580,7 @@
 			);
 			this.setText('rl-fsbi-ret-failed', count(ret.failed_payments));
 			this.setText('rl-fsbi-ret-cancellations', count(ret.cancellations_this_month));
-			this.setText('rl-fsbi-ret-churn', this.formatPercent(Number(ret.churn_rate || 0), 2));
 
-			this.setText('rl-fsbi-rev-mrr', money(rev.mrr));
 			this.setText('rl-fsbi-rev-arr', money(rev.arr));
 			this.setText('rl-fsbi-rev-gross', money(rev.gross));
 			this.setText('rl-fsbi-rev-refunds', money(rev.refunds));

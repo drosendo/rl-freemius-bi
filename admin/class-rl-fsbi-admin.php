@@ -1782,16 +1782,16 @@ class RL_FSBI_Admin
 		}
 
 		$attention = array();
-		$push = static function ($severity, $count, $label, $hash) use (&$attention) {
+		$push = function ($severity, $count, $label, $hash) use (&$attention) {
 			if ($count > 0) {
 				$attention[] = array('severity' => $severity, 'count' => (int) $count, 'label' => $label, 'hash' => $hash);
 			}
 		};
 
-		$push('high', (int) $retention['failed_payments'], __('subscriptions with a failed payment', 'rl-freemius-bi'), '#customers');
-		$push('high', $cards_expiring, __('renewals in the next 7 days with a failed payment', 'rl-freemius-bi'), '#customers');
-		$push('medium', $trials_ending, __('trials ending in the next 7 days', 'rl-freemius-bi'), '#growth');
-		$push('medium', (int) $retention['cancellations_this_month'], __('cancellations this month', 'rl-freemius-bi'), '#retention');
+		$push('high', (int) $retention['failed_payments'], _n('subscription with a failed payment', 'subscriptions with a failed payment', (int) $retention['failed_payments'], 'rl-freemius-bi'), '#customers');
+		$push('high', $cards_expiring, _n('renewal in the next 7 days with a failed payment', 'renewals in the next 7 days with a failed payment', $cards_expiring, 'rl-freemius-bi'), '#customers');
+		$push('medium', $trials_ending, _n('trial ending in the next 7 days', 'trials ending in the next 7 days', $trials_ending, 'rl-freemius-bi'), '#growth');
+		$push('medium', (int) $retention['cancellations_this_month'], _n('cancellation this month', 'cancellations this month', (int) $retention['cancellations_this_month'], 'rl-freemius-bi'), '#retention');
 
 		$order = array('high' => 0, 'medium' => 1, 'low' => 2);
 		usort($attention, static function ($a, $b) use ($order) {

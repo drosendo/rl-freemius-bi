@@ -182,149 +182,106 @@ if ( ! defined( 'WPINC' ) ) {
 		<div class="rl-fsbi-waterfall" id="rl-fsbi-waterfall" role="img" aria-label="<?php echo esc_attr__( 'MRR movement for the selected period: new, reactivation, churn and net change.', 'rl-freemius-bi' ); ?>"></div>
 	</div>
 
-	<div class="rl-fsbi-top-grid">
-		<div class="rl-fsbi-card rl-fsbi-hero-card">
-			<div class="rl-fsbi-card-label"><?php echo esc_html__( 'Total Net Revenue', 'rl-freemius-bi' ); ?></div>
-			<div class="rl-fsbi-hero-value" id="rl-fsbi-net-revenue">—</div>
-			<div class="rl-fsbi-card-sub" id="rl-fsbi-net-comparison"><?php echo esc_html__( 'vs previous period', 'rl-freemius-bi' ); ?></div>
-			<div class="rl-fsbi-fx-note" id="rl-fsbi-fx-note" hidden>
-				<?php echo esc_html__( "Converted at each day's rate; small rounding differences may occur.", 'rl-freemius-bi' ); ?>
-			</div>
-		</div>
-		<div class="rl-fsbi-card">
-			<div class="rl-fsbi-card-label"><?php echo esc_html__( 'Expected Payout', 'rl-freemius-bi' ); ?></div>
-			<div class="rl-fsbi-card-value" id="rl-fsbi-expected-payout">—</div>
-			<div class="rl-fsbi-card-sub" id="rl-fsbi-payout-note"><?php echo esc_html__( 'Based on current MRR pace', 'rl-freemius-bi' ); ?></div>
-		</div>
-		<div class="rl-fsbi-card">
-			<div class="rl-fsbi-card-label"><?php echo esc_html__( 'Refunds Breakdown', 'rl-freemius-bi' ); ?></div>
-			<div class="rl-fsbi-card-value" id="rl-fsbi-refunds-breakdown">—</div>
-			<div class="rl-fsbi-card-sub" id="rl-fsbi-refunds-sub">—</div>
-		</div>
-		<div class="rl-fsbi-card rl-fsbi-growth-card">
-			<div class="rl-fsbi-card-label"><?php echo esc_html__( 'New Paid Subscriptions', 'rl-freemius-bi' ); ?></div>
-			<div class="rl-fsbi-card-value rl-fsbi-growth-value">
-				<span id="rl-fsbi-newsubs-current">—</span>
-				<span class="rl-fsbi-growth-target">/ <span id="rl-fsbi-newsubs-target">—</span></span>
-			</div>
-			<div class="rl-fsbi-card-sub" id="rl-fsbi-newsubs-note"><?php echo esc_html__( 'this month vs target', 'rl-freemius-bi' ); ?></div>
-			<div class="rl-fsbi-growth-chart-wrap">
-				<canvas id="rl-fsbi-newsubs-chart" aria-label="<?php echo esc_attr__( 'New paid subscriptions over the last six months', 'rl-freemius-bi' ); ?>" role="img"></canvas>
-			</div>
-		</div>
-	</div>
-
-	<div class="rl-fsbi-blocks">
-		<section class="rl-fsbi-block rl-fsbi-block--acquisition" aria-labelledby="rl-fsbi-block-acq-title">
-			<h2 class="rl-fsbi-block-title" id="rl-fsbi-block-acq-title"><?php echo esc_html__( 'Acquisition', 'rl-freemius-bi' ); ?></h2>
-			<p class="rl-fsbi-block-sub"><?php echo esc_html__( 'Who arrived in this period.', 'rl-freemius-bi' ); ?></p>
-			<dl class="rl-fsbi-block-metrics">
-				<div><dt><?php echo esc_html__( 'New customers', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-acq-new">—</dd></div>
-				<div><dt><?php echo esc_html__( 'Reactivations', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-acq-reactivation">—</dd></div>
-				<div><dt><?php echo esc_html__( 'Free-to-paid conversion', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-acq-conversion">—</dd></div>
-				<div><dt><?php echo esc_html__( 'Sales origin', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-acq-origin">—</dd></div>
-			</dl>
-		</section>
-
-		<section class="rl-fsbi-block rl-fsbi-block--retention" id="rl-fsbi-block-retention" aria-labelledby="rl-fsbi-block-ret-title">
-			<h2 class="rl-fsbi-block-title" id="rl-fsbi-block-ret-title"><?php echo esc_html__( 'Retention', 'rl-freemius-bi' ); ?></h2>
-			<p class="rl-fsbi-block-sub"><?php echo esc_html__( 'Who stayed, and who needs attention.', 'rl-freemius-bi' ); ?></p>
-			<dl class="rl-fsbi-block-metrics">
-				<div><dt><?php echo esc_html__( 'Active subscriptions', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-active">—</dd></div>
-				<div><dt><?php echo esc_html__( 'Renewals due (30 days)', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-upcoming">—</dd></div>
-				<div><dt><?php echo esc_html__( 'At-risk renewals', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Renewals due in the next 30 days on subscriptions that carry a failed payment or an outstanding balance.', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo esc_attr__( 'Renewals due in the next 30 days on subscriptions that carry a failed payment or an outstanding balance.', 'rl-freemius-bi' ); ?>"><span class="dashicons dashicons-info"></span></span></dt><dd id="rl-fsbi-ret-atrisk">—</dd></div>
-				<div><dt><?php echo esc_html__( 'Active subs with a failed payment', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'How many of the active subscriptions counted above have recorded at least one failed payment. It is a count of subscriptions, not of failed attempts, and can never exceed the active total.', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo esc_attr__( 'How many of the active subscriptions counted above have recorded at least one failed payment. It is a count of subscriptions, not of failed attempts, and can never exceed the active total.', 'rl-freemius-bi' ); ?>"><span class="dashicons dashicons-info"></span></span></dt><dd id="rl-fsbi-ret-failed">—</dd></div>
-				<div><dt><?php echo esc_html__( 'Cancellations this month', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-cancellations">—</dd></div>
-				<div><dt><?php echo esc_html__( 'Churn rate', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-churn">—</dd></div>
-			</dl>
-		</section>
-
-		<section class="rl-fsbi-block rl-fsbi-block--revenue" aria-labelledby="rl-fsbi-block-rev-title">
-			<h2 class="rl-fsbi-block-title" id="rl-fsbi-block-rev-title"><?php echo esc_html__( 'Revenue', 'rl-freemius-bi' ); ?></h2>
-			<p class="rl-fsbi-block-sub"><?php echo esc_html__( 'What the period earned.', 'rl-freemius-bi' ); ?></p>
-			<dl class="rl-fsbi-block-metrics">
-				<div><dt><?php echo esc_html__( 'MRR', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-mrr">—</dd></div>
-				<div><dt><?php echo esc_html__( 'ARR', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-arr">—</dd></div>
-				<div><dt><?php echo esc_html__( 'Gross', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-gross">—</dd></div>
-				<div><dt><?php echo esc_html__( 'Refunds', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-refunds">—</dd></div>
-				<div><dt><?php echo esc_html__( 'Fees', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-fees">—</dd></div>
-				<div><dt><?php echo esc_html__( 'Net', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-net">—</dd></div>
-			</dl>
-		</section>
-	</div>
-
-	<?php
-	$health_tooltip_text = esc_attr__( "Health Score (0–100) measures SaaS stability:\n• Refunds (max 30 pts): 30 pts if <5%, penalized if ≥5%\n• Churn (max 25 pts): 25 pts if <3%, penalized if ≥3%\n• Revenue Momentum (max 20 pts): 20 pts if growing vs previous period\n• Trial Conversion (max 25 pts): only scored when the product runs trials; otherwise the other criteria are scaled to fill 100", 'rl-freemius-bi' );
-	$health_tooltip_html = esc_attr( '<div style="text-align:left;line-height:1.45;font-size:12px;padding:2px 4px;"><strong style="display:block;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:4px;">Health Score (0–100) Breakdown</strong><div style="margin-bottom:4px;">• <strong>Refund Control (30 pts):</strong> 30 pts if &lt;5%, penalized if &ge;5%</div><div style="margin-bottom:4px;">• <strong>Subscriber Churn (25 pts):</strong> 25 pts if &lt;3%, penalized if &ge;3%</div><div style="margin-bottom:4px;">• <strong>Trial Conversion (25 pts):</strong> 25 pts if &gt;25%, or direct %</div><div>• <strong>Revenue Momentum (20 pts):</strong> 20 pts if growing vs previous period</div></div>' );
-	$mrr_tooltip_html    = esc_attr( '<div style="text-align:left;font-size:12px;line-height:1.4;"><strong>Monthly Recurring Revenue (MRR)</strong><br>Normalized recurring monthly revenue generated by active subscriptions.</div>' );
-	$arr_tooltip_html    = esc_attr( '<div style="text-align:left;font-size:12px;line-height:1.4;"><strong>Annual Run Rate (ARR)</strong><br>Annualized recurring revenue pace based on current MRR (MRR &times; 12).</div>' );
-	$aov_tooltip_html    = esc_attr( '<div style="text-align:left;font-size:12px;line-height:1.4;"><strong>Average Order Value (AOV)</strong><br>Net revenue divided by total purchases in the selected period.</div>' );
-	$refund_tooltip_html = esc_attr( '<div style="text-align:left;font-size:12px;line-height:1.4;"><strong>Refund Rate</strong><br>Percentage of orders refunded during the selected date range.</div>' );
-	$churn_tooltip_html  = esc_attr( '<div style="text-align:left;font-size:12px;line-height:1.4;"><strong>Subscriber Churn Rate</strong><br>Percentage of active subscriptions canceled during the current month.</div>' );
-	?>
-
-	<div class="rl-fsbi-card rl-fsbi-portfolio-widget">
-		<div class="rl-fsbi-portfolio-header">
-			<div>
-				<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Portfolio Performance', 'rl-freemius-bi' ); ?></div>
-				<div class="rl-fsbi-card-sub"><?php echo esc_html__( 'A concise view of recurring strength and recent momentum.', 'rl-freemius-bi' ); ?></div>
-			</div>
-			<div class="rl-fsbi-portfolio-health-wrap">
-				<strong id="rl-fsbi-portfolio-health">—</strong>
-				<span class="rl-fsbi-info-tooltip rl-fsbi-health-tooltip" title="<?php echo $health_tooltip_text; ?>" data-tippy-content="<?php echo $health_tooltip_html; ?>">
-					<span class="dashicons dashicons-info"></span>
-				</span>
-			</div>
-		</div>
-		<div class="rl-fsbi-portfolio-metrics">
-			<div><span><?php echo esc_html__( 'Net Revenue', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-portfolio-revenue">—</strong></div>
-			<div><span><?php echo esc_html__( 'MRR', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-portfolio-mrr">—</strong></div>
-			<div><span><?php echo esc_html__( 'ARR', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-portfolio-arr">—</strong></div>
-			<div><span><?php echo esc_html__( 'Active Subscribers', 'rl-freemius-bi' ); ?></span><strong id="rl-fsbi-portfolio-subs">—</strong></div>
-		</div>
-		<canvas id="rl-fsbi-portfolio-chart"></canvas>
-	</div>
-
-	<div class="rl-fsbi-mini-kpis">
-		<div class="rl-fsbi-mini-kpi">
-			<span class="rl-fsbi-kpi-header"><?php echo esc_html__( 'MRR', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Monthly Recurring Revenue', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo $mrr_tooltip_html; ?>"><span class="dashicons dashicons-info"></span></span></span>
-			<strong id="rl-fsbi-mrr">—</strong>
-			<small id="rl-fsbi-mrr-as-of"></small>
-		</div>
-		<div class="rl-fsbi-mini-kpi">
-			<span class="rl-fsbi-kpi-header"><?php echo esc_html__( 'ARR', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Annual Run Rate', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo $arr_tooltip_html; ?>"><span class="dashicons dashicons-info"></span></span></span>
-			<strong id="rl-fsbi-arr">—</strong>
-			<small id="rl-fsbi-arr-as-of"></small>
-		</div>
-		<div class="rl-fsbi-mini-kpi">
-			<span class="rl-fsbi-kpi-header"><?php echo esc_html__( 'Avg Order Value', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Average Order Value', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo $aov_tooltip_html; ?>"><span class="dashicons dashicons-info"></span></span></span>
-			<strong id="rl-fsbi-aov">—</strong>
-		</div>
-		<div class="rl-fsbi-mini-kpi">
-			<span class="rl-fsbi-kpi-header"><?php echo esc_html__( 'Refund Rate', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Refund Rate', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo $refund_tooltip_html; ?>"><span class="dashicons dashicons-info"></span></span></span>
-			<strong id="rl-fsbi-refund-rate">—</strong>
-		</div>
-		<div class="rl-fsbi-mini-kpi">
-			<span class="rl-fsbi-kpi-header"><?php echo esc_html__( 'Churn Rate', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Subscriber Churn Rate', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo $churn_tooltip_html; ?>"><span class="dashicons dashicons-info"></span></span></span>
-			<strong id="rl-fsbi-churn-rate">—</strong>
-		</div>
-		<div class="rl-fsbi-mini-kpi">
-			<span class="rl-fsbi-kpi-header"><?php echo esc_html__( 'Health Score', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip rl-fsbi-health-tooltip" title="<?php echo $health_tooltip_text; ?>" data-tippy-content="<?php echo $health_tooltip_html; ?>"><span class="dashicons dashicons-info"></span></span></span>
-			<strong id="rl-fsbi-health-score">—</strong>
-		</div>
-	</div>
 
 	</section>
 
 	<section class="rl-fsbi-panel" data-panel="retention" id="rl-fsbi-panel-retention" role="tabpanel" aria-labelledby="rl-fsbi-tab-retention" tabindex="0">
-		<div class="rl-fsbi-card rl-fsbi-placeholder">
-			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Retention', 'rl-freemius-bi' ); ?></div>
-			<p class="rl-fsbi-card-sub"><?php echo esc_html__( 'Cohort retention, MRR movement and cancellation themes arrive in the next step.', 'rl-freemius-bi' ); ?></p>
+		<div class="rl-fsbi-blocks">
+			<section class="rl-fsbi-block rl-fsbi-block--retention" id="rl-fsbi-block-retention" aria-labelledby="rl-fsbi-block-ret-title">
+				<h2 class="rl-fsbi-block-title" id="rl-fsbi-block-ret-title"><?php echo esc_html__( 'Retention', 'rl-freemius-bi' ); ?></h2>
+				<p class="rl-fsbi-block-sub"><?php echo esc_html__( 'Who stayed, and who needs attention.', 'rl-freemius-bi' ); ?></p>
+				<dl class="rl-fsbi-block-metrics">
+					<div><dt><?php echo esc_html__( 'Active subscriptions', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-active">—</dd></div>
+					<div><dt><?php echo esc_html__( 'Renewals due (30 days)', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-upcoming">—</dd></div>
+					<div><dt><?php echo esc_html__( 'At-risk renewals', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Renewals due in the next 30 days on subscriptions that carry a failed payment or an outstanding balance.', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo esc_attr__( 'Renewals due in the next 30 days on subscriptions that carry a failed payment or an outstanding balance.', 'rl-freemius-bi' ); ?>"><span class="dashicons dashicons-info"></span></span></dt><dd id="rl-fsbi-ret-atrisk">—</dd></div>
+					<div><dt><?php echo esc_html__( 'Active subs with a failed payment', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'How many of the active subscriptions counted above have recorded at least one failed payment. It is a count of subscriptions, not of failed attempts, and can never exceed the active total.', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo esc_attr__( 'How many of the active subscriptions counted above have recorded at least one failed payment. It is a count of subscriptions, not of failed attempts, and can never exceed the active total.', 'rl-freemius-bi' ); ?>"><span class="dashicons dashicons-info"></span></span></dt><dd id="rl-fsbi-ret-failed">—</dd></div>
+					<div><dt><?php echo esc_html__( 'Cancellations this month', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-cancellations">—</dd></div>
+				</dl>
+			</section>
 		</div>
 	</section>
 
 	<div class="rl-fsbi-content-grid">
 		<section class="rl-fsbi-panel" data-panel="growth" id="rl-fsbi-panel-growth" role="tabpanel" aria-labelledby="rl-fsbi-tab-growth" tabindex="0">
+
+		<?php
+		$health_tooltip_text = esc_attr__( "Health Score (0–100) measures SaaS stability:\n• Refunds (max 30 pts): 30 pts if <5%, penalized if ≥5%\n• Churn (max 25 pts): 25 pts if <3%, penalized if ≥3%\n• Revenue Momentum (max 20 pts): 20 pts if growing vs previous period\n• Trial Conversion (max 25 pts): only scored when the product runs trials; otherwise the other criteria are scaled to fill 100", 'rl-freemius-bi' );
+		$health_tooltip_html = esc_attr( '<div style="text-align:left;line-height:1.45;font-size:12px;padding:2px 4px;"><strong style="display:block;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:4px;">Health Score (0–100) Breakdown</strong><div style="margin-bottom:4px;">• <strong>Refund Control (30 pts):</strong> 30 pts if &lt;5%, penalized if &ge;5%</div><div style="margin-bottom:4px;">• <strong>Subscriber Churn (25 pts):</strong> 25 pts if &lt;3%, penalized if &ge;3%</div><div style="margin-bottom:4px;">• <strong>Trial Conversion (25 pts):</strong> 25 pts if &gt;25%, or direct %</div><div>• <strong>Revenue Momentum (20 pts):</strong> 20 pts if growing vs previous period</div></div>' );
+		$arr_tooltip_html    = esc_attr( '<div style="text-align:left;font-size:12px;line-height:1.4;"><strong>Annual Run Rate (ARR)</strong><br>Annualized recurring revenue pace based on current MRR (MRR &times; 12).</div>' );
+		$aov_tooltip_html    = esc_attr( '<div style="text-align:left;font-size:12px;line-height:1.4;"><strong>Average Order Value (AOV)</strong><br>Net revenue divided by total purchases in the selected period.</div>' );
+		$refund_tooltip_html = esc_attr( '<div style="text-align:left;font-size:12px;line-height:1.4;"><strong>Refund Rate</strong><br>Percentage of orders refunded during the selected date range.</div>' );
+		?>
+
+		<div class="rl-fsbi-top-grid rl-fsbi-top-grid--3">
+			<div class="rl-fsbi-card">
+				<div class="rl-fsbi-card-label"><?php echo esc_html__( 'Expected Payout', 'rl-freemius-bi' ); ?></div>
+				<div class="rl-fsbi-card-value" id="rl-fsbi-expected-payout">—</div>
+				<div class="rl-fsbi-card-sub" id="rl-fsbi-payout-note"><?php echo esc_html__( 'Based on current MRR pace', 'rl-freemius-bi' ); ?></div>
+			</div>
+			<div class="rl-fsbi-card">
+				<div class="rl-fsbi-card-label"><?php echo esc_html__( 'Refunds Breakdown', 'rl-freemius-bi' ); ?></div>
+				<div class="rl-fsbi-card-value" id="rl-fsbi-refunds-breakdown">—</div>
+				<div class="rl-fsbi-card-sub" id="rl-fsbi-refunds-sub">—</div>
+			</div>
+			<div class="rl-fsbi-card rl-fsbi-growth-card">
+				<div class="rl-fsbi-card-label"><?php echo esc_html__( 'New Paid Subscriptions', 'rl-freemius-bi' ); ?></div>
+				<div class="rl-fsbi-card-value rl-fsbi-growth-value">
+					<span id="rl-fsbi-newsubs-current">—</span>
+					<span class="rl-fsbi-growth-target">/ <span id="rl-fsbi-newsubs-target">—</span></span>
+				</div>
+				<div class="rl-fsbi-card-sub" id="rl-fsbi-newsubs-note"><?php echo esc_html__( 'this month vs target', 'rl-freemius-bi' ); ?></div>
+				<div class="rl-fsbi-growth-chart-wrap">
+					<canvas id="rl-fsbi-newsubs-chart" aria-label="<?php echo esc_attr__( 'New paid subscriptions over the last six months', 'rl-freemius-bi' ); ?>" role="img"></canvas>
+				</div>
+			</div>
+		</div>
+
+		<div class="rl-fsbi-mini-kpis">
+			<div class="rl-fsbi-mini-kpi">
+				<span class="rl-fsbi-kpi-header"><?php echo esc_html__( 'ARR', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Annual Run Rate', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo $arr_tooltip_html; ?>"><span class="dashicons dashicons-info"></span></span></span>
+				<strong id="rl-fsbi-arr">—</strong>
+				<small id="rl-fsbi-arr-as-of"></small>
+			</div>
+			<div class="rl-fsbi-mini-kpi">
+				<span class="rl-fsbi-kpi-header"><?php echo esc_html__( 'Avg Order Value', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Average Order Value', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo $aov_tooltip_html; ?>"><span class="dashicons dashicons-info"></span></span></span>
+				<strong id="rl-fsbi-aov">—</strong>
+			</div>
+			<div class="rl-fsbi-mini-kpi">
+				<span class="rl-fsbi-kpi-header"><?php echo esc_html__( 'Refund Rate', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Refund Rate', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo $refund_tooltip_html; ?>"><span class="dashicons dashicons-info"></span></span></span>
+				<strong id="rl-fsbi-refund-rate">—</strong>
+			</div>
+			<div class="rl-fsbi-mini-kpi">
+				<span class="rl-fsbi-kpi-header"><?php echo esc_html__( 'Health Score', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip rl-fsbi-health-tooltip" title="<?php echo $health_tooltip_text; ?>" data-tippy-content="<?php echo $health_tooltip_html; ?>"><span class="dashicons dashicons-info"></span></span></span>
+				<strong id="rl-fsbi-health-score">—</strong>
+			</div>
+		</div>
+
+		<div class="rl-fsbi-blocks">
+			<section class="rl-fsbi-block rl-fsbi-block--acquisition" aria-labelledby="rl-fsbi-block-acq-title">
+				<h2 class="rl-fsbi-block-title" id="rl-fsbi-block-acq-title"><?php echo esc_html__( 'Acquisition', 'rl-freemius-bi' ); ?></h2>
+				<p class="rl-fsbi-block-sub"><?php echo esc_html__( 'Who arrived in this period.', 'rl-freemius-bi' ); ?></p>
+				<dl class="rl-fsbi-block-metrics">
+					<div><dt><?php echo esc_html__( 'New customers', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-acq-new">—</dd></div>
+					<div><dt><?php echo esc_html__( 'Reactivations', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-acq-reactivation">—</dd></div>
+					<div><dt><?php echo esc_html__( 'Sales origin', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-acq-origin">—</dd></div>
+				</dl>
+			</section>
+
+			<section class="rl-fsbi-block rl-fsbi-block--revenue" aria-labelledby="rl-fsbi-block-rev-title">
+				<h2 class="rl-fsbi-block-title" id="rl-fsbi-block-rev-title"><?php echo esc_html__( 'Revenue', 'rl-freemius-bi' ); ?></h2>
+				<p class="rl-fsbi-block-sub"><?php echo esc_html__( 'What the period earned.', 'rl-freemius-bi' ); ?></p>
+				<dl class="rl-fsbi-block-metrics">
+					<div><dt><?php echo esc_html__( 'ARR', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-arr">—</dd></div>
+					<div><dt><?php echo esc_html__( 'Gross', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-gross">—</dd></div>
+					<div><dt><?php echo esc_html__( 'Refunds', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-refunds">—</dd></div>
+					<div><dt><?php echo esc_html__( 'Fees', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-fees">—</dd></div>
+					<div><dt><?php echo esc_html__( 'Net', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-rev-net">—</dd></div>
+				</dl>
+				<div class="rl-fsbi-fx-note" id="rl-fsbi-fx-note" hidden>
+					<?php echo esc_html__( "Converted at each day's rate; small rounding differences may occur.", 'rl-freemius-bi' ); ?>
+				</div>
+			</section>
+		</div>
 		<div class="rl-fsbi-card rl-fsbi-span-2">
 			<div class="rl-fsbi-panel-title" id="rl-fsbi-sales-activity-title"><?php echo esc_html__( 'Sales Activity', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-sales-activity-chart"></canvas>
