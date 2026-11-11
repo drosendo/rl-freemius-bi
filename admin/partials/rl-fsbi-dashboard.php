@@ -152,7 +152,7 @@ if ( ! defined( 'WPINC' ) ) {
 		<?php
 		$overview_cards = array(
 			'newsubs'   => array( __( 'New subscriptions', 'rl-freemius-bi' ), __( 'First-time paid subscriptions this month, excluding renewals and trials. Pace compares progress against the target expected by today.', 'rl-freemius-bi' ) ),
-			'mrr'       => array( __( 'MRR', 'rl-freemius-bi' ), __( 'Active subscriptions renewal amount, monthlyised by billing cycle, converted at each payment rate for its day.', 'rl-freemius-bi' ) ),
+			'mrr'       => array( __( 'MRR', 'rl-freemius-bi' ), __( 'The amount that will actually renew, monthlyised by billing cycle and converted at the rate of the day. Freemius renewal_amount is used, and amount_per_cycle (list price) only when it is missing - which would ignore kept discounts and overstate what renews.', 'rl-freemius-bi' ) ),
 			'net'       => array( __( 'Net revenue', 'rl-freemius-bi' ), __( 'Gross minus refunds, commission and gateway fees for the selected period, each converted at the rate of its own day.', 'rl-freemius-bi' ) ),
 			'churn'     => array( __( 'Churn rate', 'rl-freemius-bi' ), __( 'Cancellations in the period over the subscriber base that existed at its start.', 'rl-freemius-bi' ) ),
 			'trialpaid' => array( __( 'Trial to paid', 'rl-freemius-bi' ), __( 'Trials converted to a paid subscription in the period, over trials started.', 'rl-freemius-bi' ) ),

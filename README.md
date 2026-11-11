@@ -1002,10 +1002,21 @@ Deltas carry an arrow plus words ("▲ 4.2% vs previous", "behind · 1/5") so co
 
 Verified at 1280px: New subscriptions `1 | behind · 1/5`, Net revenue `249,99 € | ▼ 58.4% vs previous`, Churn `1.6%`, attention `1 subscriptions with a failed payment`, waterfall `49,99 / 41,99 / 10,27 / 81,71`, KPI cards at 3 per row. Eight tab switches including revisits produced **no dialogs and no console errors**.
 
-Two known weaknesses, both to fix before release:
+### Unreleased - four corrections to the Overview figures
 
-- The **waterfall figures are first-payment gross, not monthlyised MRR**, so they understate movement on an account with long-lived subscriptions. The label says MRR movement; the calculation must be monthlyised (or the label changed) before this ships.
-- **Trial to paid reads 0.0%** because `trial_conversion.rate` is 0 for this product rather than absent; the card cannot yet distinguish "no trials" from "0%".
+The rebuild shipped with two defects and two figures that did not match what Freemius reports. All four are fixed:
+
+- **MRR movement is monthlyised.** New, Reactivation and Churn now divide each amount by its own billing cycle before they are summed, so a first annual payment counts as one twelfth of itself and is comparable with a month of churn. The subscription lookup was also broken: it matched the payment's `subscription_id` against the subscription table's primary key instead of its `subscription_id` column, so it found nothing and every payment went through unmonthlyised. Verified on 2228 for 1-11 November: New `4,17 €` (49,99 annual), Reactivation `3,50 €` (41,99 annual), Churn `10,27 €` (39,99 + 41,65 + 41,65 annual), net change `−2,60 €`.
+- **Trial to paid says "No trials"** when the period contains no trials, instead of `0.0%`, which reads as a conversion failure. When trials did start it shows the rate with "N of M converted".
+- **MRR uses `renewal_amount`**, the amount that will actually renew, and falls back to `amount_per_cycle` (list price) only when it is missing. List price ignores kept discounts, so it overstated MRR. The tooltip states which value is used.
+- **A partial period is compared with the same days of the previous month.** The range "this month" ends on the last day of the month while only eleven of them have happened, so eleven days were set against all of October and Net revenue read `▼ 58.4% vs previous`. The covered part of the period is now used, the same day-span of the previous month is the comparison, and the delta names it: `▲ 16.9% vs 1 Oct to 11 Oct`. The comparison query now carries the product and currency filters of the period it belongs to.
+
+Fixing these exposed two latent bugs:
+
+- The previous-period lookup referenced `$repo_for_overview` **before it was assigned**, which is a fatal error on PHP 8, so the comparison would have taken the whole AJAX request down the first time a partial period was detected.
+- The six-month sparkline series queried every product rather than the product on screen.
+
+Verified at 1280px across all six tabs with revisits: no dialogs, no console errors, no inline section errors.
 
 ### Unreleased - fix the DataTables re-render path (phase 1, step 4b)
 

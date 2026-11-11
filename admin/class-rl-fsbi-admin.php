@@ -1691,10 +1691,13 @@ class RL_FSBI_Admin
 	 * @param string $start_date    Period start.
 	 * @param string $end_date      Period end.
 	 * @param string $currency      Reporting currency.
+	 * @param int    $plugin_id     Product scope, so the comparison windows read the same products.
+	 * @param string $filter_currency Currency filter, so the comparison windows read the same rows.
 	 * @return array{waterfall:array,attention:array,series:array}
 	 */
-	private function build_overview_extras($payments, $subscriptions, $start_date, $end_date, $currency)
+	private function build_overview_extras($payments, $subscriptions, $start_date, $end_date, $currency, $plugin_id = 0, $filter_currency = null)
 	{
+		$repo = new RL_FSBI_Repository();
 		$start_ts = strtotime($start_date . ' 00:00:00');
 		$end_ts = strtotime($end_date . ' 23:59:59');
 		$ended_by_user = $this->build_ended_subscription_index($subscriptions);
@@ -1719,7 +1722,7 @@ class RL_FSBI_Admin
 				$seen[$sub_id] = true;
 			}
 
-			$amount = $this->monthlyised_payment_value($payment, $currency);
+			$amount = $this->monthlyised_payment_value($payment, $currency, $subscriptions);
 			$user_id = (int) ($payment->user_id ?? 0);
 			$returning = false;
 
@@ -1796,14 +1799,45 @@ class RL_FSBI_Admin
 			return 0 !== $bySeverity ? $bySeverity : $b['count'] <=> $a['count'];
 		});
 
+		// A partial period cannot be compared with a whole one: on the 11th, eleven
+		// days are set against a full month and every figure looks like a collapse.
+		// Compare the same day-span of the previous month instead, and say so.
+		// The selected range usually ends on the last day of the month ("this
+		// month", "last 30 days"), so the part that has actually happened is what
+		// must be counted, not the day number of the requested end date.
+		$today_date = current_time('Y-m-d');
+		$covered_end = strtotime($end_date) > strtotime($today_date) ? $today_date : $end_date;
+		$period_end_ts = strtotime($covered_end);
+		$month_end_day = (int) wp_date('t', $period_end_ts);
+		$is_partial = (int) wp_date('j', $period_end_ts) < $month_end_day;
+		$comparison = array('partial' => false, 'label' => '', 'net_previous' => 0.0, 'net_current' => 0.0);
+
+		if ($is_partial) {
+			$prev_end = wp_date('Y-m-d', strtotime($covered_end . ' -1 month'));
+			$prev_start = wp_date('Y-m-d', strtotime($start_date . ' -1 month'));
+			$prev_payments = $repo->get_payments($plugin_id, $prev_start, $prev_end, $filter_currency);
+			$prev_row = $this->summarise_month_payments($prev_payments, $currency, $prev_start);
+
+			$comparison = array(
+				'partial' => true,
+				'label' => sprintf(
+					/* translators: 1: start day/month, 2: end day/month */
+					__('vs %1$s to %2$s', 'rl-freemius-bi'),
+					wp_date('j M', strtotime($prev_start)),
+					wp_date('j M', strtotime($prev_end))
+				),
+				'net_previous' => (float) $prev_row['net'],
+				'net_current' => 0.0,
+			);
+		}
+
 		// Six months of net revenue for the sparkline, oldest first.
 		$series = array();
-		$repo = new RL_FSBI_Repository();
 		for ($i = 5; $i >= 0; $i--) {
 			$month = wp_date('Y-m', strtotime('-' . $i . ' months', strtotime($end_date)));
 			$m_start = $month . '-01';
 			$m_end = wp_date('Y-m-t', strtotime($m_start));
-			$m_payments = $repo->get_payments(0, $m_start, $m_end, null);
+			$m_payments = $repo->get_payments($plugin_id, $m_start, $m_end, $filter_currency);
 			$row = $this->summarise_month_payments($m_payments, $currency, $m_start);
 			$series[] = array('label' => wp_date('M', strtotime($m_start)), 'value' => $row['net']);
 		}
@@ -1812,6 +1846,10 @@ class RL_FSBI_Admin
 			'waterfall' => $waterfall,
 			'attention' => array_slice($attention, 0, 5),
 			'series' => $series,
+			'comparison' => $comparison,
+			'day_of_month' => (int) wp_date('j', current_time('timestamp')),
+			'days_in_month' => (int) wp_date('t', current_time('timestamp')),
+			'trials_started' => isset($stats['trials']) ? (int) $stats['trials'] : 0,
 		);
 	}
 
@@ -1822,13 +1860,55 @@ class RL_FSBI_Admin
 	 * @param string $currency Reporting currency.
 	 * @return float
 	 */
-	private function monthlyised_payment_value($payment, $currency)
+	private function monthlyised_payment_value($payment, $currency, $subscriptions = array())
 	{
 		$amounts = $this->resolve_payment_amounts($payment, 0.0);
 		$source = strtoupper((string) ($payment->currency ?? $currency));
 		$date = (string) ($payment->transaction_date ?? '');
+		$amount = (float) $this->convert_currency_amount(abs((float) $amounts['gross']), $source, $currency, $date);
 
-		return (float) $this->convert_currency_amount(abs((float) $amounts['gross']), $source, $currency, $date);
+		// MRR movement has to be a monthly figure: an annual first payment is one
+		// twelfth of it. Without this the waterfall compared a year's cash with a
+		// month's churn.
+		// The payment carries the Freemius subscription id, which is the
+		// subscription_id column - not the table's own primary key. Matching on
+		// id silently found nothing and left annual payments unmonthlyised.
+		$sub_id = (int) ($payment->subscription_id ?? 0);
+		foreach ((array) $subscriptions as $subscription) {
+			$row_sub_id = (int) ($subscription->subscription_id ?? 0);
+			if ($row_sub_id <= 0) {
+				$row_sub_id = (int) ($subscription->id ?? 0);
+			}
+
+			if ($row_sub_id !== $sub_id) {
+				continue;
+			}
+
+			$months = $this->subscription_cycle_months($subscription);
+
+			return $months > 1 ? $amount / $months : $amount;
+		}
+
+		return $amount;
+	}
+
+	/**
+	 * Billing-cycle length in months for a subscription row.
+	 *
+	 * @param object $subscription Subscription row.
+	 * @return int
+	 */
+	private function subscription_cycle_months($subscription)
+	{
+		$meta = json_decode((string) ($subscription->metadata ?? ''), true);
+		$cycle = $subscription->billing_cycle ?? null;
+		if (is_array($meta) && isset($meta['billing_cycle'])) {
+			$cycle = $meta['billing_cycle'];
+		}
+
+		$months = $this->billing_cycle_to_months($cycle);
+
+		return $months > 0 ? $months : 1;
 	}
 
 	/**
@@ -1840,18 +1920,8 @@ class RL_FSBI_Admin
 	 */
 	private function monthlyised_subscription_value($subscription, $currency)
 	{
-		$meta = json_decode((string) ($subscription->metadata ?? ''), true);
-		$cycle = $subscription->billing_cycle ?? null;
-		if (is_array($meta) && isset($meta['billing_cycle'])) {
-			$cycle = $meta['billing_cycle'];
-		}
-
-		$months = $this->billing_cycle_to_months($cycle);
-		if ($months <= 0) {
-			$months = 1;
-		}
-
-		$amount = ! empty($subscription->renewal_amount) ? (float) $subscription->renewal_amount : (float) ($subscription->amount_per_cycle ?? 0);
+		$months = $this->subscription_cycle_months($subscription);
+		$amount = $this->get_forecast_renewal_amount($subscription);
 		$source = strtoupper((string) ($subscription->currency ?? $currency));
 
 		return (float) $this->convert_currency_amount($amount, $source, $currency, (string) ($subscription->created_at ?? '')) / $months;
@@ -5078,7 +5148,7 @@ class RL_FSBI_Admin
 		$data['marketing_optins_updated'] = (string) get_option($cache_key . '_updated', '');
 		$data['newsletter_provider']      = $provider;
 		$data['overview'] = $needs('overview')
-			? $this->build_overview_extras($payments, $subscriptions, $start_date, $end_date, (string) $this->settings->get_option('rl_fsbi_conversion_currency', 'EUR'))
+			? $this->build_overview_extras($payments, $subscriptions, $start_date, $end_date, (string) $this->settings->get_option('rl_fsbi_conversion_currency', 'EUR'), $plugin_id, $currency)
 			: array();
 
 		$data['from_cache']               = false;
@@ -8067,7 +8137,13 @@ class RL_FSBI_Admin
 			return (float) $meta['renewal_amount'];
 		}
 
-		return (float) ($subscription->renewal_amount ?? 0);
+		if (isset($subscription->renewal_amount) && (float) $subscription->renewal_amount > 0) {
+			return (float) $subscription->renewal_amount;
+		}
+
+		// List price, and only when Freemius reports no renewal amount: it
+		// ignores kept discounts, so it overstates what will actually renew.
+		return (float) ($subscription->amount_per_cycle ?? 0);
 	}
 
 	private function get_subscription_next_renewal($subscription)

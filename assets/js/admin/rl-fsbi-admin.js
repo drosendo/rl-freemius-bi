@@ -1932,24 +1932,37 @@
 			setKpi('mrr', money(kpis.mrr_converted ?? kpis.mrr), '', 'neutral');
 
 			const net = Number(summary.net_revenue || 0);
-			const prev = Number(summary.previous_net_revenue || 0);
+			const comparison = extra.comparison || {};
+			// A partial period is compared with the same day-span of the previous
+			// month, never with a whole month: eleven days against thirty-one makes
+			// any figure look like a collapse.
+			const prev = comparison.partial
+				? Number(comparison.net_previous || 0)
+				: Number(summary.previous_net_revenue || 0);
+			const basis = comparison.partial && comparison.label ? ' ' + comparison.label : ' vs previous period';
+
 			if (prev > 0) {
 				const change = ((net - prev) / prev) * 100;
-				// Arrow plus words: colour alone never carries the meaning.
-				setKpi('net', money(net), (change >= 0 ? '▲ ' : '▼ ') + Math.abs(change).toFixed(1) + '% vs previous', change >= 0 ? 'good' : 'bad');
+				setKpi('net', money(net), (change >= 0 ? '▲ ' : '▼ ') + Math.abs(change).toFixed(1) + '%' + basis, change >= 0 ? 'good' : 'bad');
+			} else if (prev === 0) {
+				setKpi('net', money(net), 'no revenue in ' + (comparison.label || 'the previous period'), 'neutral');
 			} else {
-				setKpi('net', money(net), prev === 0 ? 'no revenue in previous period' : '', 'neutral');
+				setKpi('net', money(net), '', 'neutral');
 			}
 
 			const churn = Number(kpis.churn_rate || 0);
 			setKpi('churn', this.formatPercent(churn, 1), churn < 3 ? 'within target' : 'above 3% target', churn < 3 ? 'good' : 'bad');
 
 			const tc = data.trial_conversion;
-			if (tc !== undefined && tc !== null && tc !== '') {
-				const rate = typeof tc === 'object' ? Number(tc.rate || 0) : Number(tc);
-				setKpi('trialpaid', this.formatPercent(rate, 1), '', 'neutral');
+			const trialsStarted = Number(extra.trials_started ?? (typeof tc === 'object' ? (tc.total_trials || 0) : 0));
+			if (!trialsStarted) {
+				// 0% and "no trials" are different facts; showing 0.0% implies a
+				// conversion problem where there were simply no trials.
+				setKpi('trialpaid', 'No trials', '', 'neutral');
 			} else {
-				setKpi('trialpaid', '—', 'no trials in period', 'neutral');
+				const rate = typeof tc === 'object' ? Number(tc.rate || 0) : Number(tc || 0);
+				const converted = typeof tc === 'object' ? Number(tc.converted || 0) : 0;
+				setKpi('trialpaid', this.formatPercent(rate, 1), converted + ' of ' + trialsStarted + ' converted', 'neutral');
 			}
 
 			this.renderAttention(extra.attention || []);
