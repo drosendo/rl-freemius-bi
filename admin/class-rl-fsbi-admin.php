@@ -1249,8 +1249,9 @@ class RL_FSBI_Admin
 		// Per-plugin split. The headline figures stay exactly as they were
 		// (revenue and subscriptions across everything synced); these rows exist
 		// so the total can be reconciled and each product reached in one click.
-		$targets = $this->settings->get_option('rl_fsbi_monthly_targets', array());
-		$targets = is_array($targets) ? $targets : array();
+		// Framework field per product (Plugin Scope -> Monthly New Subscription
+		// Targets); the old map is only a fallback for values saved before it.
+		$targets = array();
 		$plugins = array();
 		$new_total = 0;
 		$reactivation_total = 0;
@@ -1267,7 +1268,7 @@ class RL_FSBI_Admin
 			$own_stats = $this->calculate_subscription_stats($own, $today);
 			$own_mrr = $this->calculate_period_mrr($own, $today, $currency)['converted'];
 			$own_series = $this->build_new_subscription_series($own_payments, $own, 1);
-			$own_target = isset($targets[$plugin_id]) ? max(0, (int) $targets[$plugin_id]) : 0;
+			$own_target = $this->settings->get_monthly_target($plugin_id);
 
 			// Pace, not just a percentage: on the 10th of a 30-day month, 33% of
 			// the target is on track, not behind.
@@ -1565,9 +1566,11 @@ class RL_FSBI_Admin
 	 */
 	private function estimate_payout_date($revenue_month)
 	{
-		$day = (int) $this->settings->get_option('rl_fsbi_payout_day', 15);
+		$day = trim((string) $this->settings->get_option('rl_fsbi_payout_day', ''));
+		$day = '' === $day ? 15 : (int) $day;
 		$day = min(28, max(1, $day));
-		$lag = (int) $this->settings->get_option('rl_fsbi_payout_lag_months', 2);
+		$lag = trim((string) $this->settings->get_option('rl_fsbi_payout_lag_months', ''));
+		$lag = '' === $lag ? 2 : (int) $lag;
 		$lag = min(6, max(0, $lag));
 
 		if (! preg_match('/^\d{4}-\d{2}$/', (string) $revenue_month)) {

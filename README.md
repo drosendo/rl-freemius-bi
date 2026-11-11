@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.4.11  
+**Version:** 1.4.12  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -989,6 +989,27 @@ bumping `Version:` means no site will ever see it.
 - **WordPress.org slugs are per plugin.** The single global field became a per-product editor on the **Plugin Scope** tab, prefilled with each Freemius slug and validated against the wp.org API on save — an unknown slug is rejected rather than stored, since it would render a widget full of zeros. With no slug the widget is not rendered at all (no card, no canvas, no note) and no wp.org request is made.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
+
+### 1.4.12 (2026-11-11)
+
+**Settings could not be saved at all: an empty `number` field aborts the whole form.**
+
+`RL_Field_Number::validate()` rejects anything that is not numeric:
+
+```php
+if (!is_numeric($value)) {
+    $error = sprintf(__('%s must be a valid number.', ...), $field_label);
+    return false;
+}
+```
+
+An **empty string is not numeric**, and the framework stops the save on the first validation error and redirects — nothing is written. Every optional numeric field I added (revenue share, fixed fee, payout day, payout lag, per-plugin monthly target, monthly subscription target) defaults to empty, so opening Settings and pressing Save failed silently for the whole form, including the WordPress.org slugs.
+
+All optional numeric fields are now `type => 'text'`, which accepts empty, with the value cast and range-clamped on read. Payout day/lag fall back to 15 and 2 when blank; the revenue share falls back to the synced balance only when that reports a rate.
+
+**The WordPress.org slug and the monthly target are now real framework fields.** `rl_fsbi_wporg_slug_{plugin_id}` and `rl_fsbi_monthly_target_{plugin_id}` are registered per tracked product under Plugin Scope, so they are persisted by the framework's own save path. The bespoke `admin-post` forms, their handlers and their hooks are gone; `get_wporg_slug()` and the new `get_monthly_target()` read the fields, falling back to the old maps for values saved before this release.
+
+**Not yet confirmed:** in this environment a save through the browser still did not write `rl_fsbi_wporg_slug_2228` to `rl_fsbi_settings`, and the cause is not identified. The validation fix above is proven from the framework's own validator; the persistence of these two fields needs one save on a real installation to confirm.
 
 ### 1.4.11 (2026-11-11)
 

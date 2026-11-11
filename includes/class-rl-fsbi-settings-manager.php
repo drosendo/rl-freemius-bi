@@ -213,6 +213,27 @@ class RL_FSBI_Settings_Manager {
 				)
 			);
 
+			// Real framework fields, one per tracked product, so they save through
+			// the framework. A bespoke admin-post form used to write them and the
+			// values did not survive a save.
+			foreach ( $this->get_trackable_plugins() as $tracked_id => $tracked_title ) {
+				$this->framework->add_field(
+					'plugin_scope',
+					'wporg_slugs',
+					array(
+						'id'      => 'rl_fsbi_wporg_slug_' . $tracked_id,
+						'type'    => 'text',
+						'label'   => $tracked_title,
+						'desc'    => sprintf(
+							/* translators: %s: example WordPress.org plugin slug */
+							esc_html__( 'Directory slug on WordPress.org, e.g. %s. Leave empty if this product is not listed there: the WordPress.org widget is then not rendered and no request is made.', 'rl-freemius-bi' ),
+							'my-plugin-slug'
+						),
+						'default' => '',
+					)
+				);
+			}
+
 			$this->framework->add_section(
 				'currency_settings',
 				'currency_config',
@@ -570,15 +591,6 @@ class RL_FSBI_Settings_Manager {
 			)
 		);
 
-		$this->framework->add_field(
-			'plugin_scope',
-			'wporg_slugs',
-			array(
-				'id'   => 'rl_fsbi_wporg_slugs_panel',
-				'type' => 'html',
-				'html' => $this->get_wporg_slugs_panel_html(),
-			)
-		);
 
 		$this->framework->add_section(
 			'plugin_scope',
@@ -589,15 +601,21 @@ class RL_FSBI_Settings_Manager {
 			)
 		);
 
-		$this->framework->add_field(
-			'plugin_scope',
-			'monthly_targets',
-			array(
-				'id'   => 'rl_fsbi_monthly_targets_panel',
-				'type' => 'html',
-				'html' => $this->get_monthly_targets_panel_html(),
-			)
-		);
+		foreach ( $this->get_trackable_plugins() as $tracked_id => $tracked_title ) {
+			$this->framework->add_field(
+				'plugin_scope',
+				'monthly_targets',
+				array(
+					'id'      => 'rl_fsbi_monthly_target_' . $tracked_id,
+					'type'    => 'text',
+					'label'   => $tracked_title,
+					'desc'    => esc_html__( 'First-time paid subscriptions per month you aim for. Leave empty for no target.', 'rl-freemius-bi' ),
+					'default' => '',
+					'min'     => 0,
+					'max'     => 100000,
+				)
+			);
+		}
 
 		$this->framework->add_field(
 			'support',
@@ -614,7 +632,7 @@ class RL_FSBI_Settings_Manager {
 			'sync_config',
 			array(
 				'id'      => 'rl_fsbi_monthly_subscription_target',
-				'type'    => 'number',
+				'type'    => 'text',
 				'label'   => esc_html__( 'Monthly New Subscription Target', 'rl-freemius-bi' ),
 				'desc'    => esc_html__( 'How many new paid subscriptions you aim to win each month. The dashboard compares the current month against this number.', 'rl-freemius-bi' ),
 				'default' => 5,
@@ -628,7 +646,7 @@ class RL_FSBI_Settings_Manager {
 			'sync_config',
 			array(
 				'id'      => 'rl_fsbi_fs_revenue_share',
-				'type'    => 'number',
+				'type'    => 'text',
 				'label'   => esc_html__( 'Freemius Revenue Share (%)', 'rl-freemius-bi' ),
 				'desc'    => esc_html__( 'The percentage Freemius charges on each sale. The Payments API returns no commission, so it has to be set here. It is prefilled from the synced account balance when that reports a rate; leave it empty and commission is not deducted, which overstates net revenue - the dashboard says so instead of applying 0%.', 'rl-freemius-bi' ),
 				'default' => '',
@@ -642,7 +660,7 @@ class RL_FSBI_Settings_Manager {
 			'sync_config',
 			array(
 				'id'      => 'rl_fsbi_fs_fixed_fee',
-				'type'    => 'number',
+				'type'    => 'text',
 				'label'   => esc_html__( 'Freemius Fixed Fee per Transaction', 'rl-freemius-bi' ),
 				'desc'    => esc_html__( 'The fixed fee Freemius adds to the percentage on each sale, where the plan carries one. Leave empty to use the documented defaults per currency (EUR 0.45, GBP 0.40, USD 0.50). Set 0 to disable it. Refunds do not return it.', 'rl-freemius-bi' ),
 				'default' => '',
@@ -656,7 +674,7 @@ class RL_FSBI_Settings_Manager {
 			'sync_config',
 			array(
 				'id'      => 'rl_fsbi_payout_day',
-				'type'    => 'number',
+				'type'    => 'text',
 				'label'   => esc_html__( 'Payout Day of Month', 'rl-freemius-bi' ),
 				'desc'    => esc_html__( 'The Freemius API exposes no payout schedule, so payout dates on the dashboard are estimates calculated from this rule. Day of the month you are normally paid (1-28).', 'rl-freemius-bi' ),
 				'default' => 15,
@@ -670,7 +688,7 @@ class RL_FSBI_Settings_Manager {
 			'sync_config',
 			array(
 				'id'      => 'rl_fsbi_payout_lag_months',
-				'type'    => 'number',
+				'type'    => 'text',
 				'label'   => esc_html__( 'Payout Lag (Months)', 'rl-freemius-bi' ),
 				'desc'    => esc_html__( 'How many months after the revenue month that revenue is paid out (0-6). Used only to estimate the date shown next to "Current payout" and "Next payout".', 'rl-freemius-bi' ),
 				'default' => 2,
@@ -1918,14 +1936,69 @@ class RL_FSBI_Settings_Manager {
 	 * @return string Empty when the product is not on WordPress.org.
 	 */
 	public function get_wporg_slug( $plugin_id ): string {
+		$plugin_id = (int) $plugin_id;
+		$direct    = sanitize_title( (string) $this->get_option( 'rl_fsbi_wporg_slug_' . $plugin_id, '' ) );
+
+		if ( '' !== $direct ) {
+			return $direct;
+		}
+
+		// Values written by the previous admin-post form.
 		$map = $this->get_option( 'rl_fsbi_wporg_slugs', array() );
 		if ( ! is_array( $map ) ) {
 			return '';
 		}
 
-		$slug = isset( $map[ (int) $plugin_id ] ) ? (string) $map[ (int) $plugin_id ] : '';
+		return sanitize_title( (string) ( $map[ $plugin_id ] ?? '' ) );
+	}
 
-		return sanitize_title( $slug );
+	/**
+	 * Monthly new-subscription target for one product.
+	 *
+	 * @param int $plugin_id Freemius plugin id.
+	 * @return int Zero when no target is set.
+	 */
+	public function get_monthly_target( $plugin_id ): int {
+		$plugin_id = (int) $plugin_id;
+		$direct    = $this->get_option( 'rl_fsbi_monthly_target_' . $plugin_id, '' );
+
+		if ( '' !== $direct && null !== $direct ) {
+			return max( 0, (int) $direct );
+		}
+
+		$map = $this->get_option( 'rl_fsbi_monthly_targets', array() );
+		if ( is_array( $map ) && isset( $map[ $plugin_id ] ) ) {
+			return max( 0, (int) $map[ $plugin_id ] );
+		}
+
+		return 0;
+	}
+
+	/**
+	 * Products the plugin can be configured for, as id => title.
+	 *
+	 * @return array<int,string>
+	 */
+	private function get_trackable_plugins(): array {
+		$catalog = $this->get_option( 'rl_fsbi_plugins_catalog', array() );
+		$out     = array();
+
+		if ( ! is_array( $catalog ) ) {
+			return $out;
+		}
+
+		foreach ( $catalog as $id => $entry ) {
+			$plugin_id = (int) ( is_array( $entry ) ? ( $entry['id'] ?? $id ) : $id );
+			if ( $plugin_id <= 0 ) {
+				continue;
+			}
+			$title = is_array( $entry ) && ! empty( $entry['title'] ) ? (string) $entry['title'] : 'Plugin #' . $plugin_id;
+			$out[ $plugin_id ] = sanitize_text_field( $title );
+		}
+
+		ksort( $out );
+
+		return $out;
 	}
 
 	/**
