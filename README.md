@@ -1040,6 +1040,7 @@ Four figures were still being computed twice. All four now come from `summarise_
 Framework update. `includes/library/rloptionsFramework/` is upstream **2.6.0**, and the plugin adapted to it in two places; the details are under *Unreleased — RL Options Framework 2.6.0* below.
 
 - **The settings screen saves again.** 2.6.0 rejects an array payload for any field type it does not ship as multi-value, and this plugin's `checkbox_list` ("Tracked Plugins") stores an array — so every save, on every tab, failed with **"Tracked Plugins has an invalid value."** The type now declares itself through `rl_options_framework_array_field_types`.
+- **The plugin list is readable.** In the two-column field layout the title sat beside the `ID` and slug badges and was squeezed to `Smart Insigh…`, and on the first row to nothing at all. The name now sits above the badges and wraps; the row alignment is the plugin's own CSS rather than a stack of `!important` overrides left from an earlier markup revision.
 - **The plugin's own copy of the framework is the one that runs.** The entry point is required at plugin load so it takes part in the `plugins_loaded` arbitration; requiring it later left the site running another plugin's bundled build.
 
 If a site shows that error after updating, the new `includes/class-rl-fsbi-settings-manager.php` did not reach it: the 2.6.0 library files and the host-side fix ship together.
