@@ -6,7 +6,7 @@
  * Encapsulates all admin page rendering logic separated from the main framework orchestration.
  * This service handles page layout, tabs, sections, fields, and tooltips.
  *
- * @package RL_Options_Framework
+ * @package RL_FSBI_Options_Framework
  */
 
 if (!defined('ABSPATH')) {
@@ -17,21 +17,21 @@ if (!defined('ABSPATH')) {
  * Render service for the options framework.
  * Delegates core framework logic through dependency injection.
  */
-class RL_Options_Render_Service
+class RL_FSBI_Options_Render_Service
 {
 	/**
 	 * Framework instance reference.
 	 *
-	 * @var RL_Options_Framework
+	 * @var RL_FSBI_Options_Framework
 	 */
 	private $framework;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_Options_Framework $framework Framework instance.
+	 * @param RL_FSBI_Options_Framework $framework Framework instance.
 	 */
-	public function __construct(RL_Options_Framework $framework)
+	public function __construct(RL_FSBI_Options_Framework $framework)
 	{
 		$this->framework = $framework;
 	}

@@ -3,7 +3,7 @@
 /**
  * RL Logger - Centralized logging utility for RL Options Framework
  *
- * @package RL_Options_Framework
+ * @package RL_FSBI_Options_Framework
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Generic logging utility class with enable/disable capability.
  */
-final class RL_Logger {
+final class RL_FSBI_Logger {
 	/**
 	 * Current minimum log level.
 	 * Supported: error, warn, info, debug

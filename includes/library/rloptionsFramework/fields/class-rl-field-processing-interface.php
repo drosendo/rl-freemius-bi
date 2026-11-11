@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) {
         return;
 }
 
-interface RL_Field_Processing_Interface
+interface RL_FSBI_Field_Processing_Interface
 {
         /**
          * Sanitize field value.

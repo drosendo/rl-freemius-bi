@@ -15,7 +15,7 @@ class RL_FSBI_Settings_Manager {
 	/**
 	 * Framework instance.
 	 *
-	 * @var RL_Options_Framework|null
+	 * @var RL_FSBI_Options_Framework|null
 	 */
 	private $framework = null;
 
@@ -42,10 +42,15 @@ class RL_FSBI_Settings_Manager {
 		}
 
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/main.php';
+		// Our field renderers implement these interfaces at include time, so the
+		// contracts have to exist before them. They used to be inherited from
+		// whichever plugin defined the framework first.
+		require_once RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/fields/class-rl-field-interface.php';
+		require_once RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/fields/class-rl-field-processing-interface.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/fields/class-rl-fsbi-field-checkbox-list.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/fields/class-rl-fsbi-field-password.php';
 
-		$this->framework = new RL_Options_Framework(
+		$this->framework = new RL_FSBI_Options_Framework(
 			array(
 				'option_name'   => 'rl_fsbi_settings',
 				'menu_title'    => esc_html__( 'Settings', 'rl-freemius-bi' ),
@@ -65,7 +70,7 @@ class RL_FSBI_Settings_Manager {
 		add_action(
 			'rl_fsbi_settings_framework_boot',
 			function ( $fw ) {
-				if ( $fw instanceof RL_Options_Framework ) {
+				if ( $fw instanceof RL_FSBI_Options_Framework ) {
 					$fw->register_field_renderer( new RL_FSBI_Field_Checkbox_List() );
 					$fw->register_field_renderer( new RL_FSBI_Field_Password() );
 				}
@@ -1561,11 +1566,16 @@ class RL_FSBI_Settings_Manager {
 				</p>
 			<?php endif; ?>
 
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<input type="hidden" name="action" value="rl_fsbi_user_backfill" />
-				<?php wp_nonce_field( 'rl_fsbi_user_backfill' ); ?>
-				<button type="submit" class="button"><?php echo esc_html__( 'Run user backfill now', 'rl-freemius-bi' ); ?></button>
-			</form>
+			<?php
+			// A nested <form> here closed the settings form that wraps this field
+			// (the HTML parser drops the inner tag but honours its </form>), which
+			// left the Save button outside the form and made saving impossible.
+			$backfill_url = wp_nonce_url(
+				add_query_arg( 'action', 'rl_fsbi_user_backfill', admin_url( 'admin-post.php' ) ),
+				'rl_fsbi_user_backfill'
+			);
+			?>
+			<a class="button" href="<?php echo esc_url( $backfill_url ); ?>"><?php echo esc_html__( 'Run user backfill now', 'rl-freemius-bi' ); ?></a>
 		</div>
 		<?php
 		return (string) ob_get_clean();
@@ -1808,59 +1818,6 @@ class RL_FSBI_Settings_Manager {
 		exit;
 	}
 
-	/**
-	 * Per-plugin monthly target editor for the Plugin Scope tab.
-	 *
-	 * @return string
-	 */
-	private function get_monthly_targets_panel_html(): string {
-		$catalog = $this->get_option( 'rl_fsbi_plugins_catalog', array() );
-		$catalog = is_array( $catalog ) ? $catalog : array();
-		$targets = $this->get_option( 'rl_fsbi_monthly_targets', array() );
-		$targets = is_array( $targets ) ? $targets : array();
-		$saved   = isset( $_GET['rl_fsbi_targets_saved'] ) && '1' === $_GET['rl_fsbi_targets_saved']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-
-		ob_start();
-		?>
-		<div class="rl-fsbi-wporg-slugs">
-			<?php if ( $saved ) : ?>
-				<div class="notice notice-success inline" style="margin:0 0 10px;"><p><?php esc_html_e( 'Monthly targets saved.', 'rl-freemius-bi' ); ?></p></div>
-			<?php endif; ?>
-
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<input type="hidden" name="action" value="rl_fsbi_save_monthly_targets" />
-				<?php wp_nonce_field( 'rl_fsbi_save_monthly_targets' ); ?>
-
-				<table>
-					<tbody>
-					<?php foreach ( $catalog as $plugin ) :
-						$plugin_id = isset( $plugin['id'] ) ? (int) $plugin['id'] : 0;
-						$title     = isset( $plugin['title'] ) ? (string) $plugin['title'] : 'Plugin #' . $plugin_id;
-						$stored    = isset( $targets[ $plugin_id ] ) ? (int) $targets[ $plugin_id ] : null;
-						?>
-						<tr>
-							<th scope="row"><?php echo esc_html( $title ); ?></th>
-							<td>
-								<input type="number" min="0" step="1" class="small-text"
-									name="target[<?php echo esc_attr( (string) $plugin_id ); ?>]"
-									value="<?php echo null === $stored ? '' : esc_attr( (string) $stored ); ?>"
-									placeholder="<?php echo esc_attr__( 'No target', 'rl-freemius-bi' ); ?>"
-									aria-label="<?php echo esc_attr( sprintf( /* translators: %s: plugin title */ __( 'Monthly new subscription target for %s', 'rl-freemius-bi' ), $title ) ); ?>" />
-								<span class="rl-fsbi-wporg-note"><?php esc_html_e( 'First-time paid subscriptions per month. Leave empty for no target.', 'rl-freemius-bi' ); ?></span>
-							</td>
-						</tr>
-					<?php endforeach; ?>
-					</tbody>
-				</table>
-
-				<p class="submit" style="margin:12px 0 0;">
-					<button type="submit" class="button button-primary"><?php esc_html_e( 'Save Targets', 'rl-freemius-bi' ); ?></button>
-				</p>
-			</form>
-		</div>
-		<?php
-		return (string) ob_get_clean();
-	}
 
 	/**
 	 * Ask WordPress.org about a slug.
@@ -2001,106 +1958,6 @@ class RL_FSBI_Settings_Manager {
 		return $out;
 	}
 
-	/**
-	 * Per-plugin slug editor for the Plugin Scope tab.
-	 *
-	 * @return string
-	 */
-	private function get_wporg_slugs_panel_html(): string {
-		$catalog = $this->get_option( 'rl_fsbi_plugins_catalog', array() );
-		$catalog = is_array( $catalog ) ? $catalog : array();
-
-		$message = isset( $_GET['rl_fsbi_wporg_saved'] ) ? sanitize_text_field( wp_unslash( $_GET['rl_fsbi_wporg_saved'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$fully_saved = isset( $_GET['rl_fsbi_wporg_ok'] ) && '1' === $_GET['rl_fsbi_wporg_ok']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-
-		ob_start();
-		?>
-		<div class="rl-fsbi-wporg-slugs">
-			<style>
-				.rl-fsbi-wporg-slugs{max-width:820px;background:#fff;border:1px solid #c3c4c7;border-radius:6px;padding:14px 18px}
-				.rl-fsbi-wporg-slugs table{width:100%;border-collapse:collapse;font-size:13px}
-				.rl-fsbi-wporg-slugs th,.rl-fsbi-wporg-slugs td{text-align:left;padding:8px 6px;border-bottom:1px solid #f0f0f1;vertical-align:middle}
-				.rl-fsbi-wporg-slugs th{font-weight:600;width:44%}
-				.rl-fsbi-wporg-slugs input[type=text]{width:100%;max-width:280px}
-				.rl-fsbi-wporg-slugs .rl-fsbi-wporg-note{color:#646970;font-size:12px;display:block;margin-top:3px}
-			</style>
-
-			<?php if ( isset( $_GET['rl_fsbi_wporg_checked'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
-				<div class="notice notice-info inline" style="margin:0 0 10px;"><p><?php echo esc_html( sanitize_text_field( wp_unslash( $_GET['rl_fsbi_wporg_checked'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?></p></div>
-			<?php endif; ?>
-
-			<?php if ( '1' === $message ) : ?>
-				<div class="notice notice-success inline" style="margin:0 0 10px;"><p><?php esc_html_e( 'WordPress.org slugs saved.', 'rl-freemius-bi' ); ?></p></div>
-			<?php elseif ( '' !== $message ) : ?>
-				<div class="notice <?php echo $fully_saved ? 'notice-success' : 'notice-warning'; ?> inline" style="margin:0 0 10px;"><p><?php echo esc_html( $message ); ?></p></div>
-			<?php endif; ?>
-
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<input type="hidden" name="action" value="rl_fsbi_save_wporg_slugs" />
-				<?php wp_nonce_field( 'rl_fsbi_save_wporg_slugs' ); ?>
-
-				<table>
-					<tbody>
-					<?php foreach ( $catalog as $plugin ) :
-						$plugin_id    = isset( $plugin['id'] ) ? (int) $plugin['id'] : 0;
-						$title        = isset( $plugin['title'] ) ? (string) $plugin['title'] : 'Plugin #' . $plugin_id;
-						$freemius     = isset( $plugin['slug'] ) ? sanitize_title( (string) $plugin['slug'] ) : '';
-						$stored       = $this->get_wporg_slug( $plugin_id );
-						?>
-						<tr>
-							<th scope="row">
-								<?php echo esc_html( $title ); ?>
-								<?php if ( '' !== $freemius ) : ?>
-									<span class="rl-fsbi-wporg-note"><?php echo esc_html( sprintf( /* translators: %s: Freemius product slug */ __( 'Freemius slug: %s', 'rl-freemius-bi' ), $freemius ) ); ?></span>
-								<?php endif; ?>
-							</th>
-							<td>
-								<input type="text" name="wporg[<?php echo esc_attr( (string) $plugin_id ); ?>]"
-									value="<?php echo esc_attr( $stored ); ?>"
-									placeholder="<?php echo esc_attr__( 'e.g. my-plugin-slug', 'rl-freemius-bi' ); ?>"
-									aria-label="<?php echo esc_attr( sprintf( /* translators: %s: plugin title */ __( 'WordPress.org slug for %s', 'rl-freemius-bi' ), $title ) ); ?>" />
-								<?php if ( '' !== $stored ) : ?>
-									<span class="rl-fsbi-wporg-note"><?php echo esc_html( sprintf( /* translators: %s: stored slug */ __( 'Saved: %s', 'rl-freemius-bi' ), $stored ) ); ?><?php
-									$last_check = get_transient( 'rl_fsbi_wporg_' . md5( $stored ) );
-									if ( is_array( $last_check ) ) {
-										echo ' — ';
-										if ( ! empty( $last_check['available'] ) ) {
-											echo esc_html( sprintf(
-												/* translators: 1: active install count, 2: last check time */
-												__( 'last check found %1$s active installs (%2$s)', 'rl-freemius-bi' ),
-												number_format_i18n( (int) ( $last_check['active_installs'] ?? 0 ) ),
-												(string) ( $last_check['fetched_at'] ?? '' )
-											) );
-										} else {
-											echo esc_html( sprintf(
-												/* translators: %s: reason the lookup failed */
-												__( 'last check failed: %s', 'rl-freemius-bi' ),
-												(string) ( $last_check['detail'] ?? $last_check['reason'] ?? '' )
-											) );
-										}
-									} else {
-										echo ' — ' . esc_html__( 'not checked yet', 'rl-freemius-bi' );
-									}
-									?>
-									<a href="<?php echo esc_url( wp_nonce_url( add_query_arg( array( 'action' => 'rl_fsbi_check_wporg', 'plugin_id' => $plugin_id ), admin_url( 'admin-post.php' ) ), 'rl_fsbi_check_wporg' ) ); ?>"><?php esc_html_e( 'Check now', 'rl-freemius-bi' ); ?></a>
-									</span>
-								<?php else : ?>
-									<span class="rl-fsbi-wporg-note"><?php esc_html_e( 'Nothing saved - the WordPress.org widget is not shown for this product. Leave empty if it is not on WordPress.org.', 'rl-freemius-bi' ); ?></span>
-								<?php endif; ?>
-							</td>
-						</tr>
-					<?php endforeach; ?>
-					</tbody>
-				</table>
-
-				<p class="submit" style="margin:12px 0 0;">
-					<button type="submit" class="button button-primary"><?php esc_html_e( 'Save Slugs', 'rl-freemius-bi' ); ?></button>
-				</p>
-			</form>
-		</div>
-		<?php
-		return (string) ob_get_clean();
-	}
 
 	/**
 	 * Support-tab documentation for GET /wp-json/rl-freemius-bi/v1/summary.

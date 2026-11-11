@@ -10,28 +10,28 @@
  * - Field type expansion and validation
  * - Tab/section/field visibility conditions
  *
- * @package RL_Options_Framework
+ * @package RL_FSBI_Options_Framework
  * @since 2.1.0
  */
 
 /**
  * Schema manager service for RL Options Framework.
  */
-class RL_Options_Schema_Manager {
+class RL_FSBI_Options_Schema_Manager {
 
 	/**
 	 * Framework instance.
 	 *
-	 * @var RL_Options_Framework
+	 * @var RL_FSBI_Options_Framework
 	 */
 	private $framework;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_Options_Framework $framework Framework instance.
+	 * @param RL_FSBI_Options_Framework $framework Framework instance.
 	 */
-	public function __construct( RL_Options_Framework $framework ) {
+	public function __construct( RL_FSBI_Options_Framework $framework ) {
 		$this->framework = $framework;
 	}
 
@@ -244,13 +244,13 @@ class RL_Options_Schema_Manager {
 	 * @param array $field Field configuration.
 	 */
 	private function normalize_field( array $field ): array {
-		if ( ! class_exists( 'RL_Field_Types' ) ) {
+		if ( ! class_exists( 'RL_FSBI_Field_Types' ) ) {
 			require_once __DIR__ . '/../class-rl-field-types.php';
 		}
 
 		// Expand typed aliases (email, phone, postal_code, url, nif) into framework-native field definitions.
-		if ( class_exists( 'RL_Field_Types' ) ) {
-			$field = RL_Field_Types::expand_typed_field( $field );
+		if ( class_exists( 'RL_FSBI_Field_Types' ) ) {
+			$field = RL_FSBI_Field_Types::expand_typed_field( $field );
 		}
 
 		// Provider shorthand: provider => 'countries' (or array) maps to options_provider.

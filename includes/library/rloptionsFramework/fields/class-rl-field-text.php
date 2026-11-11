@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) {
 	return;
 }
 
-class RL_Field_Text implements RL_Field_Interface, RL_Field_Processing_Interface
+class RL_FSBI_Field_Text implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
 {
 	public function type(): string
 	{

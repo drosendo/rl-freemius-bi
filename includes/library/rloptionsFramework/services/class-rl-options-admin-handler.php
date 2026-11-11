@@ -9,28 +9,28 @@
  * - AJAX field options resolution (async option providers)
  * - AJAX field validation (inline validation checks)
  *
- * @package RL_Options_Framework
+ * @package RL_FSBI_Options_Framework
  * @since 2.1.0
  */
 
 /**
  * Admin handler service for RL Options Framework.
  */
-class RL_Options_Admin_Handler {
+class RL_FSBI_Options_Admin_Handler {
 
 	/**
 	 * Framework instance.
 	 *
-	 * @var RL_Options_Framework
+	 * @var RL_FSBI_Options_Framework
 	 */
 	private $framework;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_Options_Framework $framework Framework instance.
+	 * @param RL_FSBI_Options_Framework $framework Framework instance.
 	 */
-	public function __construct( RL_Options_Framework $framework ) {
+	public function __construct( RL_FSBI_Options_Framework $framework ) {
 		$this->framework = $framework;
 	}
 
@@ -41,20 +41,20 @@ class RL_Options_Admin_Handler {
 	 * fires hooks, and redirects with status.
 	 */
 	public function handle_save(): void {
-		RL_Logger::debug( '========== SAVE HANDLER START ==========' );
+		RL_FSBI_Logger::debug( '========== SAVE HANDLER START ==========' );
 
 		if ( ! current_user_can( $this->framework->get_config( 'capability' ) ) ) {
-			RL_Logger::error( 'User does not have required capability.', [ 'capability' => $this->framework->get_config( 'capability' ) ] );
+			RL_FSBI_Logger::error( 'User does not have required capability.', [ 'capability' => $this->framework->get_config( 'capability' ) ] );
 			wp_die( esc_html__( 'You are not allowed to manage these settings.', 'smart-variations-images-premium' ) );
 		}
 
 		$nonce_action = $this->framework->get_config( 'page_slug' ) . '_save_options';
 		$nonce_field  = $this->framework->get_config( 'form_field_prefix' ) . '_nonce';
 		check_admin_referer( $nonce_action, $nonce_field );
-		RL_Logger::debug( 'Nonce verified successfully.' );
+		RL_FSBI_Logger::debug( 'Nonce verified successfully.' );
 
 		$fields_map = $this->framework->get_fields_index();
-		RL_Logger::debug( 'Total fields registered: ' . count( $fields_map ) );
+		RL_FSBI_Logger::debug( 'Total fields registered: ' . count( $fields_map ) );
 
 		// Check for reset section payload
 		$reset_section_input_name = $this->framework->get_config( 'form_field_prefix' ) . '_reset_section';
@@ -83,21 +83,21 @@ class RL_Options_Admin_Handler {
 		}
 
 		$input = isset( $_POST[ $this->framework->get_config( 'form_field_prefix' ) ] ) ? wp_unslash( $_POST[ $this->framework->get_config( 'form_field_prefix' ) ] ) : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		RL_Logger::debug( 'Form field prefix: ' . $this->framework->get_config( 'form_field_prefix' ) );
+		RL_FSBI_Logger::debug( 'Form field prefix: ' . $this->framework->get_config( 'form_field_prefix' ) );
 
 		if ( ! is_array( $input ) ) {
-			RL_Logger::warn( 'Input is not an array; defaulting to empty array.' );
+			RL_FSBI_Logger::warn( 'Input is not an array; defaulting to empty array.' );
 			$input = [];
 		}
 		$this->framework->set_validation_context( $input );
 
-		RL_Logger::debug( 'Submitted field count: ' . count( $input ) );
+		RL_FSBI_Logger::debug( 'Submitted field count: ' . count( $input ) );
 
 		$saved = get_option( $this->framework->get_config( 'option_name' ), [] );
 		if ( ! is_array( $saved ) ) {
 			$saved = [];
 		}
-		RL_Logger::debug( 'Existing saved fields: ' . count( $saved ) );
+		RL_FSBI_Logger::debug( 'Existing saved fields: ' . count( $saved ) );
 
 		$validation_errors = [];
 		$field_errors      = [];
@@ -113,7 +113,7 @@ class RL_Options_Admin_Handler {
 			$value = $this->framework->prepare_value_for_validation( $field, $value );
 
 			if ( in_array( $field_id, [ 'slider_position', 'gallery_type' ], true ) ) {
-				RL_Logger::debug(
+				RL_FSBI_Logger::debug(
 					sprintf(
 						'Processing %s: value="%s", type=%s',
 						$field_id,
@@ -135,7 +135,7 @@ class RL_Options_Admin_Handler {
 					'section_id'  => $field['__section_id'] ?? '',
 					'message'     => $error,
 				];
-				RL_Logger::warn( 'Validation failed for field.', [ 'field_id' => $field_id, 'error' => $error ] );
+				RL_FSBI_Logger::warn( 'Validation failed for field.', [ 'field_id' => $field_id, 'error' => $error ] );
 				continue;
 			}
 
@@ -144,7 +144,7 @@ class RL_Options_Admin_Handler {
 			$saved[ $field_id ]    = $sanitized_value;
 
 			if ( in_array( $field_id, [ 'slider_position', 'gallery_type' ], true ) ) {
-				RL_Logger::debug(
+				RL_FSBI_Logger::debug(
 					sprintf(
 						'Sanitized %s: "%s" -> "%s"',
 						$field_id,
@@ -158,7 +158,7 @@ class RL_Options_Admin_Handler {
 		// If validation errors, redirect with error message.
 		if ( ! empty( $validation_errors ) ) {
 			$error_message = implode( ' ', array_values( $validation_errors ) );
-			RL_Logger::warn( 'Validation errors found.', [ 'message' => $error_message ] );
+			RL_FSBI_Logger::warn( 'Validation errors found.', [ 'message' => $error_message ] );
 			$message_param = $this->framework->get_config( 'form_field_prefix' ) . '_message';
 			$error_param   = $this->framework->get_config( 'form_field_prefix' ) . '_error';
 			wp_safe_redirect(
@@ -175,14 +175,14 @@ class RL_Options_Admin_Handler {
 		}
 
 		$update_result = update_option( $this->framework->get_config( 'option_name' ), $saved );
-		RL_Logger::info( 'update_option result: ' . ( $update_result ? 'SUCCESS' : 'FAILED (or unchanged)' ) );
-		RL_Logger::info( 'Total fields saved: ' . count( $saved ) );
+		RL_FSBI_Logger::info( 'update_option result: ' . ( $update_result ? 'SUCCESS' : 'FAILED (or unchanged)' ) );
+		RL_FSBI_Logger::info( 'Total fields saved: ' . count( $saved ) );
 
 		// Fire generic post-save hooks for host integrations.
 		do_action( $this->framework->get_config( 'option_name' ) . '_settings_saved', $saved ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound
 		do_action( 'rl_options_framework_settings_saved', $saved, $this->framework->get_config(), $this->framework ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 
-		RL_Logger::debug( '========== SAVE HANDLER END ==========' );
+		RL_FSBI_Logger::debug( '========== SAVE HANDLER END ==========' );
 
 		$message_param = $this->framework->get_config( 'form_field_prefix' ) . '_message';
 		wp_safe_redirect(
@@ -204,8 +204,8 @@ class RL_Options_Admin_Handler {
 	 * fires hooks, and returns JSON response.
 	 */
 	public function handle_ajax_save(): void {
-		RL_Logger::debug( '========== AJAX SAVE HANDLER CALLED ==========' );
-		RL_Logger::debug( 'Expected nonce action: ' . $this->framework->get_config( 'ajax_action' ) . '_nonce' );
+		RL_FSBI_Logger::debug( '========== AJAX SAVE HANDLER CALLED ==========' );
+		RL_FSBI_Logger::debug( 'Expected nonce action: ' . $this->framework->get_config( 'ajax_action' ) . '_nonce' );
 
 		// Verify nonce (accept AJAX nonce and fallback to form nonce).
 		$ajax_nonce_action = $this->framework->get_config( 'ajax_action' ) . '_nonce';
@@ -218,8 +218,8 @@ class RL_Options_Admin_Handler {
 		$ajax_nonce_valid = ! empty( $ajax_nonce ) && wp_verify_nonce( $ajax_nonce, $ajax_nonce_action );
 		$form_nonce_valid = ! empty( $form_nonce ) && wp_verify_nonce( $form_nonce, $form_nonce_action );
 
-		RL_Logger::debug( 'AJAX nonce valid: ' . ( $ajax_nonce_valid ? 'yes' : 'no' ) );
-		RL_Logger::debug( 'Form nonce valid: ' . ( $form_nonce_valid ? 'yes' : 'no' ) );
+		RL_FSBI_Logger::debug( 'AJAX nonce valid: ' . ( $ajax_nonce_valid ? 'yes' : 'no' ) );
+		RL_FSBI_Logger::debug( 'Form nonce valid: ' . ( $form_nonce_valid ? 'yes' : 'no' ) );
 
 		if ( ! $ajax_nonce_valid && ! $form_nonce_valid ) {
 			wp_send_json_error(
@@ -239,10 +239,10 @@ class RL_Options_Admin_Handler {
 			);
 		}
 
-		RL_Logger::debug( '========== AJAX SAVE START ==========' );
+		RL_FSBI_Logger::debug( '========== AJAX SAVE START ==========' );
 
 		$fields_map = $this->framework->get_fields_index();
-		RL_Logger::debug( 'Total fields registered: ' . count( $fields_map ) );
+		RL_FSBI_Logger::debug( 'Total fields registered: ' . count( $fields_map ) );
 
 		// Check for import payload first
 		$import_input_name = $this->framework->get_config( 'form_field_prefix' ) . '_import_json';
@@ -311,10 +311,10 @@ class RL_Options_Admin_Handler {
 		}
 
 		$input = isset( $_POST[ $this->framework->get_config( 'form_field_prefix' ) ] ) ? wp_unslash( $_POST[ $this->framework->get_config( 'form_field_prefix' ) ] ) : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		RL_Logger::debug( 'Submitted field count: ' . count( $input ) );
+		RL_FSBI_Logger::debug( 'Submitted field count: ' . count( $input ) );
 
 		if ( ! is_array( $input ) ) {
-			RL_Logger::warn( 'Input is not an array.' );
+			RL_FSBI_Logger::warn( 'Input is not an array.' );
 			$input = [];
 		}
 		$this->framework->set_validation_context( $input );
@@ -339,7 +339,7 @@ class RL_Options_Admin_Handler {
 
 			// Debug specific fields.
 			if ( in_array( $field_id, [ 'slider_position', 'gallery_type' ], true ) ) {
-				RL_Logger::debug(
+				RL_FSBI_Logger::debug(
 					sprintf(
 						'AJAX Processing %s: value="%s", type=%s',
 						$field_id,
@@ -361,7 +361,7 @@ class RL_Options_Admin_Handler {
 					'section_id'  => $field['__section_id'] ?? '',
 					'message'     => $error,
 				];
-				RL_Logger::warn( 'AJAX validation failed for field.', [ 'field_id' => $field_id, 'error' => $error ] );
+				RL_FSBI_Logger::warn( 'AJAX validation failed for field.', [ 'field_id' => $field_id, 'error' => $error ] );
 				continue;
 			}
 
@@ -370,7 +370,7 @@ class RL_Options_Admin_Handler {
 			$saved[ $field_id ] = $sanitized_value;
 
 			if ( in_array( $field_id, [ 'slider_position', 'gallery_type' ], true ) ) {
-				RL_Logger::debug(
+				RL_FSBI_Logger::debug(
 					sprintf(
 						'AJAX Sanitized %s: "%s" -> "%s"',
 						$field_id,
@@ -383,7 +383,7 @@ class RL_Options_Admin_Handler {
 
 		// If validation errors, return error.
 		if ( ! empty( $validation_errors ) ) {
-			RL_Logger::warn( 'AJAX validation errors.', $validation_errors );
+			RL_FSBI_Logger::warn( 'AJAX validation errors.', $validation_errors );
 			wp_send_json_error(
 				[
 					'message'       => implode( ' ', array_values( $validation_errors ) ),
@@ -394,14 +394,14 @@ class RL_Options_Admin_Handler {
 		}
 
 		$update_result = update_option( $this->framework->get_config( 'option_name' ), $saved );
-		RL_Logger::info( 'AJAX update_option result: ' . ( $update_result ? 'SUCCESS' : 'FAILED (or unchanged)' ) );
-		RL_Logger::info( 'Total fields saved: ' . count( $saved ) );
+		RL_FSBI_Logger::info( 'AJAX update_option result: ' . ( $update_result ? 'SUCCESS' : 'FAILED (or unchanged)' ) );
+		RL_FSBI_Logger::info( 'Total fields saved: ' . count( $saved ) );
 
 		// Fire generic post-save hooks for host integrations.
 		do_action( $this->framework->get_config( 'option_name' ) . '_settings_saved', $saved ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound
 		do_action( 'rl_options_framework_settings_saved', $saved, $this->framework->get_config(), $this->framework ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 
-		RL_Logger::debug( '========== AJAX SAVE END ==========' );
+		RL_FSBI_Logger::debug( '========== AJAX SAVE END ==========' );
 
 		wp_send_json_success(
 			[

@@ -11,28 +11,28 @@
  * - Dynamic option resolution (providers, geo fields)
  * - Dependency rule matching
  *
- * @package RL_Options_Framework
+ * @package RL_FSBI_Options_Framework
  * @since 2.1.0
  */
 
 /**
  * Field processor service for RL Options Framework.
  */
-class RL_Options_Field_Processor {
+class RL_FSBI_Options_Field_Processor {
 
 	/**
 	 * Framework instance.
 	 *
-	 * @var RL_Options_Framework
+	 * @var RL_FSBI_Options_Framework
 	 */
 	private $framework;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_Options_Framework $framework Framework instance.
+	 * @param RL_FSBI_Options_Framework $framework Framework instance.
 	 */
-	public function __construct( RL_Options_Framework $framework ) {
+	public function __construct( RL_FSBI_Options_Framework $framework ) {
 		$this->framework = $framework;
 	}
 
@@ -46,13 +46,13 @@ class RL_Options_Field_Processor {
 		if ( 'image_select' === $type ) {
 			$options = $field['options'] ?? [];
 			if ( ! is_array( $options ) || empty( $options ) ) {
-				RL_Logger::warn( 'image_select field is missing options.', [ 'field_id' => $id ] );
+				RL_FSBI_Logger::warn( 'image_select field is missing options.', [ 'field_id' => $id ] );
 				return;
 			}
 
 			foreach ( $options as $key => $option ) {
 				if ( ! is_array( $option ) || empty( $option['src'] ) || empty( $option['label'] ) ) {
-					RL_Logger::warn( 'image_select option should define src and label.', [
+					RL_FSBI_Logger::warn( 'image_select option should define src and label.', [
 						'field_id'   => $id,
 						'option_key' => $key,
 					] );
@@ -62,7 +62,7 @@ class RL_Options_Field_Processor {
 
 		if ( 'image' === $type ) {
 			if ( ! empty( $field['options'] ) ) {
-				RL_Logger::warn( 'image field should not define options; use image_select instead.', [ 'field_id' => $id ] );
+				RL_FSBI_Logger::warn( 'image field should not define options; use image_select instead.', [ 'field_id' => $id ] );
 			}
 		}
 	}
@@ -108,7 +108,7 @@ class RL_Options_Field_Processor {
 		$field_type = (string) ( $field['type'] ?? 'text' );
 		$field_registry = $this->framework->field_registry();
 		$renderer       = $field_registry ? $field_registry->get( $field_type ) : null;
-		if ( $renderer instanceof RL_Field_Processing_Interface ) {
+		if ( $renderer instanceof RL_FSBI_Field_Processing_Interface ) {
 			return $renderer->sanitize(
 				$field,
 				$value,
@@ -141,7 +141,7 @@ class RL_Options_Field_Processor {
 
 		$field_registry = $this->framework->field_registry();
 		$renderer       = $field_registry ? $field_registry->get( (string) $field_type ) : null;
-		if ( $renderer instanceof RL_Field_Processing_Interface ) {
+		if ( $renderer instanceof RL_FSBI_Field_Processing_Interface ) {
 			return $renderer->prepare_for_validation(
 				$field,
 				$value,
@@ -226,7 +226,7 @@ class RL_Options_Field_Processor {
 		$field_type     = (string) ( $field['type'] ?? 'text' );
 		$field_registry = $this->framework->field_registry();
 		$renderer       = $field_registry ? $field_registry->get( $field_type ) : null;
-		if ( $renderer instanceof RL_Field_Processing_Interface ) {
+		if ( $renderer instanceof RL_FSBI_Field_Processing_Interface ) {
 			return $renderer->validate(
 				$field,
 				$value,

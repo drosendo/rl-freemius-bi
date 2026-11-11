@@ -18,7 +18,7 @@
  * than once (e.g., two plugins bundling the same library, or Composer
  * autoload + a manual require coexisting in the same project).
  *
- * @package RL_Options_Framework
+ * @package RL_FSBI_Options_Framework
  * @version 2.2.0
  */
 
@@ -27,7 +27,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Guard against duplicate class declarations on multiple requires.
-if ( ! class_exists( 'RL_Options_Framework', false ) ) {
+if ( ! class_exists( 'RL_FSBI_Options_Framework', false ) ) {
 	require_once __DIR__ . '/class-rl-logger.php';
 	require_once __DIR__ . '/class-rl-options-framework.php';
 	require_once __DIR__ . '/services/class-rl-options-render-service.php';

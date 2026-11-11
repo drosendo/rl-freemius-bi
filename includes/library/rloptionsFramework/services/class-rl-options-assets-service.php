@@ -6,25 +6,25 @@
  * Handles admin asset enqueueing: CSS, JavaScript, and inline styles.
  * Manages CDN vs local asset strategy based on config.
  *
- * @package RL_Options_Framework
+ * @package RL_FSBI_Options_Framework
  */
 
 if (!defined('ABSPATH')) {
 	return;
 }
 
-class RL_Options_Assets_Service {
+class RL_FSBI_Options_Assets_Service {
 	/**
-	 * @var RL_Options_Framework Framework instance for config/option access.
+	 * @var RL_FSBI_Options_Framework Framework instance for config/option access.
 	 */
 	private $framework;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_Options_Framework $framework Framework instance.
+	 * @param RL_FSBI_Options_Framework $framework Framework instance.
 	 */
-	public function __construct(RL_Options_Framework $framework) {
+	public function __construct(RL_FSBI_Options_Framework $framework) {
 		$this->framework = $framework;
 	}
 
@@ -131,9 +131,9 @@ class RL_Options_Assets_Service {
 				font-weight: 600;
 			}
 		";
-		wp_register_style('rl-framework-custom-css', false, [], $this->framework->get_config('version'));
-		wp_enqueue_style('rl-framework-custom-css');
-		wp_add_inline_style('rl-framework-custom-css', $custom_css);
+		wp_register_style('rl-fsbi-framework-custom-css', false, [], $this->framework->get_config('version'));
+		wp_enqueue_style('rl-fsbi-framework-custom-css');
+		wp_add_inline_style('rl-fsbi-framework-custom-css', $custom_css);
 
 		wp_enqueue_style('wp-color-picker');
 
@@ -152,14 +152,14 @@ class RL_Options_Assets_Service {
 
 		// SweetAlert2 for better notifications
 		wp_enqueue_style(
-			'sweetalert2',
+			'rl-fsbi-sweetalert2',
 			$sweetalert_css_url,
 			[],
 			'11.0.0'
 		);
 		// Tippy.js CSS for tooltips
 		wp_enqueue_style(
-			'tippy-js',
+			'rl-fsbi-tippy',
 			$tippy_css_url,
 			[],
 			'6.3.7'
@@ -173,7 +173,7 @@ class RL_Options_Assets_Service {
 		wp_enqueue_script('jquery-ui-datepicker');
 		wp_localize_jquery_ui_datepicker(); // i18n: locale-aware month/day names
 		wp_enqueue_script(
-			'sweetalert2',
+			'rl-fsbi-sweetalert2',
 			$sweetalert_js_url,
 			[],
 			'11.0.0',
@@ -191,7 +191,7 @@ class RL_Options_Assets_Service {
 
 		// Tippy.js for tooltips
 		wp_enqueue_script(
-			'tippy-js',
+			'rl-fsbi-tippy',
 			$tippy_js_url,
 			['popper-js'],
 			'6.3.7',
@@ -204,7 +204,7 @@ class RL_Options_Assets_Service {
 		wp_enqueue_script(
 			$config['page_slug'] . '-framework',
 			$assets_url . 'js/options-framework.js',
-			['jquery', 'wp-color-picker', 'jquery-ui-datepicker', 'sweetalert2', 'tippy-js', $config['page_slug'] . '-rl-logger'],
+			['jquery', 'wp-color-picker', 'jquery-ui-datepicker', 'rl-fsbi-sweetalert2', 'rl-fsbi-tippy', $config['page_slug'] . '-rl-logger'],
 			$config['version'],
 			true
 		);

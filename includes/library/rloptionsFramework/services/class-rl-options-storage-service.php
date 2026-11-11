@@ -8,28 +8,28 @@
  * - Export and import
  * - Reset to schema defaults
  *
- * @package RL_Options_Framework
+ * @package RL_FSBI_Options_Framework
  * @since 2.1.0
  */
 
 /**
  * Storage service for RL Options Framework.
  */
-class RL_Options_Storage_Service {
+class RL_FSBI_Options_Storage_Service {
 
 	/**
 	 * Framework instance.
 	 *
-	 * @var RL_Options_Framework
+	 * @var RL_FSBI_Options_Framework
 	 */
 	private $framework;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RL_Options_Framework $framework Framework instance.
+	 * @param RL_FSBI_Options_Framework $framework Framework instance.
 	 */
-	public function __construct( RL_Options_Framework $framework ) {
+	public function __construct( RL_FSBI_Options_Framework $framework ) {
 		$this->framework = $framework;
 	}
 

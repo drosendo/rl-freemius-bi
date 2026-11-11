@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) {
 	return;
 }
 
-class RL_Field_Import implements RL_Field_Interface, RL_Field_Processing_Interface
+class RL_FSBI_Field_Import implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface
 {
 	public function type(): string
 	{
@@ -21,7 +21,7 @@ class RL_Field_Import implements RL_Field_Interface, RL_Field_Processing_Interfa
 			echo '<p>' . wp_kses_post($desc) . '</p>';
 		}
 
-		$framework = RL_Options_Framework::instance();
+		$framework = RL_FSBI_Options_Framework::instance();
 		$import_input_name = $framework->get_config('form_field_prefix') . '_import_json';
 
 		// File input for the user

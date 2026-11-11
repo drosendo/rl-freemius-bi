@@ -6,7 +6,7 @@
  * This class intentionally ships with zero business/domain presets.
  * Theme/plugin developers register their own presets and bundles.
  *
- * @package RL_Options_Framework
+ * @package RL_FSBI_Options_Framework
  * @version 2.1.0
  */
 
@@ -14,7 +14,7 @@ if (!defined('ABSPATH')) {
 	return;
 }
 
-class RL_Field_Presets
+class RL_FSBI_Field_Presets
 {
 	/**
 	 * Registered preset definitions.
@@ -64,7 +64,7 @@ class RL_Field_Presets
 	/**
 	 * Register or replace a bundle resolver.
 	 *
-	 * Resolver signature: function(array $config, RL_Field_Presets $registry): array
+	 * Resolver signature: function(array $config, RL_FSBI_Field_Presets $registry): array
 	 *
 	 * @param string   $bundle_id Bundle identifier.
 	 * @param callable $resolver  Bundle callback.

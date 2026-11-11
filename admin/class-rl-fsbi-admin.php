@@ -4732,15 +4732,15 @@ class RL_FSBI_Admin
 			);
 			$logs[] = $entry;
 
-			if (class_exists('RL_Logger')) {
+			if (class_exists('RL_FSBI_Logger')) {
 				if ('error' === $level) {
-					RL_Logger::error($message, $context);
+					RL_FSBI_Logger::error($message, $context);
 				} elseif ('warn' === $level) {
-					RL_Logger::warn($message, $context);
+					RL_FSBI_Logger::warn($message, $context);
 				} elseif ('info' === $level) {
-					RL_Logger::info($message, $context);
+					RL_FSBI_Logger::info($message, $context);
 				} else {
-					RL_Logger::debug($message, $context);
+					RL_FSBI_Logger::debug($message, $context);
 				}
 			}
 		};
@@ -5087,15 +5087,15 @@ class RL_FSBI_Admin
 			);
 			$logs[] = $entry;
 
-			if (class_exists('RL_Logger')) {
+			if (class_exists('RL_FSBI_Logger')) {
 				if ('error' === $level) {
-					RL_Logger::error($message, $context);
+					RL_FSBI_Logger::error($message, $context);
 				} elseif ('warn' === $level) {
-					RL_Logger::warn($message, $context);
+					RL_FSBI_Logger::warn($message, $context);
 				} elseif ('info' === $level) {
-					RL_Logger::info($message, $context);
+					RL_FSBI_Logger::info($message, $context);
 				} else {
-					RL_Logger::debug($message, $context);
+					RL_FSBI_Logger::debug($message, $context);
 				}
 			}
 		};

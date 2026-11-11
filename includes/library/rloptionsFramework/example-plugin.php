@@ -16,7 +16,7 @@ require_once __DIR__ . '/main.php';
 add_action('plugins_loaded', function() {
     // 2. Initialize the framework
     // The framework will register the admin menu automatically.
-    $framework = new RL_Options_Framework(
+    $framework = new RL_FSBI_Options_Framework(
         'my_plugin_options', // Option Key (saved in wp_options)
         [
             'menu_title' => 'My Plugin Settings',

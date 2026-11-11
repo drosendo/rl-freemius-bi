@@ -10,7 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class RL_FSBI_Field_Checkbox_List implements RL_Field_Interface, RL_Field_Processing_Interface {
+class RL_FSBI_Field_Checkbox_List implements RL_FSBI_Field_Interface, RL_FSBI_Field_Processing_Interface {
 
 	/**
 	 * Field type identifier.
