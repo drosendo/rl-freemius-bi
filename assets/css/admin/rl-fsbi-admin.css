@@ -2742,3 +2742,90 @@ body[class*="rl-freemius-bi"] #wpfooter {
 	-webkit-backdrop-filter: none !important;
 	box-shadow: none !important;
 }
+
+/* WP Compress also forces `.swal2-popup { padding: 0; border-radius: 16px }` on
+   every SweetAlert site-wide, which turns this toast into a pill: the icon is
+   pushed off the edge, the text is squeezed beside it and the close button lands
+   on top of the title. A toast is a notice, not a dialog - square corners, one
+   row, icon and label centred, close button out of the way. */
+.rl-toast-container .swal2-popup.rl-toast-popup {
+	position: relative !important;
+	display: flex !important;
+	align-items: center !important;
+	justify-content: flex-start !important;
+	gap: 10px !important;
+	width: auto !important;
+	min-height: 44px !important;
+	padding: 8px 44px 8px 14px !important;
+	border: 1px solid #dcdcde !important;
+	border-radius: 4px !important;
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12) !important;
+	overflow: visible !important;
+}
+
+.rl-toast-container .swal2-popup.rl-toast-popup .swal2-header {
+	display: flex !important;
+	align-items: center !important;
+	gap: 10px !important;
+	margin: 0 !important;
+	padding: 0 !important;
+}
+
+.rl-toast-container .swal2-popup.rl-toast-popup .swal2-icon {
+	position: relative !important;
+	width: 20px !important;
+	height: 20px !important;
+	min-width: 20px !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	border: 0 !important;
+	border-radius: 50% !important;
+	background-position: center !important;
+	background-repeat: no-repeat !important;
+	background-size: 12px 12px !important;
+	animation: none !important;
+}
+
+/* SweetAlert draws its icon at em-based sizes with a ring and animated line
+   segments that spill outside the 20px box in both v9 and v11. The toast paints
+   its own compact disc instead, so the mark is the same size and position on any
+   version of the library another plugin happens to load. */
+.rl-toast-container .swal2-popup.rl-toast-popup .swal2-icon > *,
+.rl-toast-container .swal2-popup.rl-toast-popup .swal2-icon::before,
+.rl-toast-container .swal2-popup.rl-toast-popup .swal2-icon::after {
+	display: none !important;
+	content: none !important;
+}
+
+.rl-toast-container .swal2-popup.rl-toast-popup .swal2-icon.swal2-success {
+	background-color: #00a32a !important;
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M3.4 8.6l3.1 3.1 6.1-6.4'/%3E%3C/svg%3E") !important;
+}
+
+.rl-toast-container .swal2-popup.rl-toast-popup .swal2-icon.swal2-error {
+	background-color: #d63638 !important;
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' d='M4.6 4.6l6.8 6.8M11.4 4.6l-6.8 6.8'/%3E%3C/svg%3E") !important;
+}
+
+.rl-toast-container .swal2-popup.rl-toast-popup .swal2-title {
+	margin: 0 !important;
+	padding: 0 !important;
+	font-size: 14px !important;
+	font-weight: 500 !important;
+	line-height: 1.3 !important;
+	text-align: start !important;
+	color: #1d2327 !important;
+}
+
+.rl-toast-container .swal2-popup.rl-toast-popup .swal2-close {
+	position: absolute !important;
+	inset-inline-end: 6px !important;
+	top: 50% !important;
+	transform: translateY(-50%) !important;
+	width: 24px !important;
+	height: 24px !important;
+	margin: 0 !important;
+	font-size: 16px !important;
+	line-height: 24px !important;
+	color: #787c82 !important;
+}
