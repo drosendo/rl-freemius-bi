@@ -403,6 +403,17 @@ class RL_FSBI_Detection {
 				}
 			}
 
+			// A full history pull takes a while and the browser used to sit on a
+			// blank page with no sign of life. The count is published so the notice
+			// can say what is happening.
+			update_option( 'rl_fsbi_detection_progress', array(
+				'stage'     => 'payments',
+				'plugin_id' => (int) $plugin_id,
+				'fetched'   => count( $all ),
+				'started'   => (int) get_option( 'rl_fsbi_detection_started', time() ),
+				'at'        => time(),
+			), false );
+
 			$offset += $count;
 
 			if ( $offset > 20000 ) {

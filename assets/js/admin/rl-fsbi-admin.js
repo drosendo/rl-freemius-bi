@@ -1957,6 +1957,7 @@
 			// scroll offset is measured rather than guessed.
 			this.measureStickyHeader();
 
+			this.bindDetectionRun();
 			this.renderRecentMonths(extra);
 			this.renderActivity(extra.recent_activity || []);
 
@@ -2169,6 +2170,90 @@
 		 * @param {Array}  series  Points of {label, value}.
 		 * @returns {void}
 		 */
+		/**
+		 * Run detection with a live readout instead of a silent wait.
+		 *
+		 * A full payment history pull can take a minute; the page used to sit
+		 * there with no sign that anything was happening.
+		 *
+		 * @function bindDetectionRun
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
+		bindDetectionRun: function() {
+			const button = document.querySelector('[data-detection-run]');
+			if (!button || this.detectionBound) {
+				return;
+			}
+			this.detectionBound = true;
+
+			button.addEventListener('click', (event) => {
+				event.preventDefault();
+
+				const notice = button.closest('.rl-fsbi-detection-notice');
+				const status = notice ? notice.querySelector('[data-detection-status]') : null;
+				const text = notice ? notice.querySelector('[data-detection-text]') : null;
+				const started = Date.now();
+
+				button.setAttribute('aria-disabled', 'true');
+				button.style.pointerEvents = 'none';
+				button.textContent = 'Detecting…';
+				if (status) {
+					status.hidden = false;
+				}
+				if (text) {
+					text.textContent = 'Reading your payment history…';
+				}
+
+				const format = (seconds) => Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
+
+				const poll = window.setInterval(async () => {
+					const elapsed = Math.round((Date.now() - started) / 1000);
+					try {
+						const body = new URLSearchParams({ action: 'rl_fsbi_detection_progress', nonce: rlFsbiAdmin.nonce });
+						const response = await fetch(rlFsbiAdmin.ajaxUrl, { method: 'POST', credentials: 'same-origin', body });
+						const json = await response.json();
+						const data = (json && json.data) || {};
+						if (text) {
+							const fetched = Number(data.fetched || 0).toLocaleString();
+							text.textContent = data.stage === 'payments'
+								? `Reading payments for product ${data.plugin_id || ''} — ${fetched} so far (${format(elapsed)})`
+								: `Reading your payment history… (${format(elapsed)})`;
+						}
+					} catch (e) {
+						if (text) {
+							text.textContent = `Reading your payment history… (${format(elapsed)})`;
+						}
+					}
+				}, 1500);
+
+				// The request that does the work runs alongside the polling.
+				fetch(button.getAttribute('href'), { credentials: 'same-origin' })
+					.then((response) => {
+						// A timeout on the host comes back as a 5xx: say so rather
+						// than reloading into the same empty notice.
+						if (!response.ok) {
+							throw new Error('detection failed');
+						}
+					})
+					.then(() => {
+						window.clearInterval(poll);
+						if (text) {
+							text.textContent = 'Done. Reloading…';
+						}
+						window.location.reload();
+					})
+					.catch(() => {
+						window.clearInterval(poll);
+						if (text) {
+							text.textContent = 'Detection did not finish. Try again, or set the values manually.';
+						}
+						button.textContent = 'Run detection';
+						button.style.pointerEvents = '';
+					});
+			});
+		},
+
 		renderSparkline: function(id, series) {
 			const canvas = document.getElementById('rl-fsbi-kpi-' + id + '-spark');
 			if (!canvas) {

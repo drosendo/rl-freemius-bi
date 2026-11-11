@@ -120,6 +120,7 @@ class RL_FSBI {
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_sync_cancel', $plugin_admin, 'handle_sync_cancel_ajax' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_refresh_latest', $plugin_admin, 'handle_refresh_latest_ajax' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_get_dashboard_data', $plugin_admin, 'handle_get_dashboard_data_ajax' );
+		$this->loader->add_action( 'wp_ajax_rl_fsbi_detection_progress', $plugin_admin, 'handle_detection_progress_ajax' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_export_monthly_csv', $plugin_admin, 'handle_export_monthly_csv_ajax' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_get_marketing_optins', $plugin_admin, 'handle_get_marketing_optins_ajax' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_fetch_mailchimp_data', $plugin_admin, 'handle_fetch_mailchimp_data_ajax' );

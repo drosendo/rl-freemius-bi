@@ -4034,8 +4034,9 @@ class RL_FSBI_Admin
 
 			echo '<div class="notice notice-info rl-fsbi-detection-notice"><p><strong>' . esc_html__('Setup not detected yet', 'rl-freemius-bi') . '</strong> ';
 			echo '<span class="description">' . esc_html__('The commission model, currencies, plans and WordPress.org slug can be read from your own Freemius data. Nothing is applied until you accept the result.', 'rl-freemius-bi') . '</span></p>';
-			echo '<p><a href="' . esc_url($redetect_url) . '" class="button button-primary">' . esc_html__('Run detection', 'rl-freemius-bi') . '</a> ';
-			echo '<a href="' . esc_url($edit_url) . '" class="button">' . esc_html__('Set it manually', 'rl-freemius-bi') . '</a></p></div>';
+			echo '<p><a href="' . esc_url($redetect_url) . '" class="button button-primary rl-fsbi-detection-run" data-detection-run="1">' . esc_html__('Run detection', 'rl-freemius-bi') . '</a> ';
+			echo '<a href="' . esc_url($edit_url) . '" class="button">' . esc_html__('Set it manually', 'rl-freemius-bi') . '</a></p>';
+			echo '<p class="rl-fsbi-detection-status" data-detection-status hidden><span class="spinner is-active" style="float:none;margin:0 8px 0 0"></span><span data-detection-text></span></p></div>';
 
 			return;
 		}
@@ -4099,7 +4100,8 @@ class RL_FSBI_Admin
 			echo '<span class="dashicons dashicons-yes-alt" aria-hidden="true" style="color:#22c89b"></span> ' . esc_html__('Detected values accepted. Manual values always win.', 'rl-freemius-bi') . ' ';
 		}
 		echo '<a class="button" href="' . esc_url($edit_url) . '">' . esc_html__('Edit manually', 'rl-freemius-bi') . '</a> ';
-		echo '<a class="button" href="' . esc_url($redetect_url) . '">' . esc_html__('Re-detect', 'rl-freemius-bi') . '</a>';
+		echo '<a class="button rl-fsbi-detection-run" href="' . esc_url($redetect_url) . '" data-detection-run="1">' . esc_html__('Re-detect', 'rl-freemius-bi') . '</a>';
+		echo '<p class="rl-fsbi-detection-status" data-detection-status hidden><span class="spinner is-active" style="float:none;margin:0 8px 0 0"></span><span data-detection-text></span></p>';
 		echo '</p></div>';
 	}
 
@@ -4150,6 +4152,30 @@ class RL_FSBI_Admin
 	}
 
 	/**
+	 * Progress of a detection run, for the notice's live readout.
+	 *
+	 * @return void
+	 */
+	public function handle_detection_progress_ajax()
+	{
+		check_ajax_referer('rl_fsbi_nonce', 'nonce');
+
+		if (! current_user_can('manage_options')) {
+			wp_send_json_error(esc_html__('Unauthorized', 'rl-freemius-bi'));
+		}
+
+		$progress = get_option('rl_fsbi_detection_progress', array());
+		$started = (int) get_option('rl_fsbi_detection_started', 0);
+
+		wp_send_json_success(array(
+			'stage' => is_array($progress) ? (string) ($progress['stage'] ?? '') : '',
+			'plugin_id' => is_array($progress) ? (int) ($progress['plugin_id'] ?? 0) : 0,
+			'fetched' => is_array($progress) ? (int) ($progress['fetched'] ?? 0) : 0,
+			'elapsed' => $started > 0 ? max(0, time() - $started) : 0,
+		));
+	}
+
+	/**
 	 * Run detection again on demand.
 	 *
 	 * @return void
@@ -4162,8 +4188,13 @@ class RL_FSBI_Admin
 
 		check_admin_referer('rl_fsbi_detection_redetect');
 
+		update_option('rl_fsbi_detection_started', time(), false);
+		update_option('rl_fsbi_detection_progress', array('stage' => 'starting', 'fetched' => 0, 'started' => time(), 'at' => time()), false);
+
 		$detection = new RL_FSBI_Detection($this->settings);
 		$detection->run($this->get_selected_plugin_ids());
+
+		update_option('rl_fsbi_detection_progress', array('stage' => 'complete', 'at' => time()), false);
 
 		wp_safe_redirect(add_query_arg('rl_fsbi_detected', 'redetected', wp_get_referer() ?: admin_url('admin.php?page=rl-freemius-bi')));
 		exit;
