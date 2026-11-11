@@ -81,12 +81,14 @@ class RL_FSBI {
 		$this->loader->add_action( 'admin_menu', $plugin_admin, 'add_plugin_admin_menu' );
 		$this->loader->add_action( 'admin_post_rl_fsbi_user_backfill', $plugin_admin, 'handle_user_backfill_action' );
 		$this->loader->add_action( 'admin_post_rl_fsbi_save_wporg_slugs', $this, 'handle_save_wporg_slugs' );
+		$this->loader->add_action( 'admin_post_rl_fsbi_save_monthly_targets', $this, 'handle_save_monthly_targets' );
 		$this->loader->add_action( 'rest_api_init', $this, 'register_rest_routes' );
 
 		// Lazy callbacks only: instantiating these here would build a settings
 		// manager on every single request.
 		$this->loader->add_filter( 'cron_schedules', $this, 'add_fsbi_cron_schedules' );
 		$this->loader->add_action( 'admin_init', $this, 'schedule_background_jobs' );
+		$this->loader->add_action( 'admin_init', $this, 'maybe_reset_debug_mode', 5 );
 		$this->loader->add_action( 'rl_fsbi_user_sync', $this, 'run_user_sync_cron' );
 		$this->loader->add_action( 'rl_fsbi_api_log_cleanup', $this, 'run_api_log_cleanup' );
 		$this->loader->add_action( 'rl_fsbi_fetch_coupons', $plugin_admin, 'run_scheduled_coupon_fetch' );
@@ -148,6 +150,16 @@ class RL_FSBI {
 		$settings->handle_save_wporg_slugs();
 	}
 
+	/**
+	 * Passthrough for the per-plugin monthly target form.
+	 *
+	 * @return void
+	 */
+	public function handle_save_monthly_targets() {
+		$settings = new RL_FSBI_Settings_Manager();
+		$settings->handle_save_monthly_targets();
+	}
+
 	public function register_rest_routes() {
 		$rest = new RL_FSBI_REST_API();
 		$rest->register_routes();
@@ -181,6 +193,30 @@ class RL_FSBI {
 		if ( ! wp_next_scheduled( 'rl_fsbi_rest_warm' ) ) {
 			wp_schedule_event( time() + 5 * MINUTE_IN_SECONDS, 'hourly', 'rl_fsbi_rest_warm' );
 		}
+	}
+
+	/**
+	 * Force Debug Mode off once per release.
+	 *
+	 * Debug Mode used to be written on by default, so a site that upgraded with
+	 * it enabled kept verbose logging running indefinitely. This clears it once
+	 * per version; an administrator who switches it back on afterwards keeps it
+	 * on until the next release.
+	 *
+	 * @return void
+	 */
+	public function maybe_reset_debug_mode() {
+		if ( get_option( 'rl_fsbi_debug_reset_for' ) === $this->get_version() ) {
+			return;
+		}
+
+		$settings = get_option( 'rl_fsbi_settings' );
+		if ( is_array( $settings ) && ! empty( $settings['enable_debug'] ) ) {
+			$settings['enable_debug'] = false;
+			update_option( 'rl_fsbi_settings', $settings );
+		}
+
+		update_option( 'rl_fsbi_debug_reset_for', $this->get_version(), false );
 	}
 
 	/**
