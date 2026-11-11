@@ -8,6 +8,16 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Deploy / client credentials. sftp.json holds a plaintext FTP password; it must
+# never reach a repository, whatever directory depth it sits at.
+sftp.json
+**/sftp.json
+*.sftp.json
+.ftpconfig
+.vscode-sftp
+deploy.json
+**/deploy.json
 *.sublime-project
 *.sublime-workspace
 
