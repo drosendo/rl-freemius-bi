@@ -53,6 +53,53 @@ class RL_FSBI_Activator {
 	}
 
 	/**
+	 * One-time work for a plugin version bump (not a schema bump).
+	 *
+	 * The revenue share has to be present for commission to be deducted, and an
+	 * account that detection called legacy kept an empty setting because only a
+	 * manual Accept ever wrote it. Persisting it here means a deployed update
+	 * stops reporting "revenue share not set" without anyone clicking anything.
+	 *
+	 * @return void
+	 */
+	public static function maybe_upgrade_plugin() {
+		$installed = (string) get_option( 'rl_fsbi_plugin_version', '' );
+
+		if ( RL_FSBI_VERSION === $installed ) {
+			return;
+		}
+
+		$settings = get_option( 'rl_fsbi_settings' );
+		if ( ! is_array( $settings ) ) {
+			$settings = array();
+		}
+
+		$share = isset( $settings['rl_fsbi_fs_revenue_share'] ) ? trim( (string) $settings['rl_fsbi_fs_revenue_share'] ) : '';
+		$model = isset( $settings['rl_fsbi_commission_model'] ) ? (string) $settings['rl_fsbi_commission_model'] : '';
+
+		if ( '' === $model && class_exists( 'RL_FSBI_Detection' ) ) {
+			$summary = get_option( RL_FSBI_Detection::OPTION_SUMMARY, array() );
+			if ( is_array( $summary ) && ! empty( $summary['model'] ) ) {
+				$model = (string) $summary['model'];
+				$settings['rl_fsbi_commission_model'] = $model;
+			}
+		}
+
+		if ( '' === $share && 'legacy' === $model && class_exists( 'RL_FSBI_Detection' ) ) {
+			$summary = get_option( RL_FSBI_Detection::OPTION_SUMMARY, array() );
+			$rate    = is_array( $summary ) ? (float) ( $summary['marginal_rate'] ?? 0 ) : 0.0;
+			$settings['rl_fsbi_fs_revenue_share'] = (string) ( $rate > 0 ? $rate : RL_FSBI_Detection::TIER_3_RATE );
+
+			if ( ! isset( $settings['rl_fsbi_fs_fixed_fee'] ) || '' === trim( (string) $settings['rl_fsbi_fs_fixed_fee'] ) ) {
+				$settings['rl_fsbi_fs_fixed_fee'] = '0';
+			}
+		}
+
+		update_option( 'rl_fsbi_settings', $settings );
+		update_option( 'rl_fsbi_plugin_version', RL_FSBI_VERSION );
+	}
+
+	/**
 	 * Create the two add-on tables without touching the main schema.
 	 *
 	 * These are deliberately NOT part of the dbDelta pass: running dbDelta over

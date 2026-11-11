@@ -1943,23 +1943,10 @@ class RL_FSBI_Admin
 			}
 		}
 
-		// What renews in the next 30 days, valued in the reporting currency.
-		$renewals_due = 0;
-		$renewals_due_amount = 0.0;
-		$in_thirty_days = strtotime('+30 days', $now_ts);
-		foreach ($subscriptions as $sub) {
-			$due_at = ! empty($sub->next_renewal) ? strtotime((string) $sub->next_renewal) : false;
-			if (false === $due_at || $due_at < $now_ts || $due_at > $in_thirty_days) {
-				continue;
-			}
-			$renewals_due++;
-			$renewals_due_amount += $this->convert_currency_amount(
-				$this->get_forecast_renewal_amount($sub),
-				strtoupper((string) ($sub->currency ?? $currency)),
-				$currency,
-				(string) ($sub->next_renewal ?: '')
-			);
-		}
+		// What renews in the next 30 days: the same query the Retention tab runs,
+		// so the two tabs cannot report 19 against 15 for the same window.
+		$renewals_due = (int) ($retention['upcoming_30d'] ?? 0);
+		$renewals_due_amount = (float) ($retention['upcoming_amount'] ?? 0);
 
 		// The last five payments of the period, with the same new / renewal /
 		// reactivation rule the MRR movement uses.
@@ -7394,6 +7381,15 @@ class RL_FSBI_Admin
 		$report_currency = $currency ? strtoupper((string) $currency) : $default_currency;
 		$data_as_of      = $this->resolve_data_as_of($end_date);
 
+		// Gross and net come from the function that knows how commission, VAT and
+		// gateway fees are netted, not from a column sum. The stored net column is
+		// empty for products imported without a settled payout, and a plain gross
+		// sum counted chargebacks as sales, so the headline, the Growth chart and
+		// the monthly table could each report a different number for one month.
+		$period_summary = $this->summarise_month_payments($payments, $report_currency, $start_date);
+		$gross_revenue = (float) $period_summary['gross'];
+		$net_revenue = (float) $period_summary['net'];
+
 		$purchase_count = 0;
 		$refund_count = 0;
 		$renewal_count = 0;
@@ -8434,8 +8430,11 @@ class RL_FSBI_Admin
 				$cancel_stamp = strtotime((string) $subscription->updated_at);
 			}
 
+			// Existence is decided by creation and cancellation, not by expiry:
+			// expires_at is rewritten on every sync to the current period end, so
+			// using it as a lower bound emptied the base for every earlier month
+			// and reported 0.00% churn beside 5-11 cancellations.
 			$existed_at_start = (false === $created_at || $created_at <= $window_start)
-				&& (false === $expires_at || $expires_at >= $window_start)
 				&& (false === $cancel_stamp || $cancel_stamp > $window_start);
 
 			if ($existed_at_start) {
@@ -9127,6 +9126,7 @@ class RL_FSBI_Admin
 		$now      = current_time('timestamp');
 		$horizon  = strtotime('+30 days', $now);
 		$upcoming = 0;
+		$upcoming_amount = 0.0;
 		$at_risk  = 0;
 		$at_risk_amount = 0.0;
 		$failed   = 0;
@@ -9156,6 +9156,12 @@ class RL_FSBI_Admin
 			}
 
 			$upcoming++;
+			$upcoming_amount += (float) $this->convert_currency_amount(
+				$this->get_forecast_renewal_amount($subscription),
+				strtoupper((string) ($subscription->currency ?? 'EUR')),
+				(string) $this->conversion_currency,
+				(string) ($subscription->next_renewal ?: '')
+			);
 
 			$outstanding = isset($subscription->outstanding_balance) ? (float) $subscription->outstanding_balance : 0.0;
 			if ($failed_count > 0 || $outstanding > 0) {
@@ -9168,6 +9174,7 @@ class RL_FSBI_Admin
 			'renewals'                 => (int) ($subscription_stats['monthly'] + $subscription_stats['annual']),
 			'active'                   => (int) $subscription_stats['active'],
 			'upcoming_30d'             => $upcoming,
+			'upcoming_amount'          => round((float) $upcoming_amount, 2),
 			'at_risk_30d'              => $at_risk,
 			'at_risk_amount'           => round($at_risk_amount, 2),
 			'failed_payments'          => $failed,
@@ -9735,7 +9742,10 @@ class RL_FSBI_Admin
 				'net'           => (float) $month_summary['net'],
 				'commission'    => (float) $month_summary['commission'],
 				'payout_status' => $payout_status,
-				'payout_total'  => round((float) ($stats['payout_total'] ?? 0), 2),
+				// What Freemius pays for the month is what the month netted:
+				// gross - refunds - gateway - commission. The old carry-over pool
+				// produced a payout larger than the net it came from.
+				'payout_total'  => (float) $month_summary['net'],
 				'payout_date'   => (string) ($payout_date['date'] ?? ''),
 				'payout_label'  => (string) ($payout_date['label'] ?? ''),
 				'split'         => $split,

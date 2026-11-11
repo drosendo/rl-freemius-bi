@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.4.12  
+**Version:** 1.5.0  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -989,6 +989,17 @@ bumping `Version:` means no site will ever see it.
 - **WordPress.org slugs are per plugin.** The single global field became a per-product editor on the **Plugin Scope** tab, prefilled with each Freemius slug and validated against the wp.org API on save — an unknown slug is rejected rather than stored, since it would render a widget full of zeros. With no slug the widget is not rendered at all (no card, no canvas, no note) and no wp.org request is made.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
+
+### Unreleased - one payout, one gross, one net
+
+Four figures were still being computed twice. All four now come from `summarise_month_payments()` or from `estimate_payout_date()`:
+
+- **Payout.** A month pays what it netted: gross − refunds − gateway − commission, on the 10th of X+2. The old carry-over pool produced an October payout of 721 / 668 / 717 depending on where you looked, and a September payout larger than the net it came from. Overview, Revenue & Payouts and the WordPress widget now read the same value.
+- **Gross.** The period's gross and net are the summarised ones, not a column sum: a chargeback carries a positive gross and is_refund = 0, so a plain sum counted it as a sale. September read 1,025.70 in the table, 929.84 in the growth chart and 992.50 by the API; one function leaves one answer.
+- **Renewals due in 30 days.** Overview and Retention read the same retention snapshot, so 19 against 15 cannot happen.
+- **Churn trend.** The base for each month no longer uses `expires_at` as a lower bound. That field is rewritten on every sync to the current period end, which emptied the base for every earlier month and drew 0.00% churn beside five to eleven cancellations.
+
+**Upgrade routine.** A version bump now persists the commission model and rate that detection found: an account called legacy gets its marginal rate (7%) and a fixed fee of 0 without anyone clicking Accept, so the site stops reading "revenue share not set". The bump also changes the payload cache key, so month rows are rebuilt on the first load after the update rather than waiting for the next sync.
 
 ### 1.5.0 (unreleased)
 

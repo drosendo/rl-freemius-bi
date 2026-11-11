@@ -11,7 +11,7 @@
  * Plugin URI:        https://rosendolabs.com
  * Update URI:        https://github.com/drosendo/rl-freemius-bi
  * Description:       Comprehensive Business Intelligence dashboard for Freemius plugin sales, renewals, MRR, and payouts.
- * Version:           1.4.12
+ * Version:           1.5.0
  * Author:            Rosendo Labs
  * Author URI:        https://rosendolabs.com
  * License:           GPL-2.0+
@@ -28,7 +28,7 @@ if ( ! defined( 'WPINC' ) ) {
  * Currently plugin version.
  * Start at version 1.0.0 and use SemVer - https://semver.org
  */
-define( 'RL_FSBI_VERSION', '1.4.12' );
+define( 'RL_FSBI_VERSION', '1.5.0' );
 define( 'RL_FSBI_DB_VERSION', '1.2.3' );
 define( 'RL_FSBI_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'RL_FSBI_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -62,6 +62,7 @@ register_deactivation_hook( __FILE__, 'deactivate_rl_fsbi' );
 function rl_fsbi_maybe_upgrade_db() {
 	require_once RL_FSBI_PLUGIN_DIR . 'includes/class-rl-fsbi-activator.php';
 	RL_FSBI_Activator::maybe_upgrade();
+	RL_FSBI_Activator::maybe_upgrade_plugin();
 }
 add_action( 'plugins_loaded', 'rl_fsbi_maybe_upgrade_db' );
 
