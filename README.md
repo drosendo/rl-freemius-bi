@@ -853,6 +853,9 @@ bumping `Version:` means no site will ever see it.
 **Debug mode is off unless you ask for it.**
 - The framework was configured with `debug_level => 'debug'`, so the Support tab's *Enable Debug Mode* toggle had no effect at all: verbose logging ran on every live site. The level now follows the toggle, which defaults to off, and a warning banner appears on the plugin screens while it is on, linking straight to the setting.
 
+**New KPI: new paid subscriptions against a monthly target.**
+- A fourth card in the top row shows the current month's new paid subscriptions against a target you set under *Synchronization* (default 5), with the last six months as a stacked mini bar chart split into **new customers** and **reactivations** — a reactivation being a first payment from someone whose previous subscription had already ended. The card reports the gap to target and how much of it came from returning customers.
+
 ### 1.3.30 (2026-11-10)
 - **An autofilled email can no longer become a bogus Developer ID.** A vendor reported that the backfill failed after signing up, and that the browser had filled the Developer ID field with their email address. The field was a plain text input with no autocomplete hints, and the sanitizer kept only the digits — so `john1985@gmail.com` was saved as `1985`, a perfectly valid id belonging to someone else. Every request then authenticated as the wrong account, and the failure described the API rather than the field. The sanitizer now rejects non-numeric input and keeps the previous value, the backfill error names the missing or non-numeric credential, a notice on the plugin screens says the value was not saved, and the credential fields carry `autocomplete="off"` with a numeric keypad on mobile.
 

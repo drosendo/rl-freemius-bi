@@ -553,6 +553,20 @@ class RL_FSBI_Settings_Manager {
 			'sync_settings',
 			'sync_config',
 			array(
+				'id'      => 'rl_fsbi_monthly_subscription_target',
+				'type'    => 'number',
+				'label'   => esc_html__( 'Monthly New Subscription Target', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'How many new paid subscriptions you aim to win each month. The dashboard compares the current month against this number.', 'rl-freemius-bi' ),
+				'default' => 5,
+				'min'     => 0,
+				'max'     => 100000,
+			)
+		);
+
+		$this->framework->add_field(
+			'sync_settings',
+			'sync_config',
+			array(
 				'id'   => 'rl_fsbi_user_backfill_panel',
 				'type' => 'html',
 				'html' => $this->get_user_backfill_panel_html(),

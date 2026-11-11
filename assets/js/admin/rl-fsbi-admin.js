@@ -1302,6 +1302,7 @@
 			this.currentReportCurrency = data.report_currency || data?.summary?.report_currency || null;
 			this.updatePageHeader(data);
 			this.updateTopCards(data);
+			this.updateGrowthKpi(data);
 			this.updateMiniKpis(data);
 			this.updateMiniStats(data);
 			this.updateTrialPanel(data);
@@ -1715,6 +1716,78 @@
 		 * @param {boolean} fill - Whether to fill area under curves.
 		 * @returns {void}
 		 */
+		/**
+		 * Render the new-paid-subscriptions target card.
+		 *
+		 * @function updateGrowthKpi
+		 * @memberof FSBI
+		 * @param {Object} data - Analytics payload containing the growth block.
+		 * @returns {void}
+		 */
+		updateGrowthKpi: function(data) {
+			const growth = data.growth || {};
+			const target = Number(growth.target || 0);
+			const current = Number(growth.current_total || 0);
+			const reactivation = Number(growth.current_reactivation || 0);
+
+			this.setText('rl-fsbi-newsubs-current', String(current));
+			this.setText('rl-fsbi-newsubs-target', target > 0 ? String(target) : '—');
+
+			let note = 'this month vs target';
+			if (target <= 0) {
+				note = 'no target set';
+			} else if (current >= target) {
+				note = `target met · ${current - target} over`;
+			} else {
+				note = `${target - current} to go${reactivation > 0 ? ` · ${reactivation} reactivation${reactivation === 1 ? '' : 's'}` : ''}`;
+			}
+			this.setText('rl-fsbi-newsubs-note', note);
+
+			const canvas = document.getElementById('rl-fsbi-newsubs-chart');
+			if (!canvas || !window.Chart) {
+				return;
+			}
+
+			if (this.charts.growth) {
+				this.charts.growth.destroy();
+			}
+
+			const labels = growth.labels || [];
+			const newSeries = growth.new || [];
+			const reSeries = growth.reactivation || [];
+
+			if (!labels.length) {
+				return;
+			}
+
+			this.charts.growth = new Chart(canvas, {
+				type: 'bar',
+				data: {
+					labels: labels.map((l) => String(l).slice(5)),
+					datasets: [
+						{ label: 'New', data: newSeries, backgroundColor: '#22c89b', borderRadius: 2, barPercentage: 0.7, categoryPercentage: 0.8 },
+						{ label: 'Reactivation', data: reSeries, backgroundColor: 'rgba(34,200,155,0.38)', borderRadius: 2, barPercentage: 0.7, categoryPercentage: 0.8 },
+					],
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: {
+						legend: { display: false },
+						tooltip: {
+							callbacks: {
+								label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}`,
+							},
+						},
+					},
+					scales: {
+						x: { stacked: true, display: false },
+						y: { stacked: true, display: false, beginAtZero: true, suggestedMax: Math.max(target, 1) },
+					},
+				},
+			});
+		},
+
 		drawLineChart: function(key, canvasId, labels, datasets, fill) {
 			const canvas = document.getElementById(canvasId);
 			if (!canvas || !window.Chart) {

@@ -99,6 +99,17 @@ if ( ! defined( 'WPINC' ) ) {
 			<div class="rl-fsbi-card-value" id="rl-fsbi-refunds-breakdown">—</div>
 			<div class="rl-fsbi-card-sub" id="rl-fsbi-refunds-sub">—</div>
 		</div>
+		<div class="rl-fsbi-card rl-fsbi-growth-card">
+			<div class="rl-fsbi-card-label"><?php echo esc_html__( 'New Paid Subscriptions', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-card-value rl-fsbi-growth-value">
+				<span id="rl-fsbi-newsubs-current">—</span>
+				<span class="rl-fsbi-growth-target">/ <span id="rl-fsbi-newsubs-target">—</span></span>
+			</div>
+			<div class="rl-fsbi-card-sub" id="rl-fsbi-newsubs-note"><?php echo esc_html__( 'this month vs target', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-growth-chart-wrap">
+				<canvas id="rl-fsbi-newsubs-chart" aria-label="<?php echo esc_attr__( 'New paid subscriptions over the last six months', 'rl-freemius-bi' ); ?>" role="img"></canvas>
+			</div>
+		</div>
 	</div>
 
 	<?php

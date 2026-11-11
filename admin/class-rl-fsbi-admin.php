@@ -5528,6 +5528,7 @@ class RL_FSBI_Admin
 		$revenue_overview = $this->build_revenue_overview_series($annual_payments, $commission_rate, $report_currency);
 		$revenue_forecast = $this->build_revenue_forecast_series($subscriptions, $mrr, $report_currency);
 		$churn_trend = $this->build_churn_trend_series($subscriptions);
+		$new_subscriptions = $this->build_new_subscription_series($annual_payments, $subscriptions);
 
 		$currency_distribution = $this->build_distribution_series($payments, 'currency', 'gross', $commission_rate, $report_currency);
 		$country_distribution = $this->build_distribution_series($payments, 'country_code', 'net', $commission_rate, $report_currency);
@@ -5609,6 +5610,7 @@ class RL_FSBI_Admin
 				'wporg_growth'         => $daily_sales_volume,
 				'daily_sales_volume'   => $daily_sales_volume,
 			),
+			'growth' => $new_subscriptions,
 			'table' => $monthly_table,
 
 			// Compatibility keys kept for existing integrations.
@@ -6437,6 +6439,125 @@ class RL_FSBI_Admin
 	/**
 	 * Build plan distribution from subscriptions.
 	 */
+	/**
+	 * Count first payments per month, split into new customers and reactivations.
+	 *
+	 * A reactivation is a first payment from someone who already held a
+	 * subscription that had ended — they came back rather than arrived.
+	 *
+	 * @param array $payments      Payment rows (12 months recommended).
+	 * @param array $subscriptions All subscription rows for the scope.
+	 * @param int   $months        Trailing months to report.
+	 * @return array{labels:array,new:array,reactivation:array,total:array,target:int,current_total:int,current_new:int,current_reactivation:int}
+	 */
+	private function build_new_subscription_series($payments, $subscriptions, $months = 6)
+	{
+		$labels       = array();
+		$new_counts   = array();
+		$re_counts    = array();
+		$now          = current_time('timestamp');
+
+		for ($i = $months - 1; $i >= 0; $i--) {
+			$key = wp_date('Y-m', strtotime('-' . $i . ' months', $now));
+			$labels[]      = $key;
+			$new_counts[$key] = 0;
+			$re_counts[$key]  = 0;
+		}
+
+		// When each subscription ended, per user, so a returning customer can be
+		// told apart from a first-time one.
+		$ended_by_user = array();
+		foreach ($subscriptions as $subscription) {
+			$user_id = isset($subscription->user_id) ? (int) $subscription->user_id : 0;
+			if ($user_id <= 0) {
+				continue;
+			}
+
+			$meta   = json_decode((string) ($subscription->metadata ?? ''), true);
+			$status = strtolower((string) ($subscription->status ?? ''));
+
+			$ended = false;
+			if (! empty($subscription->expires_at)) {
+				$ended = strtotime((string) $subscription->expires_at);
+			}
+			if (is_array($meta) && ! empty($meta['canceled_at'])) {
+				$canceled = strtotime((string) $meta['canceled_at']);
+				$ended    = $ended ? min($ended, $canceled) : $canceled;
+			} elseif (in_array($status, array('cancelled', 'canceled'), true) && ! empty($subscription->updated_at)) {
+				$canceled = strtotime((string) $subscription->updated_at);
+				$ended    = $ended ? min($ended, $canceled) : $canceled;
+			}
+
+			if (false === $ended) {
+				continue;
+			}
+
+			$ended_by_user[$user_id][(int) $subscription->subscription_id] = $ended;
+		}
+
+		$seen_subscriptions = array();
+
+		foreach ($payments as $payment) {
+			if ($this->is_refund_payment($payment) || $this->is_renewal_payment($payment)) {
+				continue;
+			}
+
+			$month = substr((string) $payment->transaction_date, 0, 7);
+			if (! isset($new_counts[$month])) {
+				continue;
+			}
+
+			$subscription_key = (int) ($payment->subscription_id ?? 0);
+			if ($subscription_key > 0) {
+				if (isset($seen_subscriptions[$subscription_key])) {
+					continue;
+				}
+				$seen_subscriptions[$subscription_key] = true;
+			}
+
+			$paid_at = strtotime((string) $payment->transaction_date);
+			$user_id = (int) ($payment->user_id ?? 0);
+			$is_returning = false;
+
+			if ($user_id > 0 && ! empty($ended_by_user[$user_id])) {
+				foreach ($ended_by_user[$user_id] as $prior_id => $ended_at) {
+					if ($prior_id === $subscription_key) {
+						continue;
+					}
+					if ($ended_at < $paid_at) {
+						$is_returning = true;
+						break;
+					}
+				}
+			}
+
+			if ($is_returning) {
+				$re_counts[$month]++;
+			} else {
+				$new_counts[$month]++;
+			}
+		}
+
+		$target = (int) $this->settings->get_option('rl_fsbi_monthly_subscription_target', 5);
+		$total  = array();
+		foreach ($labels as $label) {
+			$total[] = $new_counts[$label] + $re_counts[$label];
+		}
+
+		$current = end($labels);
+
+		return array(
+			'labels'       => $labels,
+			'new'          => array_values($new_counts),
+			'reactivation' => array_values($re_counts),
+			'total'        => $total,
+			'target'       => max(0, $target),
+			'current_total' => (int) ($total ? $total[count($total) - 1] : 0),
+			'current_new'  => (int) ($new_counts[$current] ?? 0),
+			'current_reactivation' => (int) ($re_counts[$current] ?? 0),
+		);
+	}
+
 	private function build_plan_distribution_series($subscriptions)
 	{
 		$bucket = array();
