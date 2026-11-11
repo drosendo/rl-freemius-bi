@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.4.8  
+**Version:** 1.4.9  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -989,6 +989,32 @@ bumping `Version:` means no site will ever see it.
 - **WordPress.org slugs are per plugin.** The single global field became a per-product editor on the **Plugin Scope** tab, prefilled with each Freemius slug and validated against the wp.org API on save — an unknown slug is rejected rather than stored, since it would render a widget full of zeros. With no slug the widget is not rendered at all (no card, no canvas, no note) and no wp.org request is made.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
+
+### 1.4.9 (2026-11-11)
+
+**The commission column is recorded data, not a balancing item.**
+
+1.4.8 derived the commission as whatever made the row add up, which would silently absorb any future sync bug. Reverse-engineering the stored columns settled what they actually mean:
+
+- **`payments.fee` is the Freemius commission**: `fee/gross = 14.798%` on every one of the 45 EUR rows that has one (min 14.7978, max 14.8000), matching `balances.commission_rate = 14.80` synced from Freemius.
+- **`payments.net = gross - fee` exactly** on those rows (verified 100.0000% across 45 rows).
+- **Two row families exist**: rows with `fee > 0, net > 0, gateway_fee = 0` (commission recorded) and rows with `fee = 0, net = 0, gateway_fee > 0` (commission **not** recorded — only the gateway fee was returned by the sync).
+
+So the widget now reads the commission from the payment when it is there, and only applies the synced account rate to rows where it is missing, marking those with `*` and a tooltip naming the rate and the row count. `Gross - refunds - commission - gateway fees = net` holds **by construction**, with no figure left to absorb errors. The **gateway fee** moved to its own column, taken from `gateway_fee`, instead of being folded into the commission.
+
+| Month | Gross | Refunds | Gateway | Commission | Net |
+| --- | --- | --- | --- | --- | --- |
+| Sep | 3,260.19 | 150.64 | 45.17 | 482.47* | 2,581.91 |
+| Oct | 2,571.45 | 0.00 | 34.27 | 380.54* | 2,156.64 |
+| Nov (to 11 Nov) | 1,867.10 | 41.75 | 12.36 | 276.30* | 1,536.69 |
+
+Commission is 14.80% of gross in all three months. Net moves down from 1.4.8 (Sep 2,666.39 → 2,581.91, Oct 2,219.00 → 2,156.64, Nov 1,558.69 → 1,536.69) because rows synced without a commission were previously counted as if Freemius took nothing.
+
+**Sanity check.** When Debug Mode is on, a month whose commission deviates more than 20% from the rate Freemius reports is written to the log with the derived-row count, so a future sync regression shows up as a log line rather than as silently absorbed money.
+
+**Why November looked like 0.28%.** It never was: 0.28% was the *residue* left by the 1.4.8 balancing formula, dominated by refund sign handling, not a commission rate. With the recorded rate, November's commission is 14.80% like every other month.
+
+**Why September's gross changed from 3,109.55 to 3,260.19.** September contains refund rows stored with a **negative** `gross` (-59.99, -41.65, -49.00) which were inside the sales total. Once refunds are excluded from *sales* gross and shown in the Refunds column instead, the sales figure rises by the 150.64 that had been netted into it. November moves the other way (-49.00) because its refund row was stored with a *positive* gross that had been inflating sales.
 
 ### 1.4.8 (2026-11-11)
 

@@ -663,6 +663,18 @@ class RL_FSBI_Admin
 				overflow-x: auto
 			}
 
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-derived {
+				color: #fbbf24;
+				cursor: help
+			}
+
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-footnote {
+				margin: 6px 0 0;
+				color: #8994bd;
+				font-size: 10px;
+				line-height: 1.45
+			}
+
 			#rl_fsbi_portfolio_widget .rl-fsbi-wp-months {
 				min-width: 320px;
 				font-size: 11px;
@@ -943,8 +955,8 @@ class RL_FSBI_Admin
 					<th><?php echo esc_html__('Month', 'rl-freemius-bi'); ?></th>
 					<th><?php echo esc_html__('Gross', 'rl-freemius-bi'); ?></th>
 					<th><?php echo esc_html__('Refunds', 'rl-freemius-bi'); ?></th>
-					<th title="<?php echo esc_attr__('Payment processor fee.', 'rl-freemius-bi'); ?>"><?php echo esc_html__('Fees', 'rl-freemius-bi'); ?></th>
-					<th title="<?php echo esc_attr__('Freemius commission: gross minus refunds, fees and net. This is the component that used to be missing, which is why the row never added up.', 'rl-freemius-bi'); ?>"><?php echo esc_html__('Commission', 'rl-freemius-bi'); ?></th>
+					<th title="<?php echo esc_attr__('Payment processor fee, as recorded on the payment.', 'rl-freemius-bi'); ?>"><?php echo esc_html__('Gateway', 'rl-freemius-bi'); ?></th>
+					<th title="<?php echo esc_attr__('The Freemius cut, recorded on each payment as its fee. Rows synced without a net carry no commission; those use the rate Freemius reports for the account and are marked derived.', 'rl-freemius-bi'); ?>"><?php echo esc_html__('Commission', 'rl-freemius-bi'); ?></th>
 					<th><?php echo esc_html__('Net', 'rl-freemius-bi'); ?></th>
 				</tr>
 			</thead>
@@ -954,14 +966,15 @@ class RL_FSBI_Admin
 						<td><?php echo esc_html($point['label']); ?><?php if ('current' === $point['payout_status']) : ?><span class="rl-fsbi-wp-payout-badge rl-fsbi-wp-payout-current"><?php echo esc_html__('CURRENT PAYOUT', 'rl-freemius-bi'); ?></span><?php elseif ('next' === $point['payout_status']) : ?><span class="rl-fsbi-wp-payout-badge rl-fsbi-wp-payout-next"><?php echo esc_html__('NEXT PAYOUT', 'rl-freemius-bi'); ?></span><?php endif; ?><?php if ($point['partial'] && ! empty($point['projection_height'])) : ?><br /><small class="rl-fsbi-wp-projection-note"><?php echo esc_html(sprintf(/* translators: %s: projected net revenue */ __('Linear projection: %s', 'rl-freemius-bi'), $format_plain($point['projection']))); ?></small><?php endif; ?></td>
 						<td><?php echo esc_html($format_num($point['gross'])); ?></td>
 						<td><?php echo esc_html($format_num($point['refunds'])); ?></td>
-						<td><?php echo esc_html($format_num($point['fees'])); ?></td>
-						<td><?php echo esc_html($format_num($point['commission'])); ?></td>
+						<td title="<?php echo esc_attr(sprintf(/* translators: 1: commission as % of gross, 2: rows using the derived rate */ __('%1$s%% of gross; %2$s rows use the synced rate (derived).', 'rl-freemius-bi'), number_format_i18n((float) $point['commission_pct'], 2), number_format_i18n((int) $point['derived_rows']))); ?>"><?php echo esc_html($format_num($point['commission'])); ?><?php if ($point['derived_rows'] > 0) : ?><span class="rl-fsbi-wp-derived" aria-hidden="true">*</span><?php endif; ?></td>
+						<td><?php echo esc_html($format_num($point['gateway'])); ?></td>
 						<td><strong><?php echo esc_html($format_num($point['value'])); ?></strong></td>
 					</tr>
 				<?php endforeach; ?>
 			</tbody>
 		</table>
 		</div>
+		<p class="rl-fsbi-wp-footnote"><?php echo esc_html__('Gross − refunds − commission − gateway fees = net. Commission is the Freemius fee recorded on each payment; a month with * has rows synced without one, where the rate Freemius reports for the account is applied instead.', 'rl-freemius-bi'); ?></p>
 
 		<?php if (! empty($data['plugins'])) : ?>
 			<details class="rl-fsbi-wp-breakdown">
@@ -1110,7 +1123,7 @@ class RL_FSBI_Admin
 			$row = $this->summarise_month_payments($month_payments, $currency, $start);
 			$gross = $row['gross'];
 			$refunds = $row['refunds'];
-			$fees = $row['fees'];
+			$fees = $row['gateway'];
 			$net = $row['net'];
 			$trend[] = array(
 				'month' => wp_date('M', strtotime($start)),
@@ -1120,6 +1133,9 @@ class RL_FSBI_Admin
 				'refunds' => $refunds,
 				'fees' => $fees,
 				'commission' => $row['commission'],
+				'gateway' => $row['gateway'],
+				'derived_rows' => $row['derived_rows'],
+				'commission_pct' => $row['commission_pct'],
 				'partial' => 0 === $i,
 				'label' => 0 === $i
 					? sprintf(
@@ -1289,39 +1305,116 @@ class RL_FSBI_Admin
 	{
 		$gross = 0.0;
 		$refunds = 0.0;
-		$fees = 0.0;
+		$commission = 0.0;
+		$gateway = 0.0;
 		$net = 0.0;
+		$derived_rows = 0;
+
+		// Freemius records its cut in the payments "fee" column (14.80% of gross
+		// on every row that has one) and stores net = gross - fee. Rows synced
+		// without a net carry no commission at all, so the synced rate from
+		// balances is used for those and counted as derived.
+		$rate = $this->get_synced_commission_rate();
 
 		foreach ($payments as $payment) {
-			$amounts = $this->resolve_payment_amounts($payment, 7.0);
+			$amounts = $this->resolve_payment_amounts($payment, 0.0);
 			$source_currency = strtoupper((string) ($payment->currency ?? $currency));
 			$date = (string) ($payment->transaction_date ?? $fallback_date);
-			$is_refund = $this->is_refund_payment($payment);
+			$convert = function ($value) use ($source_currency, $currency, $date) {
+				return $this->convert_currency_amount((float) $value, $source_currency, $currency, $date);
+			};
 
-			$fee = $this->convert_currency_amount((float) $amounts['fee'], $source_currency, $currency, $date);
-			$fees += $fee;
+			$row_gross = $convert($amounts['gross']);
+			$row_fee = $convert(isset($payment->fee) ? (float) $payment->fee : 0.0);
+			$row_net = $convert(isset($payment->net) ? (float) $payment->net : 0.0);
+			$row_gateway = $convert(isset($payment->gateway_fee) ? (float) $payment->gateway_fee : 0.0);
 
-			if ($is_refund) {
-				$refund_gross = abs((float) $amounts['gross']);
-				$refund_net = abs((float) $amounts['net']);
-				$refunds += $this->convert_currency_amount($refund_gross, $source_currency, $currency, $date);
-				// A refund row whose net is zero still took money back; its effect
-				// is the gross amount. One with a net simply returns that net.
-				$net -= $this->convert_currency_amount($refund_net > 0 ? $refund_net : $refund_gross, $source_currency, $currency, $date);
+			if ($this->is_refund_payment($payment)) {
+				// A refund returns what the customer paid, less whatever Freemius
+				// kept on it, so the loss is the recorded net when there is one.
+				$returned = abs($row_gross);
+				$kept = abs($row_fee);
+				$refund_effect = $returned > 0 ? $returned - $kept : $kept;
+				$refunds += $refund_effect;
+				$net -= $refund_effect;
 				continue;
 			}
 
-			$gross += $this->convert_currency_amount((float) $amounts['gross'], $source_currency, $currency, $date);
-			$net += $this->convert_currency_amount((float) $amounts['net'], $source_currency, $currency, $date);
+			$gross += $row_gross;
+
+			if (abs($row_net) > 0.00001) {
+				$commission += $row_fee;
+				$net += $row_net;
+			} else {
+				$row_commission = $row_gross * ($rate / 100);
+				$commission += $row_commission;
+				$net += $row_gross - $row_commission - $row_gateway;
+				$derived_rows++;
+			}
+
+			$gateway += $row_gateway;
 		}
 
-		return array(
+		$totals = array(
 			'gross' => round($gross, 2),
 			'refunds' => round($refunds, 2),
-			'fees' => round($fees, 2),
-			'commission' => round($gross - $refunds - $fees - $net, 2),
+			'commission' => round($commission, 2),
+			'gateway' => round($gateway, 2),
 			'net' => round($net, 2),
+			'derived_rows' => $derived_rows,
+			'rate' => $rate,
+			// Only meaningful once the month has rows; used for the sanity check.
+			'commission_pct' => $gross > 0 ? round(($commission / $gross) * 100, 2) : 0.0,
 		);
+
+		$this->audit_month_commission($totals);
+
+		return $totals;
+	}
+
+	/**
+	 * The commission rate Freemius reports for this account, as a percentage.
+	 *
+	 * @return float
+	 */
+	private function get_synced_commission_rate()
+	{
+		$balances = $this->get_balances_for_dashboard(0, null);
+		$rate = $this->get_balance_commission_rate($balances);
+
+		return $rate > 0 ? $rate : 0.0;
+	}
+
+	/**
+	 * Flag a month whose commission does not match the rate Freemius reports.
+	 *
+	 * Written only when Debug Mode is on: this is a data-integrity check, not
+	 * something to fill the log with. A month with unrecorded commission is
+	 * expected to sit below the rate, so the check reports the split instead of
+	 * pretending the totals are comparable.
+	 *
+	 * @param array $totals Result of summarise_month_payments().
+	 * @return void
+	 */
+	private function audit_month_commission($totals)
+	{
+		if (! $this->settings->is_debug_mode() || $totals['gross'] <= 0 || $totals['rate'] <= 0) {
+			return;
+		}
+
+		$expected = $totals['rate'];
+		$actual = $totals['commission_pct'];
+		$deviation = $expected > 0 ? abs($actual - $expected) / $expected : 0.0;
+
+		if ($deviation > 0.2) {
+			error_log(sprintf(
+				'[rl-fsbi] commission sanity check: %.2f%% of gross vs %.2f%% recorded rate (%d rows with derived commission, %d%% deviation)',
+				$actual,
+				$expected,
+				$totals['derived_rows'],
+				(int) round($deviation * 100)
+			)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		}
 	}
 
 	/**
