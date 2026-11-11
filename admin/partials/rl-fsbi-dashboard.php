@@ -55,6 +55,12 @@ if ( ! defined( 'WPINC' ) ) {
 	$raw_catalog      = isset( $GLOBALS['rl_fsbi_raw_catalog'] ) && is_array( $GLOBALS['rl_fsbi_raw_catalog'] ) ? $GLOBALS['rl_fsbi_raw_catalog'] : array();
 	$initial_version  = isset( $GLOBALS['rl_fsbi_plugin_version'] ) ? (string) $GLOBALS['rl_fsbi_plugin_version'] : '';
 
+	// The date inputs used to be rendered empty and only filled by JavaScript,
+	// so anything that stopped the bundle from running left the toolbar showing
+	// "Date Range: —". Render the current month up front, in the site timezone.
+	$initial_period_start = wp_date( 'Y-m-01' );
+	$initial_period_end   = wp_date( 'Y-m-t' );
+
 	$initial_title = esc_html__( 'All Plugins', 'rl-freemius-bi' );
 	if ( $forced_plugin_id > 0 ) {
 		if ( ! empty( $raw_catalog[ (string) $forced_plugin_id ]['title'] ) ) {
@@ -101,9 +107,9 @@ if ( ! defined( 'WPINC' ) ) {
 			</select>
 
 			<label for="rl-fsbi-date-range"><?php echo esc_html__( 'Date Range:', 'rl-freemius-bi' ); ?></label>
-			<input type="date" id="rl-fsbi-start-date" />
-			<span>—</span>
-			<input type="date" id="rl-fsbi-end-date" />
+			<input type="date" id="rl-fsbi-start-date" value="<?php echo esc_attr( $initial_period_start ); ?>" aria-label="<?php echo esc_attr__( 'Start date', 'rl-freemius-bi' ); ?>" />
+			<span aria-hidden="true">—</span>
+			<input type="date" id="rl-fsbi-end-date" value="<?php echo esc_attr( $initial_period_end ); ?>" aria-label="<?php echo esc_attr__( 'End date', 'rl-freemius-bi' ); ?>" />
 
 			<label for="rl-fsbi-plan-filter"><?php echo esc_html__( 'Plan:', 'rl-freemius-bi' ); ?></label>
 			<select id="rl-fsbi-plan-filter" name="plan_id">
@@ -419,7 +425,6 @@ if ( ! defined( 'WPINC' ) ) {
 				<div><dt><?php echo esc_html__( 'Uninstalled', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-installs-uninstalled">—</dd></div>
 				<div><dt><?php echo esc_html__( 'Total records', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-installs-total">—</dd></div>
 			</dl>
-			<p class="rl-fsbi-card-sub rl-fsbi-wporg-note"><?php echo esc_html__( 'WordPress.org install data is not fetched by this plugin.', 'rl-freemius-bi' ); ?></p>
 		</div>
 	</div>
 

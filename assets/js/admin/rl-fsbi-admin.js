@@ -1390,6 +1390,7 @@
 		 */
 		renderDashboard: function(data) {
 			this.currentReportCurrency = data.report_currency || data?.summary?.report_currency || null;
+			this.syncDateInputs(data.period || {});
 			this.updatePageHeader(data);
 			this.updateTopCards(data);
 			this.updatePlanFilter(data);
@@ -1400,6 +1401,29 @@
 			this.updateTrialPanel(data);
 			this.updateCharts(data);
 			this.updateMonthlyTable(data);
+		},
+
+		/**
+		 * Show the period the server actually used in the toolbar.
+		 *
+		 * Blank date inputs read as "no range set" and left the label showing
+		 * nothing but the dash between two empty fields.
+		 *
+		 * @function syncDateInputs
+		 * @memberof FSBI
+		 * @param {Object} period - { start, end } as resolved by the backend.
+		 * @returns {void}
+		 */
+		syncDateInputs: function(period) {
+			const start = document.getElementById('rl-fsbi-start-date');
+			const end = document.getElementById('rl-fsbi-end-date');
+
+			if (start && !start.value && period.start) {
+				start.value = period.start;
+			}
+			if (end && !end.value && period.end) {
+				end.value = period.end;
+			}
 		},
 
 		/**

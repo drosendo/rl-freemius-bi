@@ -5893,6 +5893,10 @@ class RL_FSBI_Admin
 		$next_payout_eligible = ! empty($monthly_table['next_payout_eligible']);
 
 		return array(
+			'period' => array(
+				'start' => $start_date,
+				'end'   => $end_date,
+			),
 			'summary' => array(
 				'net_revenue'          => round($net_revenue, 2),
 				'previous_net_revenue' => round($previous_net, 2),
