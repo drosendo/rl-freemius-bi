@@ -1078,17 +1078,21 @@ class RL_FSBI_Admin
 	 */
 	private function describe_commission_tooltip($point)
 	{
+		$summary = $this->get_detection_summary();
+		$assumed_note = (! empty($summary['assumed']) && 'legacy' === $this->get_commission_model())
+			? __(' Assumed legacy tiers from account age - Freemius reports no rate for this account; confirm in Freemius -> Earnings -> Payouts Information -> Fees Breakdown.', 'rl-freemius-bi')
+			: '';
 		if (empty($point['commission_configured'])) {
 			return __('No commission applied: the Freemius revenue share is not configured. The Payments API does not return it, so it has to be set on the Settings page; until then net revenue is overstated by the whole commission.', 'rl-freemius-bi');
 		}
 
 		return sprintf(
 			/* translators: 1: effective percentage, 2: configured rate, 3: number of sales */
-			__('Derived from the configured %2$s%% revenue share on (gross + VAT) plus the fixed fee, over %3$s sales; refunds return the percentage part only. Effective rate this month: %1$s%%.', 'rl-freemius-bi'),
+			__('Derived from the %2$s%% revenue share on (gross + VAT) plus the fixed fee, over %3$s sales; refunds return the percentage part only. Effective rate this month: %1$s%%.', 'rl-freemius-bi'),
 			number_format_i18n((float) ($point['commission_pct'] ?? 0), 2),
 			number_format_i18n((float) ($point['rate'] ?? 0), 2),
 			number_format_i18n((int) ($point['sale_rows'] ?? 0))
-		);
+		) . $assumed_note;
 	}
 
 	/**
@@ -1374,7 +1378,7 @@ class RL_FSBI_Admin
 		$sale_rows = 0;
 
 		$rate = $this->get_freemius_revenue_share();
-		$configured = $rate > 0;
+		$configured = $rate > 0 || 'legacy' === $this->get_commission_model();
 
 		foreach ($payments as $payment) {
 			$amounts = $this->resolve_payment_amounts($payment, 0.0);
@@ -1388,6 +1392,12 @@ class RL_FSBI_Admin
 			$row_vat = $convert(abs(isset($payment->vat) ? (float) $payment->vat : 0.0));
 			$row_gateway = $convert(abs(isset($payment->gateway_fee) ? (float) $payment->gateway_fee : 0.0));
 
+			// The legacy model charges by the payment position in the lifetime
+			// cumulative, so the rate is resolved per row before the sale/refund
+			// split: a refund reverses the same tier its sale was charged at.
+			$row_rate = $this->get_commission_rate_for_date($date);
+			$row_configured = $configured || $row_rate > 0;
+
 			if (! $this->is_sale_payment($payment)) {
 				// A row that is not a sale but carries a positive amount is the
 				// original payment recorded as disputed; its matching chargeback
@@ -1396,7 +1406,7 @@ class RL_FSBI_Admin
 					continue;
 				}
 
-				$commission_part = $configured ? ($row_gross + $row_vat) * ($rate / 100) : 0.0;
+				$commission_part = $row_configured ? ($row_gross + $row_vat) * ($row_rate / 100) : 0.0;
 				$refunds += $row_gross;
 				$commission -= $commission_part;
 				$vat_total -= $row_vat;
@@ -1412,8 +1422,8 @@ class RL_FSBI_Admin
 			$gateway += $row_gateway;
 			$sale_rows++;
 
-			if ($configured) {
-				$row_commission = ($row_gross + $row_vat) * ($rate / 100) + $this->get_freemius_fixed_fee($source_currency);
+			if ($row_configured) {
+				$row_commission = ($row_gross + $row_vat) * ($row_rate / 100) + $this->get_freemius_fixed_fee($source_currency);
 				$commission += $row_commission;
 				$net += $row_gross - $row_commission - $row_gateway;
 			} else {
@@ -1485,8 +1495,86 @@ class RL_FSBI_Admin
 			return max(0.0, (float) $configured);
 		}
 
+		if ('legacy' === $this->get_commission_model()) {
+			$summary = $this->get_detection_summary();
+			return RL_FSBI_Detection::progressive_marginal_rate((float) ($summary['lifetime_gross_usd'] ?? 0));
+		}
+
 		return max(0.0, $this->get_synced_commission_rate());
 	}
+
+	/**
+	 * Commission model in force: legacy tiers, flat, current, or empty.
+	 *
+	 * @return string
+	 */
+	private function get_commission_model()
+	{
+		$model = (string) $this->settings->get_option('rl_fsbi_commission_model', '');
+		if ('' !== $model) {
+			return $model;
+		}
+
+		if ('' !== (string) $this->settings->get_option(RL_FSBI_Detection::OPTION_ACCEPTED, '')) {
+			$summary = $this->get_detection_summary();
+			return (string) ($summary['model'] ?? '');
+		}
+
+		return '';
+	}
+
+	/**
+	 * Stored detection summary.
+	 *
+	 * @return array
+	 */
+	private function get_detection_summary()
+	{
+		if (! class_exists('RL_FSBI_Detection')) {
+			return array();
+		}
+
+		$summary = $this->settings->get_option(RL_FSBI_Detection::OPTION_SUMMARY, array());
+
+		return is_array($summary) ? $summary : array();
+	}
+
+	/**
+	 * Revenue share that applies to a payment on a given date.
+	 *
+	 * With the legacy model the tier depends on where the payment sits in the
+	 * lifetime cumulative gross, so a month is costed by its payments' position
+	 * in time rather than by an average applied to everything.
+	 *
+	 * @param string $date Payment date, Y-m-d.
+	 * @return float
+	 */
+	private function get_commission_rate_for_date($date)
+	{
+		if ('legacy' !== $this->get_commission_model()) {
+			return $this->get_freemius_revenue_share();
+		}
+
+		$summary = $this->get_detection_summary();
+		$tier1 = (string) ($summary['tier_dates']['tier1'] ?? '');
+		$tier2 = (string) ($summary['tier_dates']['tier2'] ?? '');
+		$date = substr((string) $date, 0, 10);
+
+		if ('' === $tier1) {
+			return RL_FSBI_Detection::TIER_1_RATE;
+		}
+
+		if ($date <= $tier1) {
+			return RL_FSBI_Detection::TIER_1_RATE;
+		}
+
+		if ('' === $tier2 || $date <= $tier2) {
+			return RL_FSBI_Detection::TIER_2_RATE;
+		}
+
+		return RL_FSBI_Detection::TIER_3_RATE;
+	}
+
 
 	/**
 	 * The fixed per-transaction fee Freemius charges, in the payment currency.
@@ -3551,6 +3639,12 @@ class RL_FSBI_Admin
 			echo '</ul>';
 		}
 
+		if (! empty($summary['basis'])) {
+			echo '<p><span class="dashicons dashicons-info" aria-hidden="true"></span> <strong>'
+				. esc_html__('Assumed, not reported by Freemius:', 'rl-freemius-bi') . '</strong> '
+				. esc_html((string) $summary['basis']) . '</p>';
+		}
+
 		foreach ((array) ($summary['warnings'] ?? array()) as $warning) {
 			echo '<p><span class="dashicons dashicons-warning" aria-hidden="true"></span> ' . esc_html((string) $warning) . '</p>';
 		}
@@ -3584,7 +3678,12 @@ class RL_FSBI_Admin
 		$summary = $this->settings->get_option(RL_FSBI_Detection::OPTION_SUMMARY, array());
 		$rate = is_array($summary) ? (float) ($summary['marginal_rate'] ?? 0) : 0.0;
 
-		if ($rate > 0 && '' === trim((string) $this->settings->get_option('rl_fsbi_fs_revenue_share', ''))) {
+		$model = is_array($summary) ? (string) ($summary['model'] ?? '') : '';
+		if ('' !== $model && '' === trim((string) $this->settings->get_option('rl_fsbi_commission_model', ''))) {
+			$this->settings->update_option('rl_fsbi_commission_model', $model);
+		}
+
+		if ('legacy' !== $model && $rate > 0 && '' === trim((string) $this->settings->get_option('rl_fsbi_fs_revenue_share', ''))) {
 			$this->settings->update_option('rl_fsbi_fs_revenue_share', (string) $rate);
 		}
 

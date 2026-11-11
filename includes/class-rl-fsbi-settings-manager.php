@@ -650,6 +650,24 @@ class RL_FSBI_Settings_Manager {
 			'sync_settings',
 			'sync_config',
 			array(
+				'id'      => 'rl_fsbi_commission_model',
+				'type'    => 'select',
+				'label'   => esc_html__( 'Commission Model', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'How Freemius charges you. Legacy applies the tiers per payment by its position in the lifetime cumulative gross; Flat and Current use the revenue share below. Set by the setup detection, and editable here at any time.', 'rl-freemius-bi' ),
+				'default' => '',
+				'options' => array(
+					''        => esc_html__( 'Not set', 'rl-freemius-bi' ),
+					'legacy'  => esc_html__( 'Legacy progressive (27% / 17% / 7%)', 'rl-freemius-bi' ),
+					'flat'    => esc_html__( 'Flat percentage', 'rl-freemius-bi' ),
+					'current' => esc_html__( 'Current (3.8% + 2.3% + fixed fee)', 'rl-freemius-bi' ),
+				),
+			)
+		);
+
+		$this->framework->add_field(
+			'sync_settings',
+			'sync_config',
+			array(
 				'id'      => 'rl_fsbi_fs_revenue_share',
 				'type'    => 'text',
 				'label'   => esc_html__( 'Freemius Revenue Share (%)', 'rl-freemius-bi' ),

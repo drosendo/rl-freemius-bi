@@ -992,6 +992,13 @@ bumping `Version:` means no site will ever see it.
 
 ### Unreleased - first-run auto-detection
 
+**When Freemius reports no rate, account age is the evidence.** A first payment before the current pricing started (2026-10-05) means the account was onboarded under the legacy tiers, so the model is preselected as **Legacy progressive (assumed from account age)** with marginal 7.00% and lifetime average 7.95% for product 2228 - labelled as *assumed, not reported by Freemius*, with the hint to confirm in Freemius -> Earnings -> Payouts Information -> Fees Breakdown. It is applied only when the administrator presses Accept, and the Commission tooltip carries the same marker. For 2228 the first payment is 2019-01-15 with the $1,000 and $5,000 boundaries crossed on 2019-02-08 and 2019-10-06.
+
+**Tiers are applied per payment, by position.** Detection records the date each tier boundary is crossed in the lifetime cumulative gross; the widget then charges each payment at the rate of the tier it falls into (27% up to the first $1,000, 17% up to $5,000, 7% after) instead of applying a lifetime average to everything. Refunds reverse the percentage part at the same tier as the sale they reverse.
+
+Verified with the legacy model accepted, product 2228 only: Sep 1,091.19 gross / 150.64 refunds / 57.62 gateway / 78.68 commission / 804.25 net; Oct 799.45 / 0 / 34.27 / 66.31 / 698.87; Nov 282.10 / 0 / 12.36 / 22.60 / 247.14. Every row satisfies `gross - refunds - commission - gateway = net`.
+
+
 `RL_FSBI_Detection` (`includes/class-rl-fsbi-detection.php`) works the account out from its own data instead of asking for it:
 
 - **Full history**: every payment of every product in scope, paged at 100 until the API returns nothing.

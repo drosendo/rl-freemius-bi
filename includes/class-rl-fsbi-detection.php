@@ -41,11 +41,24 @@ class RL_FSBI_Detection {
 	const TIER_3_RATE  = 7.0;
 
 	/**
+	 * Date the current pricing started. A first payment before this, with no
+	 * rate reported by Freemius, is evidence of the legacy progressive model.
+	 */
+	const NEW_PRICING_DATE = '2026-10-05';
+
+	/**
 	 * Settings manager.
 	 *
 	 * @var RL_FSBI_Settings_Manager
 	 */
 	private $settings;
+
+	/**
+	 * Summary being assembled, so the model chooser can see the account age.
+	 *
+	 * @var array
+	 */
+	private $current_summary = array();
 
 	/**
 	 * Constructor.
@@ -99,10 +112,11 @@ class RL_FSBI_Detection {
 
 		$lifetime_gross_usd = 0.0;
 		$payment_currencies = array();
+		$sales              = array();
 
 		foreach ( $plugin_ids as $plugin_id ) {
 			$payments = $this->fetch_all_payments( $api, $plugin_id );
-			$gross    = $this->gross_in_usd( $payments, $payment_currencies );
+			$gross    = $this->gross_in_usd( $payments, $payment_currencies, $sales );
 			$lifetime_gross_usd += $gross;
 
 			$summary['plugins'][ $plugin_id ] = array(
@@ -110,6 +124,13 @@ class RL_FSBI_Detection {
 				'gross_usd'   => round( $gross, 2 ),
 			);
 		}
+
+		// Where each tier boundary falls in time, so a month can be costed by
+		// each payment's position in the lifetime cumulative rather than by an
+		// average applied to everything.
+		$tier_index = $this->build_tier_index( $sales );
+		$summary['first_payment_date'] = $tier_index['first_date'];
+		$summary['tier_dates']         = $tier_index['tier_dates'];
 
 		$summary['lifetime_gross_usd'] = round( $lifetime_gross_usd, 2 );
 		$summary['currencies']         = array_values( array_unique( $payment_currencies ) );
@@ -120,8 +141,12 @@ class RL_FSBI_Detection {
 		$models = $this->evaluate_models( $lifetime_gross_usd, $observed );
 		$summary['comparison'] = $models;
 
+		$this->current_summary = $summary;
+
 		$chosen = $this->choose_model( $models, $observed );
 		$summary['model']              = $chosen['model'];
+		$summary['assumed']            = ! empty( $chosen['assumed'] );
+		$summary['basis']              = (string) ( $chosen['basis'] ?? '' );
 		$summary['model_label']        = $chosen['label'];
 		$summary['marginal_rate']      = $chosen['marginal_rate'];
 		$summary['lifetime_average']   = $chosen['lifetime_average'];
@@ -258,6 +283,41 @@ class RL_FSBI_Detection {
 			);
 		}
 
+		// No rate from Freemius: account age is the evidence. A first payment
+		// before the current pricing started means the account was onboarded under
+		// the legacy tiers, so assume progressive - clearly marked as assumed, and
+		// applied only if the administrator accepts it.
+		if ( $observed <= 0 ) {
+			$first_date = (string) ( $this->current_summary['first_payment_date'] ?? '' );
+			$assumed    = '' !== $first_date && $first_date < self::NEW_PRICING_DATE;
+
+			if ( $assumed ) {
+				return array(
+					'model' => 'legacy',
+					'label' => __( 'Legacy progressive (assumed from account age)', 'rl-freemius-bi' ),
+					'marginal_rate' => $legacy['marginal_rate'],
+					'lifetime_average' => $legacy['average'],
+					'confidence' => 0.0,
+					'assumed' => true,
+					'basis' => sprintf(
+						/* translators: 1: first payment date, 2: pricing date */
+						__( 'First payment on %1$s, before the current pricing started on %2$s, and Freemius reports no rate. Confirm in Freemius -> Earnings -> Payouts Information -> Fees Breakdown.', 'rl-freemius-bi' ),
+						$first_date,
+						self::NEW_PRICING_DATE
+					),
+				);
+			}
+
+			return array(
+				'model' => 'unknown',
+				'label' => __( 'Unknown - no rate reported by Freemius', 'rl-freemius-bi' ),
+				'marginal_rate' => 0.0,
+				'lifetime_average' => 0.0,
+				'confidence' => 0.0,
+				'assumed' => false,
+			);
+		}
+
 		if ( $observed > 0 && $models['current']['difference'] < $models['legacy']['difference'] ) {
 			return array(
 				'model' => 'current',
@@ -365,7 +425,7 @@ class RL_FSBI_Detection {
 	 * @param array $currencies_seen    Collected currencies, by reference.
 	 * @return float
 	 */
-	private function gross_in_usd( array $payments, array &$currencies_seen ) {
+	private function gross_in_usd( array $payments, array &$currencies_seen, array &$sales = array() ) {
 		$total = 0.0;
 
 		foreach ( $payments as $payment ) {
@@ -385,10 +445,56 @@ class RL_FSBI_Detection {
 			}
 
 			$date = isset( $payment['created'] ) ? substr( (string) $payment['created'], 0, 10 ) : '';
-			$total += $this->to_usd( $gross, $currency, $date );
+			$usd  = $this->to_usd( $gross, $currency, $date );
+			$total += $usd;
+			$sales[] = array( 'date' => $date, 'usd' => $usd );
 		}
 
 		return $total;
+	}
+
+	/**
+	 * Date at which each progressive tier boundary is crossed.
+	 *
+	 * Walking the sales in date order gives, for any later payment, the tier it
+	 * falls into: everything up to the $1,000 boundary is charged 27%, up to
+	 * $5,000 is charged 17%, and anything after is charged 7%.
+	 *
+	 * @param array $sales Dated USD sales.
+	 * @return array{first_date:string,tier_dates:array}
+	 */
+	private function build_tier_index( array $sales ) {
+		usort( $sales, static function ( $a, $b ) {
+			return strcmp( (string) $a['date'], (string) $b['date'] );
+		} );
+
+		$cumulative = 0.0;
+		$first_date = '';
+		$tier_dates = array( 'tier1' => '', 'tier2' => '' );
+
+		foreach ( $sales as $sale ) {
+			if ( '' === $first_date && '' !== (string) $sale['date'] ) {
+				$first_date = (string) $sale['date'];
+			}
+
+			$cumulative += (float) $sale['usd'];
+
+			if ( '' === $tier_dates['tier1'] && $cumulative >= self::TIER_1_LIMIT ) {
+				$tier_dates['tier1'] = (string) $sale['date'];
+			}
+
+			if ( '' === $tier_dates['tier2'] && $cumulative >= self::TIER_2_LIMIT ) {
+				$tier_dates['tier2'] = (string) $sale['date'];
+			}
+		}
+
+		$this->log( 'tier index', array(
+			'first_date' => $first_date,
+			'tier_dates' => $tier_dates,
+			'cumulative' => round( $cumulative, 2 ),
+		) );
+
+		return array( 'first_date' => $first_date, 'tier_dates' => $tier_dates );
 	}
 
 	/**
