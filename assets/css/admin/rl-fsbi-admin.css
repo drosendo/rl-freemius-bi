@@ -1209,12 +1209,16 @@
 	}
 
 	.rl-fsbi-content-grid {
-		grid-template-columns: 1fr;
+		grid-template-columns: minmax(0, 1fr);
 	}
 
-	.rl-fsbi-span-2,
-	.rl-fsbi-span-3 {
-		grid-column: span 1;
+	/* A child that still claims "span 3" keeps the grid three columns wide on a
+	   single-column layout, which is what crushed every card to about 110px
+	   between 900px and 1220px. Reset the span for every direct child rather
+	   than for the helper classes only. */
+	.rl-fsbi-content-grid > * {
+		grid-column: 1 / -1 !important;
+		min-width: 0;
 	}
 }
 
