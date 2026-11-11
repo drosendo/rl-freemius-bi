@@ -85,19 +85,14 @@ if ( ! defined( 'WPINC' ) ) {
 
 	<div class="rl-fsbi-toolbar">
 		<div class="rl-fsbi-controls">
-			<span class="rl-fsbi-field">
 			<?php if ( $forced_plugin_id > 0 ) : ?>
-				<?php // A locked product is not a control: a disabled select renders grey on
-				// grey and reads as broken. It is named in plain text instead. ?>
-				<span class="rl-fsbi-field-label"><?php echo esc_html__( 'Plugin', 'rl-freemius-bi' ); ?></span>
-				<span class="rl-fsbi-locked-plugin"><?php
-					$forced_title = isset( $plugins_catalog[ (string) $forced_plugin_id ] )
-						? $plugins_catalog[ (string) $forced_plugin_id ]
-						: sprintf( __( 'Plugin #%d', 'rl-freemius-bi' ), $forced_plugin_id );
-					echo esc_html( $forced_title );
-				?></span>
+				<?php // On a product dashboard the plugin is not a control: the page already
+				// names it in its title, so the field is a truncated repeat of the header
+				// and only pushes the real filters onto a second row. Keep the value the
+				// JS reads, drop the visible field. ?>
 				<input type="hidden" id="rl-fsbi-plugin-filter-forced" value="<?php echo esc_attr( $forced_plugin_id ); ?>" />
 			<?php else : ?>
+			<span class="rl-fsbi-field">
 				<label for="rl-fsbi-plugin-filter"><?php echo esc_html__( 'Plugin:', 'rl-freemius-bi' ); ?></label>
 				<select id="rl-fsbi-plugin-filter" name="plugin_id">
 					<option value="all"><?php echo esc_html__( 'All Plugins', 'rl-freemius-bi' ); ?></option>
@@ -105,8 +100,8 @@ if ( ! defined( 'WPINC' ) ) {
 						<option value="<?php echo esc_attr( $plugin_id ); ?>"><?php echo esc_html( $plugin_title ); ?></option>
 					<?php endforeach; ?>
 				</select>
-			<?php endif; ?>
 			</span>
+			<?php endif; ?>
 
 			<span class="rl-fsbi-field">
 			<label for="rl-fsbi-currency-filter"><?php echo esc_html__( 'Currency:', 'rl-freemius-bi' ); ?></label>
@@ -133,7 +128,7 @@ if ( ! defined( 'WPINC' ) ) {
 				</select>
 				</span>
 
-				<button id="rl-fsbi-sync-btn" class="button"><?php echo esc_html__( 'Sync Now', 'rl-freemius-bi' ); ?></button>
+				<button id="rl-fsbi-sync-btn" class="button"><?php echo esc_html__( 'Sync Now', 'rl-freemius-bi' ); ?><span class="rl-fsbi-sync-info rl-fsbi-info-tooltip" title="<?php echo esc_attr__( 'When the local copy of your Freemius data was last refreshed, in the site timezone.', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo esc_attr__( 'When the local copy of your Freemius data was last refreshed, in the site timezone.', 'rl-freemius-bi' ); ?>"><span class="dashicons dashicons-info" aria-hidden="true"></span><span class="screen-reader-text"><?php echo esc_html__( 'When the local copy of your Freemius data was last refreshed, in the site timezone.', 'rl-freemius-bi' ); ?></span></span></button>
 				<button id="rl-fsbi-sync-cancel-btn" class="button" type="button" hidden><?php echo esc_html__( 'Cancel Sync', 'rl-freemius-bi' ); ?></button>
 				<span class="rl-fsbi-last-synced" id="rl-fsbi-last-synced" title="<?php echo esc_attr__( 'When the local copy of your Freemius data was last refreshed, in the site timezone.', 'rl-freemius-bi' ); ?>"></span>
 			</span>

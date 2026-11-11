@@ -2822,13 +2822,30 @@
 
 			const lastSynced = document.getElementById('rl-fsbi-last-synced');
 			if (lastSynced) {
-				// Short enough to sit on the filter row without pushing the group
-				// past the bar's padding.
+				// The stamp is read by screen readers and on hover; it is not painted,
+				// because on the filter row it competed with the filters themselves for
+				// the same line and added a second line of text under the Sync button.
 				const syncedAt = String(data.last_synced || '');
 				const syncedDate = syncedAt ? new Date(syncedAt.replace(' ', 'T')) : null;
 				lastSynced.textContent = syncedDate && !Number.isNaN(syncedDate.getTime())
 					? `Synced ${syncedDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${syncedAt.slice(11, 16)}`
 					: (syncedAt ? `Synced ${syncedAt}` : 'Never synced');
+
+				const syncInfo = document.querySelector('#rl-fsbi-sync-btn .rl-fsbi-sync-info');
+				if (syncInfo) {
+					const note = lastSynced.textContent;
+					syncInfo.setAttribute('title', note);
+					syncInfo.setAttribute('data-tippy-content', note);
+					const sr = syncInfo.querySelector('.screen-reader-text');
+					if (sr) {
+						sr.textContent = note;
+					}
+					// Tippy reads data-tippy-content once, at init, so the open instance
+					// has to be told about the newer stamp.
+					if (syncInfo._tippy && typeof syncInfo._tippy.setContent === 'function') {
+						syncInfo._tippy.setContent(note);
+					}
+				}
 			}
 
 			// A funnel with nothing in it is a row of zeros pretending to be data.
