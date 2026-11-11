@@ -1676,6 +1676,188 @@ class RL_FSBI_Admin
 
 
 	/**
+	 * The three things the Overview tab needs and nothing else provides.
+	 *
+	 * - MRR movement as new / reactivation / churn. Expansion and contraction
+	 *   are deliberately absent: they need plan-change history, which Freemius
+	 *   does not expose, and deriving them from amount deltas would report a
+	 *   coupon or an FX swing as expansion.
+	 * - The "needs attention" list, most urgent first, capped at five.
+	 * - A six-month net revenue series for the sparkline, converted per event at
+	 *   the rate of the day it happened.
+	 *
+	 * @param array  $payments      Payments for the period.
+	 * @param array  $subscriptions Subscriptions in scope.
+	 * @param string $start_date    Period start.
+	 * @param string $end_date      Period end.
+	 * @param string $currency      Reporting currency.
+	 * @return array{waterfall:array,attention:array,series:array}
+	 */
+	private function build_overview_extras($payments, $subscriptions, $start_date, $end_date, $currency)
+	{
+		$start_ts = strtotime($start_date . ' 00:00:00');
+		$end_ts = strtotime($end_date . ' 23:59:59');
+		$ended_by_user = $this->build_ended_subscription_index($subscriptions);
+		$seen = array();
+		$waterfall = array('new' => 0.0, 'reactivation' => 0.0, 'churn' => 0.0, 'net' => 0.0);
+
+		foreach ($payments as $payment) {
+			$paid_at = strtotime((string) ($payment->transaction_date ?? ''));
+			if (false === $paid_at || $paid_at < $start_ts || $paid_at > $end_ts) {
+				continue;
+			}
+
+			if (! $this->is_sale_payment($payment) || $this->is_renewal_payment($payment)) {
+				continue;
+			}
+
+			$sub_id = (int) ($payment->subscription_id ?? 0);
+			if ($sub_id > 0) {
+				if (isset($seen[$sub_id])) {
+					continue;
+				}
+				$seen[$sub_id] = true;
+			}
+
+			$amount = $this->monthlyised_payment_value($payment, $currency);
+			$user_id = (int) ($payment->user_id ?? 0);
+			$returning = false;
+
+			foreach ((array) ($ended_by_user[$user_id] ?? array()) as $prior_id => $ended_at) {
+				if ($prior_id !== $sub_id && $ended_at < $paid_at) {
+					$returning = true;
+					break;
+				}
+			}
+
+			if ($returning) {
+				$waterfall['reactivation'] += $amount;
+			} else {
+				$waterfall['new'] += $amount;
+			}
+		}
+
+		// Churn: the monthly value of what stopped during the period.
+		foreach ($subscriptions as $subscription) {
+			$meta = json_decode((string) ($subscription->metadata ?? ''), true);
+			$canceled_at = is_array($meta) && ! empty($meta['canceled_at']) ? strtotime((string) $meta['canceled_at']) : false;
+			$expired_at = ! empty($subscription->expires_at) ? strtotime((string) $subscription->expires_at) : false;
+			$stopped_at = $canceled_at ?: $expired_at;
+
+			if (false === $stopped_at || $stopped_at < $start_ts || $stopped_at > $end_ts) {
+				continue;
+			}
+
+			$waterfall['churn'] += $this->monthlyised_subscription_value($subscription, $currency);
+		}
+
+		foreach ($waterfall as $key => $value) {
+			if ('net' === $key) {
+				continue;
+			}
+			$waterfall[$key] = round((float) $value, 2);
+		}
+		$waterfall['net'] = round($waterfall['new'] + $waterfall['reactivation'] - $waterfall['churn'], 2);
+
+		$stats = $this->calculate_subscription_stats($subscriptions, $end_date, $start_date);
+		$retention = $this->build_retention_snapshot($subscriptions, $stats);
+		$now = current_time('timestamp');
+		$week = strtotime('+7 days', $now);
+		$cards_expiring = 0;
+		$trials_ending = 0;
+
+		foreach ($subscriptions as $subscription) {
+			$renewal_at = ! empty($subscription->next_renewal) ? strtotime((string) $subscription->next_renewal) : false;
+			if (false !== $renewal_at && $renewal_at >= $now && $renewal_at <= $week && ! empty($subscription->failed_payments)) {
+				$cards_expiring++;
+			}
+
+			$trial_ends = ! empty($subscription->trial_ends) ? strtotime((string) $subscription->trial_ends) : false;
+			if (false !== $trial_ends && $trial_ends >= $now && $trial_ends <= $week) {
+				$trials_ending++;
+			}
+		}
+
+		$attention = array();
+		$push = static function ($severity, $count, $label, $hash) use (&$attention) {
+			if ($count > 0) {
+				$attention[] = array('severity' => $severity, 'count' => (int) $count, 'label' => $label, 'hash' => $hash);
+			}
+		};
+
+		$push('high', (int) $retention['failed_payments'], __('subscriptions with a failed payment', 'rl-freemius-bi'), '#customers');
+		$push('high', $cards_expiring, __('renewals in the next 7 days with a failed payment', 'rl-freemius-bi'), '#customers');
+		$push('medium', $trials_ending, __('trials ending in the next 7 days', 'rl-freemius-bi'), '#growth');
+		$push('medium', (int) $retention['cancellations_this_month'], __('cancellations this month', 'rl-freemius-bi'), '#retention');
+
+		$order = array('high' => 0, 'medium' => 1, 'low' => 2);
+		usort($attention, static function ($a, $b) use ($order) {
+			$bySeverity = $order[$a['severity']] <=> $order[$b['severity']];
+			return 0 !== $bySeverity ? $bySeverity : $b['count'] <=> $a['count'];
+		});
+
+		// Six months of net revenue for the sparkline, oldest first.
+		$series = array();
+		$repo = new RL_FSBI_Repository();
+		for ($i = 5; $i >= 0; $i--) {
+			$month = wp_date('Y-m', strtotime('-' . $i . ' months', strtotime($end_date)));
+			$m_start = $month . '-01';
+			$m_end = wp_date('Y-m-t', strtotime($m_start));
+			$m_payments = $repo->get_payments(0, $m_start, $m_end, null);
+			$row = $this->summarise_month_payments($m_payments, $currency, $m_start);
+			$series[] = array('label' => wp_date('M', strtotime($m_start)), 'value' => $row['net']);
+		}
+
+		return array(
+			'waterfall' => $waterfall,
+			'attention' => array_slice($attention, 0, 5),
+			'series' => $series,
+		);
+	}
+
+	/**
+	 * Monthly value of a payment, monthlyised by the subscription's cycle.
+	 *
+	 * @param object $payment  Payment row.
+	 * @param string $currency Reporting currency.
+	 * @return float
+	 */
+	private function monthlyised_payment_value($payment, $currency)
+	{
+		$amounts = $this->resolve_payment_amounts($payment, 0.0);
+		$source = strtoupper((string) ($payment->currency ?? $currency));
+		$date = (string) ($payment->transaction_date ?? '');
+
+		return (float) $this->convert_currency_amount(abs((float) $amounts['gross']), $source, $currency, $date);
+	}
+
+	/**
+	 * Monthly value of a subscription, monthlyised by its billing cycle.
+	 *
+	 * @param object $subscription Subscription row.
+	 * @param string $currency     Reporting currency.
+	 * @return float
+	 */
+	private function monthlyised_subscription_value($subscription, $currency)
+	{
+		$meta = json_decode((string) ($subscription->metadata ?? ''), true);
+		$cycle = $subscription->billing_cycle ?? null;
+		if (is_array($meta) && isset($meta['billing_cycle'])) {
+			$cycle = $meta['billing_cycle'];
+		}
+
+		$months = $this->billing_cycle_to_months($cycle);
+		if ($months <= 0) {
+			$months = 1;
+		}
+
+		$amount = ! empty($subscription->renewal_amount) ? (float) $subscription->renewal_amount : (float) ($subscription->amount_per_cycle ?? 0);
+		$source = strtoupper((string) ($subscription->currency ?? $currency));
+
+		return (float) $this->convert_currency_amount($amount, $source, $currency, (string) ($subscription->created_at ?? '')) / $months;
+	}
+
+	/**
 	 * Estimated date the revenue of a month is paid out.
 	 *
 	 * The public Freemius API exposes neither payouts nor a payout schedule, so
@@ -4895,6 +5077,10 @@ class RL_FSBI_Admin
 		$data['marketing_optins']         = $optins_count;
 		$data['marketing_optins_updated'] = (string) get_option($cache_key . '_updated', '');
 		$data['newsletter_provider']      = $provider;
+		$data['overview'] = $needs('overview')
+			? $this->build_overview_extras($payments, $subscriptions, $start_date, $end_date, (string) $this->settings->get_option('rl_fsbi_conversion_currency', 'EUR'))
+			: array();
+
 		$data['from_cache']               = false;
 		$data['sections']                 = $sections;
 

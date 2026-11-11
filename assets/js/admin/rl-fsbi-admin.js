@@ -1726,6 +1726,7 @@
 		renderDashboard: function(data) {
 			this.currentReportCurrency = data.report_currency || data?.summary?.report_currency || null;
 			this.syncDateInputs(data.period || {});
+			this.updateOverview(data);
 			this.updatePageHeader(data);
 			this.updateTopCards(data);
 			this.updatePlanFilter(data);
@@ -1872,6 +1873,222 @@
 		 * @param {Object} data - Analytics payload containing kpis and summary objects.
 		 * @returns {void}
 		 */
+		/**
+		 * Overview tab: five KPI cards, the attention list and the MRR waterfall.
+		 *
+		 * Everything is read from the payload the overview slice already carries;
+		 * a figure that is not in it shows an em dash rather than a zero, so a
+		 * missing number never looks like a real one.
+		 *
+		 * @function updateOverview
+		 * @memberof FSBI
+		 * @param {Object} data Analytics payload.
+		 * @returns {void}
+		 */
+		updateOverview: function(data) {
+			const currency = this.getDisplayCurrency();
+			const kpis = data.kpis || {};
+			const summary = data.summary || {};
+			// New subscriptions are reported under blocks.acquisition; the target
+			// and its monthly series come from growth.growth (the new-subscription
+			// series built for the growth tab).
+			const acq = (data.blocks && data.blocks.acquisition) || {};
+			const seriesData = data.growth || {};
+			const subs = {
+				new: Number(seriesData.current_new ?? acq.new_customers ?? 0),
+				reactivations: Number(seriesData.current_reactivation ?? acq.reactivations ?? 0),
+				target: Number(seriesData.target || 0),
+			};
+			const extra = data.overview || {};
+			const money = (v) => this.formatCurrency(Number(v || 0), currency);
+
+			const setKpi = (id, value, deltaText, deltaTone) => {
+				this.setText('rl-fsbi-kpi-' + id, value);
+				const delta = document.getElementById('rl-fsbi-kpi-' + id + '-delta');
+				if (!delta) {
+					return;
+				}
+				delta.textContent = deltaText || '';
+				delta.className = 'rl-fsbi-kpi-delta' + (deltaTone ? ' is-' + deltaTone : '');
+			};
+
+			// New subscriptions vs target, with the pace expected by today.
+			const newCount = Number(subs.new || 0);
+			const target = Number(subs.target || 0);
+			let paceText = '';
+			if (target > 0) {
+				const day = Number(data.overview?.day_of_month || new Date().getDate());
+				const days = Number(data.overview?.days_in_month || 30);
+				const expected = (target * day) / Math.max(1, days);
+				const onTrack = newCount >= expected;
+				paceText = onTrack
+					? 'on track · ' + newCount + '/' + target
+					: 'behind · ' + newCount + '/' + target;
+				setKpi('newsubs', String(newCount), paceText, onTrack ? 'good' : 'warn');
+			} else {
+				setKpi('newsubs', String(newCount), Number(subs.reactivations || 0) + ' reactivations', 'neutral');
+			}
+
+			setKpi('mrr', money(kpis.mrr_converted ?? kpis.mrr), '', 'neutral');
+
+			const net = Number(summary.net_revenue || 0);
+			const prev = Number(summary.previous_net_revenue || 0);
+			if (prev > 0) {
+				const change = ((net - prev) / prev) * 100;
+				// Arrow plus words: colour alone never carries the meaning.
+				setKpi('net', money(net), (change >= 0 ? '▲ ' : '▼ ') + Math.abs(change).toFixed(1) + '% vs previous', change >= 0 ? 'good' : 'bad');
+			} else {
+				setKpi('net', money(net), prev === 0 ? 'no revenue in previous period' : '', 'neutral');
+			}
+
+			const churn = Number(kpis.churn_rate || 0);
+			setKpi('churn', this.formatPercent(churn, 1), churn < 3 ? 'within target' : 'above 3% target', churn < 3 ? 'good' : 'bad');
+
+			const tc = data.trial_conversion;
+			if (tc !== undefined && tc !== null && tc !== '') {
+				const rate = typeof tc === 'object' ? Number(tc.rate || 0) : Number(tc);
+				setKpi('trialpaid', this.formatPercent(rate, 1), '', 'neutral');
+			} else {
+				setKpi('trialpaid', '—', 'no trials in period', 'neutral');
+			}
+
+			this.renderAttention(extra.attention || []);
+			this.renderWaterfall(extra.waterfall || {}, currency);
+			this.renderSparkline('net', extra.series || []);
+		},
+
+		/**
+		 * Draw the attention list, most urgent first, capped at five.
+		 *
+		 * @function renderAttention
+		 * @memberof FSBI
+		 * @param {Array} items Attention entries.
+		 * @returns {void}
+		 */
+		renderAttention: function(items) {
+			const box = document.getElementById('rl-fsbi-attention');
+			const list = document.getElementById('rl-fsbi-attention-list');
+			if (!box || !list) {
+				return;
+			}
+
+			list.textContent = '';
+
+			if (!Array.isArray(items) || !items.length) {
+				box.hidden = true;
+				return;
+			}
+
+			items.slice(0, 5).forEach((item) => {
+				const li = document.createElement('li');
+				li.className = 'rl-fsbi-attention-item is-' + (item.severity || 'medium');
+				const icon = document.createElement('span');
+				icon.className = 'dashicons ' + ('high' === item.severity ? 'dashicons-warning' : 'dashicons-info-outline');
+				icon.setAttribute('aria-hidden', 'true');
+				const link = document.createElement('a');
+				link.href = '#' + String(item.hash || 'overview').replace(/^#/, '');
+				link.textContent = Number(item.count).toLocaleString() + ' ' + item.label;
+				li.appendChild(icon);
+				li.appendChild(link);
+				list.appendChild(li);
+			});
+
+			box.hidden = false;
+		},
+
+		/**
+		 * MRR movement: new, reactivation, churn, then the net change.
+		 *
+		 * @function renderWaterfall
+		 * @memberof FSBI
+		 * @param {Object} wf     Waterfall values.
+		 * @param {string} currency Currency code.
+		 * @returns {void}
+		 */
+		renderWaterfall: function(wf, currency) {
+			const host = document.getElementById('rl-fsbi-waterfall');
+			if (!host) {
+				return;
+			}
+
+			host.textContent = '';
+			const bars = [
+				{ key: 'new', label: 'New', tone: 'good' },
+				{ key: 'reactivation', label: 'Reactivation', tone: 'good' },
+				{ key: 'churn', label: 'Churn', tone: 'bad' },
+				{ key: 'net', label: 'Net change', tone: 'neutral' },
+			];
+			const max = Math.max(1, ...bars.map((b) => Math.abs(Number(wf[b.key] || 0))));
+
+			bars.forEach((bar) => {
+				const value = Number(wf[bar.key] || 0);
+				const row = document.createElement('div');
+				row.className = 'rl-fsbi-waterfall-row is-' + bar.tone;
+
+				const label = document.createElement('span');
+				label.className = 'rl-fsbi-waterfall-label';
+				label.textContent = bar.label;
+
+				const track = document.createElement('span');
+				track.className = 'rl-fsbi-waterfall-track';
+				const fill = document.createElement('span');
+				fill.className = 'rl-fsbi-waterfall-fill';
+				fill.style.width = Math.max(2, Math.round((Math.abs(value) / max) * 100)) + '%';
+				track.appendChild(fill);
+
+				const amount = document.createElement('span');
+				amount.className = 'rl-fsbi-waterfall-value';
+				amount.textContent = (value < 0 ? '−' : '') + this.formatCurrency(Math.abs(value), currency);
+
+				row.appendChild(label);
+				row.appendChild(track);
+				row.appendChild(amount);
+				host.appendChild(row);
+			});
+		},
+
+		/**
+		 * Tiny line chart for one KPI card.
+		 *
+		 * @function renderSparkline
+		 * @memberof FSBI
+		 * @param {string} id      KPI id.
+		 * @param {Array}  series  Points of {label, value}.
+		 * @returns {void}
+		 */
+		renderSparkline: function(id, series) {
+			const canvas = document.getElementById('rl-fsbi-kpi-' + id + '-spark');
+			if (!canvas || !series.length || !window.Chart) {
+				return;
+			}
+
+			if (this.charts['kpi_' + id]) {
+				this.charts['kpi_' + id].destroy();
+			}
+
+			this.charts['kpi_' + id] = new Chart(canvas, {
+				type: 'line',
+				data: {
+					labels: series.map((p) => p.label),
+					datasets: [{
+						data: series.map((p) => Number(p.value || 0)),
+						borderColor: '#5f6bff',
+						borderWidth: 1.5,
+						pointRadius: 0,
+						fill: false,
+						tension: 0.35,
+					}],
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: { legend: { display: false }, tooltip: { enabled: false } },
+					scales: { x: { display: false }, y: { display: false } },
+					animation: false,
+				},
+			});
+		},
+
 		updateMiniKpis: function(data) {
 			const currency = this.getDisplayCurrency();
 			const kpis = data.kpis || {};

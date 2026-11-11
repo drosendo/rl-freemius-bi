@@ -147,6 +147,41 @@ if ( ! defined( 'WPINC' ) ) {
 	</div>
 
 	<section class="rl-fsbi-panel" data-panel="overview" id="rl-fsbi-panel-overview" role="tabpanel" aria-labelledby="rl-fsbi-tab-overview" tabindex="0">
+
+	<div class="rl-fsbi-kpi-row" id="rl-fsbi-kpi-row">
+		<?php
+		$overview_cards = array(
+			'newsubs'   => array( __( 'New subscriptions', 'rl-freemius-bi' ), __( 'First-time paid subscriptions this month, excluding renewals and trials. Pace compares progress against the target expected by today.', 'rl-freemius-bi' ) ),
+			'mrr'       => array( __( 'MRR', 'rl-freemius-bi' ), __( 'Active subscriptions renewal amount, monthlyised by billing cycle, converted at each payment rate for its day.', 'rl-freemius-bi' ) ),
+			'net'       => array( __( 'Net revenue', 'rl-freemius-bi' ), __( 'Gross minus refunds, commission and gateway fees for the selected period, each converted at the rate of its own day.', 'rl-freemius-bi' ) ),
+			'churn'     => array( __( 'Churn rate', 'rl-freemius-bi' ), __( 'Cancellations in the period over the subscriber base that existed at its start.', 'rl-freemius-bi' ) ),
+			'trialpaid' => array( __( 'Trial to paid', 'rl-freemius-bi' ), __( 'Trials converted to a paid subscription in the period, over trials started.', 'rl-freemius-bi' ) ),
+		);
+		foreach ( $overview_cards as $card_id => $card_meta ) :
+			?>
+			<div class="rl-fsbi-kpi-card" data-kpi="<?php echo esc_attr( $card_id ); ?>">
+				<div class="rl-fsbi-kpi-head">
+					<span class="rl-fsbi-kpi-label"><?php echo esc_html( $card_meta[0] ); ?></span>
+					<span class="rl-fsbi-kpi-info" title="<?php echo esc_attr( $card_meta[1] ); ?>"><span class="dashicons dashicons-info" aria-hidden="true"></span><span class="screen-reader-text"><?php echo esc_html( $card_meta[1] ); ?></span></span>
+				</div>
+				<strong class="rl-fsbi-kpi-value" id="rl-fsbi-kpi-<?php echo esc_attr( $card_id ); ?>">—</strong>
+				<span class="rl-fsbi-kpi-delta" id="rl-fsbi-kpi-<?php echo esc_attr( $card_id ); ?>-delta"></span>
+				<canvas class="rl-fsbi-kpi-spark" id="rl-fsbi-kpi-<?php echo esc_attr( $card_id ); ?>-spark" height="34" aria-hidden="true"></canvas>
+			</div>
+		<?php endforeach; ?>
+	</div>
+
+	<div class="rl-fsbi-attention" id="rl-fsbi-attention" hidden>
+		<h2 class="rl-fsbi-attention-title"><?php echo esc_html__( 'Needs attention', 'rl-freemius-bi' ); ?></h2>
+		<ul class="rl-fsbi-attention-list" id="rl-fsbi-attention-list"></ul>
+	</div>
+
+	<div class="rl-fsbi-card rl-fsbi-waterfall-card">
+		<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'MRR movement', 'rl-freemius-bi' ); ?></div>
+		<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'New is first-time subscriptions, reactivation is a customer whose earlier subscription had ended, churn is what stopped during the period. Expansion and contraction are not shown: they need plan-change history Freemius does not expose, and deriving them from amount deltas would report coupons or currency swings as expansion.', 'rl-freemius-bi' ); ?></div>
+		<div class="rl-fsbi-waterfall" id="rl-fsbi-waterfall" role="img" aria-label="<?php echo esc_attr__( 'MRR movement for the selected period: new, reactivation, churn and net change.', 'rl-freemius-bi' ); ?>"></div>
+	</div>
+
 	<div class="rl-fsbi-top-grid">
 		<div class="rl-fsbi-card rl-fsbi-hero-card">
 			<div class="rl-fsbi-card-label"><?php echo esc_html__( 'Total Net Revenue', 'rl-freemius-bi' ); ?></div>

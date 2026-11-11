@@ -1926,3 +1926,169 @@ p.rl-fsbi-field-desc,
 .rl-fsbi-panel.is-loading > :not(.rl-fsbi-section-error):not(.rl-fsbi-skeleton) {
 	display: none !important;
 }
+
+/* Overview: five KPI cards, equal width, wrapping to 3 then 2. */
+.rl-fsbi-kpi-row {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: 10px;
+	margin: 0 0 12px;
+}
+
+.rl-fsbi-kpi-card {
+	padding: 12px 13px;
+	border: 1px solid var(--fsbi-border, #2b3150);
+	border-radius: 8px;
+	background: var(--fsbi-bg-2, #191e2e);
+	min-width: 0;
+}
+
+.rl-fsbi-kpi-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+	margin-bottom: 6px;
+}
+
+.rl-fsbi-kpi-label {
+	color: var(--fsbi-muted, #9aa4cc);
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: .06em;
+}
+
+.rl-fsbi-kpi-info {
+	color: #6b769e;
+	cursor: help;
+}
+
+.rl-fsbi-kpi-value {
+	display: block;
+	color: var(--fsbi-text, #e7ebff);
+	font-size: 20px;
+	line-height: 1.15;
+	overflow-wrap: anywhere;
+}
+
+.rl-fsbi-kpi-delta {
+	display: block;
+	margin-top: 3px;
+	font-size: 11px;
+	color: var(--fsbi-muted, #9aa4cc);
+}
+
+.rl-fsbi-kpi-delta.is-good { color: #4ade80; }
+.rl-fsbi-kpi-delta.is-warn { color: #fbbf24; }
+.rl-fsbi-kpi-delta.is-bad  { color: #ff5a72; }
+
+.rl-fsbi-kpi-spark {
+	display: block;
+	width: 100%;
+	height: 34px;
+	margin-top: 6px;
+}
+
+@media (max-width: 1400px) {
+	.rl-fsbi-kpi-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+	.rl-fsbi-kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Needs attention: hidden entirely when there is nothing to say. */
+.rl-fsbi-attention {
+	margin: 0 0 12px;
+	padding: 12px 14px;
+	border: 1px solid #4b3a1d;
+	border-left: 3px solid var(--fsbi-warning, #f4b942);
+	border-radius: 6px;
+	background: #241f14;
+}
+
+.rl-fsbi-attention-title {
+	margin: 0 0 8px;
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: .06em;
+	color: #ffd79a;
+}
+
+.rl-fsbi-attention-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.rl-fsbi-attention-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+.rl-fsbi-attention-item .dashicons {
+	font-size: 14px;
+	width: 14px;
+	height: 14px;
+}
+
+.rl-fsbi-attention-item.is-high .dashicons { color: #ff5a72; }
+.rl-fsbi-attention-item.is-medium .dashicons { color: #fbbf24; }
+
+.rl-fsbi-attention-item a {
+	color: #ffe9c7;
+	text-decoration: none;
+}
+
+.rl-fsbi-attention-item a:hover,
+.rl-fsbi-attention-item a:focus {
+	text-decoration: underline;
+}
+
+/* MRR waterfall: label, bar, value per row. */
+.rl-fsbi-waterfall {
+	margin: 6px 0 0;
+}
+
+.rl-fsbi-waterfall-row {
+	display: grid;
+	grid-template-columns: 110px minmax(0, 1fr) 110px;
+	align-items: center;
+	gap: 10px;
+	padding: 5px 0;
+	font-size: 12px;
+}
+
+.rl-fsbi-waterfall-label {
+	color: var(--fsbi-muted, #9aa4cc);
+}
+
+.rl-fsbi-waterfall-track {
+	display: block;
+	height: 12px;
+	border-radius: 3px;
+	background: rgba(154, 164, 204, 0.1);
+	overflow: hidden;
+}
+
+.rl-fsbi-waterfall-fill {
+	display: block;
+	height: 100%;
+	background: var(--fsbi-accent, #5f6bff);
+}
+
+.rl-fsbi-waterfall-row.is-good .rl-fsbi-waterfall-fill { background: #22c89b; }
+.rl-fsbi-waterfall-row.is-bad .rl-fsbi-waterfall-fill { background: #ff5a72; }
+
+.rl-fsbi-waterfall-value {
+	color: var(--fsbi-text, #e7ebff);
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+@media (max-width: 900px) {
+	.rl-fsbi-waterfall-row { grid-template-columns: 90px minmax(0, 1fr) 88px; }
+}

@@ -990,6 +990,23 @@ bumping `Version:` means no site will ever see it.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
 
+### Unreleased - Overview tab rebuild (phase 1, step 4c)
+
+The Overview tab now opens with what a seller needs to act on rather than a wall of cards:
+
+- **Five KPI cards**, each with an info tooltip stating the exact definition: New subscriptions against the target with a **pace** verdict, MRR, Net revenue with a delta against the previous period, Churn rate with a target verdict, and Trial to paid. A figure that is not in the payload shows an em dash, never a zero, so a missing number cannot be mistaken for a real one.
+- **Needs attention**, capped at five and sorted by severity then count, each linking to the tab that holds the detail. The box is **absent from the page when there is nothing to report**.
+- **MRR movement** with three rows only - New, Reactivation, Churn - plus the net change. Expansion and contraction are deliberately not shown: they need plan-change history Freemius does not expose, and deriving them from amount deltas would report coupons or currency swings as expansion.
+
+Deltas carry an arrow plus words ("▲ 4.2% vs previous", "behind · 1/5") so colour never carries the meaning alone.
+
+Verified at 1280px: New subscriptions `1 | behind · 1/5`, Net revenue `249,99 € | ▼ 58.4% vs previous`, Churn `1.6%`, attention `1 subscriptions with a failed payment`, waterfall `49,99 / 41,99 / 10,27 / 81,71`, KPI cards at 3 per row. Eight tab switches including revisits produced **no dialogs and no console errors**.
+
+Two known weaknesses, both to fix before release:
+
+- The **waterfall figures are first-payment gross, not monthlyised MRR**, so they understate movement on an account with long-lived subscriptions. The label says MRR movement; the calculation must be monthlyised (or the label changed) before this ships.
+- **Trial to paid reads 0.0%** because `trial_conversion.rate` is 0 for this product rather than absent; the card cannot yet distinguish "no trials" from "0%".
+
 ### Unreleased - fix the DataTables re-render path (phase 1, step 4b)
 
 Rendering a cached slice calls `renderDashboard()` a second time, and `updateMonthlyTable()` rebuilt the table body **while DataTables was still initialised on it**: the destroy call sat at the end of the function, after the rows had already been replaced. DataTables then wrote `_DT_CellIndex` onto rows it no longer owned:
