@@ -255,6 +255,7 @@ if ( ! defined( 'WPINC' ) ) {
 	</div>
 
 	<div class="rl-fsbi-content-grid">
+		<section class="rl-fsbi-panel" data-panel="growth">
 		<div class="rl-fsbi-card rl-fsbi-span-2">
 			<div class="rl-fsbi-panel-title" id="rl-fsbi-sales-activity-title"><?php echo esc_html__( 'Sales Activity', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-sales-activity-chart"></canvas>
@@ -401,6 +402,8 @@ if ( ! defined( 'WPINC' ) ) {
 		</div>
 
 		<?php if ( ! empty( $GLOBALS['rl_fsbi_has_wporg'] ) ) : ?>
+		</section>
+		<section class="rl-fsbi-panel" data-panel="wporg">
 		<div class="rl-fsbi-card rl-fsbi-wporg-widget" id="rl-fsbi-wporg-widget">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'WordPress.org (free)', 'rl-freemius-bi' ); ?></div>
 			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'From the public WordPress.org plugins API. These are installs of the free plugin from the WordPress.org directory — a different population from the Freemius install records beside them, so the two are shown separately and never added together.', 'rl-freemius-bi' ); ?></div>
@@ -417,6 +420,8 @@ if ( ! defined( 'WPINC' ) ) {
 		</div>
 		<?php endif; ?>
 
+		</section>
+		<section class="rl-fsbi-panel" data-panel="growth">
 		<div class="rl-fsbi-card rl-fsbi-installs-widget">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Freemius Installs', 'rl-freemius-bi' ); ?></div>
 			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Install records reported to Freemius by the plugin itself. WordPress.org shows a different population and is never combined with this figure.', 'rl-freemius-bi' ); ?></div>
@@ -427,8 +432,10 @@ if ( ! defined( 'WPINC' ) ) {
 				<div><dt><?php echo esc_html__( 'Total records', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-installs-total">—</dd></div>
 			</dl>
 		</div>
+		</section>
 	</div>
 
+	<section class="rl-fsbi-panel" data-panel="marketing">
 	<div class="rl-fsbi-card rl-fsbi-coupons-card">
 		<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Coupons', 'rl-freemius-bi' ); ?></div>
 		<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Redemptions in the selected period with the coupon definition as Freemius reports it. Uses counts this period; the limit, remaining and expiry are the coupon\'s own. Discount given is derived from the amount actually charged.', 'rl-freemius-bi' ); ?></div>
@@ -451,8 +458,10 @@ if ( ! defined( 'WPINC' ) ) {
 				</tbody>
 			</table>
 		</div>
+	</section>
 	</div>
 
+	<section class="rl-fsbi-panel" data-panel="customers">
 	<div class="rl-fsbi-card rl-fsbi-table-card">
 		<div class="rl-fsbi-card-header-flex">
 			<div>

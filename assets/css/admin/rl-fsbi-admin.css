@@ -360,6 +360,18 @@
 	margin-top: 12px;
 }
 
+/*
+ * Tab panels.
+ *
+ * `display: contents` means a panel generates no box, so its cards stay direct
+ * grid and flex children of whatever wraps them: splitting the markup into
+ * panels changes nothing on screen until a later step hides a panel by
+ * attribute. Panels are the grouping, not a layout layer.
+ */
+.rl-fsbi-panel {
+	display: contents;
+}
+
 .rl-fsbi-card {
 	background: radial-gradient(circle at top left, #222946, #141a29 70%);
 	border: 1px solid var(--fsbi-border);
@@ -1216,7 +1228,8 @@
 	   single-column layout, which is what crushed every card to about 110px
 	   between 900px and 1220px. Reset the span for every direct child rather
 	   than for the helper classes only. */
-	.rl-fsbi-content-grid > * {
+	.rl-fsbi-content-grid > *,
+	.rl-fsbi-content-grid > .rl-fsbi-panel > * {
 		grid-column: 1 / -1 !important;
 		min-width: 0;
 	}

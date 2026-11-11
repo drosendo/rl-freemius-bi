@@ -990,6 +990,19 @@ bumping `Version:` means no site will ever see it.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
 
+### Unreleased - dashboard panels (phase 1, step 1)
+
+The product dashboard's detailed cards now live in `<section class="rl-fsbi-panel" data-panel="...">` groups: `growth` (sales activity and the mini stats, expected renewals, trial funnel, forecast, the four charts, sales volume, Freemius installs), `wporg` (the WordPress.org card alone), `marketing` (coupons) and `customers` (monthly revenue breakdown). `overview` and `retention` are declared but empty until steps 4 and 2 fill them.
+
+Panels are declared `display: contents`, so a panel generates no box and its cards stay direct grid children: the page is pixel-identical until a later step hides a panel by attribute. Panels group, they do not lay out.
+
+Two consequences worth knowing:
+
+- `.rl-fsbi-content-grid > *` no longer matches the cards, since the sections are now the grid's children. The single-column rule below 1220px was extended to `.rl-fsbi-content-grid > .rl-fsbi-panel > *`, otherwise the `span 3` cards would have re-created the three-implicit-column collapse this rule exists to prevent.
+- A `span 3` card nested inside a panel still spans three columns, which is why the card count, column template and card widths are unchanged at 1280, 1920 and 1200px.
+
+Verified: 17 cards render, all five panels report `display: contents`, every checked render target fills (`stat-purchases` 2, `stat-renewals` 4, `wporg-active` 1,000, `installs-active` 2,309, `ret-active` 190, `acq-origin` Unknown), all eight chart canvases have non-zero size, no horizontal overflow at 1280, 1920 or 1200, and no console errors.
+
 ### Unreleased - first-run auto-detection
 
 **When Freemius reports no rate, account age is the evidence.** A first payment before the current pricing started (2026-10-05) means the account was onboarded under the legacy tiers, so the model is preselected as **Legacy progressive (assumed from account age)** with marginal 7.00% and lifetime average 7.95% for product 2228 - labelled as *assumed, not reported by Freemius*, with the hint to confirm in Freemius -> Earnings -> Payouts Information -> Fees Breakdown. It is applied only when the administrator presses Accept, and the Commission tooltip carries the same marker. For 2228 the first payment is 2019-01-15 with the $1,000 and $5,000 boundaries crossed on 2019-02-08 and 2019-10-06.
