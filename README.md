@@ -850,6 +850,9 @@ bumping `Version:` means no site will ever see it.
 **The "WP.org Growth & Downloads" chart was neither.**
 - It plotted Freemius payment events per day and was titled as if it were WordPress.org install data. At a handful of sales a day the y-axis appeared frozen between 0 and 3. It is now titled *Freemius Sales Volume (Daily)*, says plainly that it is billing activity and not WordPress.org installs, and draws integer ticks so a low-volume series stops rendering half payments. The payload also exposes the series as `daily_sales_volume`; `wporg_growth` is kept as an alias so existing consumers keep working.
 
+**Debug mode is off unless you ask for it.**
+- The framework was configured with `debug_level => 'debug'`, so the Support tab's *Enable Debug Mode* toggle had no effect at all: verbose logging ran on every live site. The level now follows the toggle, which defaults to off, and a warning banner appears on the plugin screens while it is on, linking straight to the setting.
+
 ### 1.3.30 (2026-11-10)
 - **An autofilled email can no longer become a bogus Developer ID.** A vendor reported that the backfill failed after signing up, and that the browser had filled the Developer ID field with their email address. The field was a plain text input with no autocomplete hints, and the sanitizer kept only the digits — so `john1985@gmail.com` was saved as `1985`, a perfectly valid id belonging to someone else. Every request then authenticated as the wrong account, and the failure described the API rather than the field. The sanitizer now rejects non-numeric input and keeps the previous value, the backfill error names the missing or non-numeric credential, a notice on the plugin screens says the value was not saved, and the credential fields carry `autocomplete="off"` with a numeric keypad on mobile.
 

@@ -57,7 +57,7 @@ class RL_FSBI_Settings_Manager {
 				'text_domain'   => 'rl-freemius-bi',
 				'ajax_action'   => 'rl_fsbi_save_settings',
 				'context'       => 'plugin',
-				'debug_level'   => 'debug',
+				'debug_level'   => 'error',
 			)
 		);
 
@@ -1772,6 +1772,22 @@ class RL_FSBI_Settings_Manager {
 	 * @param mixed  $default    Default value.
 	 * @return mixed
 	 */
+	/**
+	 * Whether verbose debug logging is switched on.
+	 *
+	 * Driven by the Support tab toggle; the reading is a plain option lookup so
+	 * the banner does not have to boot the framework.
+	 *
+	 * @return bool
+	 */
+	public function is_debug_mode(): bool {
+		if ( ! $this->framework ) {
+			return false;
+		}
+
+		return (bool) $this->framework->get_option( 'enable_debug', false );
+	}
+
 	public function get_option( $option_key, $default = false ) {
 		return $this->framework ? $this->framework->get_option( $option_key, $default ) : $default;
 	}

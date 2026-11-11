@@ -2302,6 +2302,35 @@ class RL_FSBI_Admin
 	 *
 	 * @return void
 	 */
+	/**
+	 * Warn while verbose debug logging is switched on.
+	 *
+	 * Debug mode writes a line for every framework call, which is useful while
+	 * troubleshooting and should not be left running on a live site.
+	 *
+	 * @return void
+	 */
+	public function render_debug_notice()
+	{
+		if (! current_user_can('manage_options') || ! $this->is_plugin_page()) {
+			return;
+		}
+
+		if (! $this->settings->is_debug_mode()) {
+			return;
+		}
+
+		$settings_url = admin_url('admin.php?page=' . $this->plugin_name . '-settings&tab=support');
+
+		printf(
+			'<div class="notice notice-warning"><p><strong>%s</strong> %s <a href="%s">%s</a></p></div>',
+			esc_html__('Debug mode is on.', 'rl-freemius-bi'),
+			esc_html__('Verbose logging is written for every request, which slows the dashboard and fills the log quickly. Switch it off once you have finished troubleshooting.', 'rl-freemius-bi'),
+			esc_url($settings_url),
+			esc_html__('Open Support settings', 'rl-freemius-bi')
+		);
+	}
+
 	public function render_credential_notice()
 	{
 		if (! current_user_can('manage_options') || ! $this->is_plugin_page()) {

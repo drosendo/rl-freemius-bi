@@ -104,6 +104,7 @@ class RL_FSBI {
 
 		$this->loader->add_action( 'admin_notices', $plugin_admin, 'render_kit_quota_notice' );
 		$this->loader->add_action( 'admin_notices', $plugin_admin, 'render_credential_notice' );
+		$this->loader->add_action( 'admin_notices', $plugin_admin, 'render_debug_notice' );
 		$this->loader->add_action( 'wp_dashboard_setup', $plugin_admin, 'register_wordpress_dashboard_widget' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_sync_data', $plugin_admin, 'handle_sync_ajax' );
 		$this->loader->add_action( 'wp_ajax_rl_fsbi_sync_batch', $plugin_admin, 'handle_sync_batch_ajax' );
