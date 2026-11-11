@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.5.0  
+**Version:** 1.5.1  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -1034,6 +1034,15 @@ Four figures were still being computed twice. All four now come from `summarise_
 - **Churn trend.** The base for each month no longer uses `expires_at` as a lower bound. That field is rewritten on every sync to the current period end, which emptied the base for every earlier month and drew 0.00% churn beside five to eleven cancellations.
 
 **Upgrade routine.** A version bump now persists the commission model and rate that detection found: an account called legacy gets its marginal rate (7%) and a fixed fee of 0 without anyone clicking Accept, so the site stops reading "revenue share not set". The bump also changes the payload cache key, so month rows are rebuilt on the first load after the update rather than waiting for the next sync.
+
+### 1.5.1
+
+Framework update. `includes/library/rloptionsFramework/` is upstream **2.6.0**, and the plugin adapted to it in two places; the details are under *Unreleased — RL Options Framework 2.6.0* below.
+
+- **The settings screen saves again.** 2.6.0 rejects an array payload for any field type it does not ship as multi-value, and this plugin's `checkbox_list` ("Tracked Plugins") stores an array — so every save, on every tab, failed with **"Tracked Plugins has an invalid value."** The type now declares itself through `rl_options_framework_array_field_types`.
+- **The plugin's own copy of the framework is the one that runs.** The entry point is required at plugin load so it takes part in the `plugins_loaded` arbitration; requiring it later left the site running another plugin's bundled build.
+
+If a site shows that error after updating, the new `includes/class-rl-fsbi-settings-manager.php` did not reach it: the 2.6.0 library files and the host-side fix ship together.
 
 ### 1.5.0 (unreleased)
 
