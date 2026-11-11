@@ -1376,7 +1376,42 @@
 		},
 
 		/**
-		 * Update mini-KPI cards and Portfolio Performance metrics.
+		 * Write the live Health Score breakdown into its tooltips.
+		 *
+		 * @function updateHealthTooltip
+		 * @memberof FSBI
+		 * @param {Object} kpis - KPI payload.
+		 * @returns {void}
+		 */
+		updateHealthTooltip: function(kpis) {
+			const criteria = Array.isArray(kpis.health_criteria) ? kpis.health_criteria : [];
+			if (!criteria.length) {
+				return;
+			}
+
+			const available = criteria.reduce((sum, c) => sum + Number(c.max || 0), 0);
+			const scaled = available > 0 && available !== 100;
+
+			const rows = criteria.map((c) => {
+				const pct = c.max > 0 ? Math.round((Number(c.score) / Number(c.max)) * 100) : 0;
+				return `<div style="margin-bottom:4px;">• <strong>${c.label} (${c.max} pts):</strong> ${c.score} pts (${pct}%)</div>`;
+			}).join('');
+
+			const note = scaled
+				? `<div style="margin-top:6px;font-size:11px;opacity:.85;">No trials in this period, so Trial Conversion is excluded and the remaining ${available} points are scaled to 100.</div>`
+				: '';
+
+			const html = `<div style="text-align:left;line-height:1.45;font-size:12px;padding:2px 4px;"><strong style="display:block;margin-bottom:6px;border-bottom:1px solid rgba(0,0,0,0.12);padding-bottom:4px;">Health Score (0–100) Breakdown</strong>${rows}${note}</div>`;
+
+			document.querySelectorAll('.rl-fsbi-health-tooltip').forEach((el) => {
+				el.setAttribute('data-tippy-content', html);
+				if (el._tippy) {
+					el._tippy.setContent(html);
+				}
+			});
+		},
+
+
 		 *
 		 * @function updateMiniKpis
 		 * @memberof FSBI
@@ -1399,6 +1434,7 @@
 			this.setText('rl-fsbi-refund-rate', this.formatPercent(Number(kpis.refund_rate || 0), 1));
 			this.setText('rl-fsbi-churn-rate', this.formatPercent(Number(kpis.churn_rate || 0), 1));
 			this.setText('rl-fsbi-health-score', String(Math.round(Number(kpis.health_score || 0))));
+			this.updateHealthTooltip(kpis);
 			this.setText('rl-fsbi-portfolio-revenue', this.formatCurrency(Number(data.summary?.net_revenue || 0), currency));
 			this.setText('rl-fsbi-portfolio-mrr', this.formatCurrency(mrr, currency));
 			this.setText('rl-fsbi-portfolio-arr', this.formatCurrency(arr, currency));

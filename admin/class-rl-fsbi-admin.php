@@ -5449,16 +5449,46 @@ class RL_FSBI_Admin
 		$aov = $payment_total > 0 ? ($net_revenue / $payment_total) : null;
 		$trial_rate = $trial_count > 0 ? ($converted_trials / $trial_count) * 100 : 0;
 
-		$health_score = min(
-			100,
-			max(
-				0,
-				($refund_rate < 5 ? 30 : max(0, 30 - ($refund_rate * 2))) +
-					($churn_rate < 3 ? 25 : max(0, 25 - ($churn_rate * 4))) +
-					($trial_rate > 25 ? 25 : ($trial_rate)) +
-					($net_revenue > $previous_net ? 20 : 10)
-			)
+		// Criteria the product can actually be judged on. A product that runs no
+		// trials scores nothing for trial conversion, which reads as a 25-point
+		// penalty for a business model it does not use, so the criterion is
+		// dropped and the remaining ones are scaled to fill the range.
+		$health_criteria = array(
+			'refunds' => array(
+				'label' => __('Refund Control', 'rl-freemius-bi'),
+				'score' => $refund_rate < 5 ? 30 : max(0, 30 - ($refund_rate * 2)),
+				'max' => 30,
+			),
+			'churn' => array(
+				'label' => __('Subscriber Churn', 'rl-freemius-bi'),
+				'score' => $churn_rate < 3 ? 25 : max(0, 25 - ($churn_rate * 4)),
+				'max' => 25,
+			),
+			'momentum' => array(
+				'label' => __('Revenue Momentum', 'rl-freemius-bi'),
+				'score' => $net_revenue > $previous_net ? 20 : 10,
+				'max' => 20,
+			),
 		);
+
+		if ($trial_count > 0) {
+			$health_criteria['trials'] = array(
+				'label' => __('Trial Conversion', 'rl-freemius-bi'),
+				'score' => $trial_rate > 25 ? 25 : $trial_rate,
+				'max' => 25,
+			);
+		}
+
+		$health_earned = 0.0;
+		$health_available = 0;
+		foreach ($health_criteria as $criterion) {
+			$health_earned += (float) $criterion['score'];
+			$health_available += (int) $criterion['max'];
+		}
+
+		$health_score = $health_available > 0
+			? min(100, max(0, ($health_earned / $health_available) * 100))
+			: 0;
 
 		$monthly_table = $this->build_monthly_breakdown($annual_payments, $report_currency, $commission_rate);
 		$sales_activity = $this->build_sales_activity_series($payments, $subscriptions, $start_date, $end_date, $commission_rate, $report_currency);
@@ -5509,6 +5539,16 @@ class RL_FSBI_Admin
 				'refund_rate'         => round($refund_rate, 2),
 				'churn_rate'          => round($churn_rate, 2),
 				'health_score'        => round($health_score, 0),
+				'health_criteria'    => array_map(
+					static function ($criterion) {
+						return array(
+							'label' => $criterion['label'],
+							'score' => round((float) $criterion['score'], 1),
+							'max'   => (int) $criterion['max'],
+						);
+					},
+					$health_criteria
+				),
 				'active_subscriptions' => $active_subscriptions,
 				'monthly_subscriptions' => (int) $subscription_stats['monthly'],
 				'annual_subscriptions'  => (int) $subscription_stats['annual'],
