@@ -2705,6 +2705,10 @@
 			this.setText('rl-fsbi-rev-net', money(rev.net));
 
 			const installs = data.installs || {};
+			// Only the Growth slice carries installs. Writing the card from an empty
+			// payload is what printed 0 for Premium and 0 for Total before the tab
+			// had ever been opened.
+			const hasInstalls = Object.keys(installs).length > 0;
 			// Freemius reports the live install count on the product; the table only
 			// holds records, most of which are historical uninstalls.
 			const reportedActive = Number(installs.reported_active || 0);
@@ -2721,10 +2725,12 @@
 			const premium = Number(installs.reported_premium || 0) > 0
 				? Number(installs.reported_premium)
 				: Number(installs.premium || 0);
-			this.setText('rl-fsbi-installs-active', count(activeInstalls));
-			this.setText('rl-fsbi-installs-premium', count(premium));
-			this.setText('rl-fsbi-installs-uninstalled', count(uninstalled));
-			this.setText('rl-fsbi-installs-total', count(total));
+			if (hasInstalls) {
+				this.setText('rl-fsbi-installs-active', count(activeInstalls));
+				this.setText('rl-fsbi-installs-premium', count(premium));
+				this.setText('rl-fsbi-installs-uninstalled', count(uninstalled));
+				this.setText('rl-fsbi-installs-total', count(total));
+			}
 
 			this.renderCoupons(data.coupons || []);
 			this.updateWporgWidget(data.wporg || {});
