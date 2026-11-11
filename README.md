@@ -990,6 +990,19 @@ bumping `Version:` means no site will ever see it.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
 
+### Unreleased - fix the DataTables re-render path (phase 1, step 4b)
+
+Rendering a cached slice calls `renderDashboard()` a second time, and `updateMonthlyTable()` rebuilt the table body **while DataTables was still initialised on it**: the destroy call sat at the end of the function, after the rows had already been replaced. DataTables then wrote `_DT_CellIndex` onto rows it no longer owned:
+
+```
+TypeError: Cannot set properties of undefined (setting '_DT_CellIndex')
+DataTables warning: table id=rl-fsbi-monthly-table - Incorrect column count
+```
+
+The second line was a **modal alert**, so switching back to a tab could block the page. The destroy now runs before the body is rewritten, and an empty slice renders its "no data" row without initialising an instance over it.
+
+Verified by cycling ten tab switches (growth → overview → customers → overview → marketing → growth → wporg → customers → wporg → overview) with no dialogs, no page errors and no console errors, ending with five cached slices and the monthly table live at twelve rows.
+
 ### Unreleased - compact sticky header (phase 1, step 4a)
 
 The controls were sized for a wide page, so at 1280px the plan selector wrapped to a second row and the sticky header took a fifth of the viewport. Controls now use a 28px rhythm with smaller type, the date fields are narrower and the tab bar is tighter.

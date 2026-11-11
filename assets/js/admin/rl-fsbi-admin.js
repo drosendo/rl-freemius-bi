@@ -3182,6 +3182,15 @@
 
 			this.monthlyTableData = tableData;
 
+			// DataTables must be torn down BEFORE the rows are rebuilt. Rewriting
+			// the tbody of a live instance makes it write _DT_CellIndex onto rows
+			// it no longer owns, which raises "Incorrect column count" as a modal
+			// alert. The destroy that used to live at the end of this function ran
+			// after the damage.
+			if (window.jQuery && window.jQuery.fn && window.jQuery.fn.DataTable && window.jQuery.fn.DataTable.isDataTable(table)) {
+				window.jQuery(table).DataTable().destroy();
+			}
+
 			tbody.innerHTML = '';
 
 			if (!rows.length) {
@@ -3269,11 +3278,14 @@
 			this.setText('rl-fsbi-total-net', this.formatCurrency(Number(totals.net || 0), reportCurrency));
 			this.setText('rl-fsbi-total-currency', totals.currency || reportCurrency);
 
+			// Already destroyed above; this only guards a path that skipped it.
 			if (window.jQuery && window.jQuery.fn && window.jQuery.fn.DataTable && window.jQuery.fn.DataTable.isDataTable(table)) {
 				window.jQuery(table).DataTable().destroy();
 			}
 
-			if (window.jQuery && window.jQuery.fn && window.jQuery.fn.DataTable) {
+			// An empty slice shows its message row instead of an instance with no
+			// rows, which DataTables rejects as a column-count mismatch.
+			if (window.jQuery && window.jQuery.fn && window.jQuery.fn.DataTable && rows.length) {
 				this.dataTable = window.jQuery(table).DataTable({
 					pageLength: Number.parseInt(rlFsbiAdmin.tableRows || 25, 10),
 					ordering: false,
