@@ -2729,9 +2729,16 @@ body[class*="rl-freemius-bi"] #wpfooter {
 
 /* The framework reports a save with a bottom-corner toast, but it renders that
    toast through SweetAlert2, whose stylesheet paints the dark dialog backdrop on
-   every container that carries `swal2-backdrop-show`. The whole admin screen
-   dimmed to grey for the life of the toast. Real dialogs keep their backdrop. */
-.rl-toast-container.swal2-container {
+   every container that carries `swal2-backdrop-show` - so the whole admin screen
+   dimmed for the life of the toast. WP Compress Image Optimizer sharpens it into
+   `background: rgba(17,24,39,.4) !important; backdrop-filter: blur(4px)` on the
+   same two classes, site-wide. Three classes here beat those two whatever order
+   the stylesheets load in, and the blur is cleared as well. Real dialogs keep
+   their backdrop; only the toast container is reset. */
+.rl-toast-container.swal2-container.swal2-backdrop-show {
+	background: none !important;
 	background-color: transparent !important;
+	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none !important;
 	box-shadow: none !important;
 }
