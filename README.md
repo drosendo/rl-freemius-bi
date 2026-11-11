@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.4.9  
+**Version:** 1.4.10  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -989,6 +989,35 @@ bumping `Version:` means no site will ever see it.
 - **WordPress.org slugs are per plugin.** The single global field became a per-product editor on the **Plugin Scope** tab, prefilled with each Freemius slug and validated against the wp.org API on save — an unknown slug is rejected rather than stored, since it would render a widget full of zeros. With no slug the widget is not rendered at all (no card, no canvas, no note) and no wp.org request is made.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
+
+### 1.4.10 (2026-11-11)
+
+**A payments re-sync proved that Freemius does not return a commission for this product at all.**
+
+Backed up the payments table to `wp_rl_fsbi_payments_backup_20261111` (2,978 rows), re-fetched every payment for product 2228 through the API, and compared row by row:
+
+| | rows | recorded commission | derived (*) |
+| --- | --- | --- | --- |
+| Before | 2,978 | 247 | 2,613 |
+| After | 2,978 | 247 | 2,613 |
+
+**Zero rows changed.** The API returned 1,375 payments for product 2228 and `fee` was present on **none** of them; the 247 rows that carry a recorded commission all belong to the local demo product, which the API does not know about. So the `*` marker on the real product is not a sync gap that a re-sync can close — the field is simply absent from the response. The commission tooltip now says exactly that instead of implying a retry would fix it:
+
+- all rows recorded → *"14.80% of gross, recorded by Freemius on every payment of the month"*;
+- all rows derived → *"Derived: Freemius returned no commission on this month's payments… Re-syncing the payments does not change this"*;
+- mixed → the split with counts.
+
+**Refunds carry no commission either.** A raw refund payment straight from the API:
+
+```
+gross = -59.99   vat = -12.60   gateway_fee = 0   type = 'refund'
+```
+
+There is no `fee` and no `net`, so there is **no commission to reverse** on a refund, and the Commission column must not be reduced by one. The rule the widget applies is therefore: *Refunds = the amount returned to the customer, net of any commission Freemius actually recorded on that row*, which for API refunds is the full amount. That is now stated in the footnote under the table.
+
+**VAT is present and still unaccounted for.** 677 payment rows carry a `vat` value (freely negative on refunds, e.g. −12.60). Whether `gross` is VAT-inclusive decides whether VAT belongs in the identity; it is not being guessed at here — it needs one confirmation against a Freemius payout statement before it becomes a column.
+
+*(The Phase 1 dashboard shell is not in this release: `.rl-fsbi-content-grid` is a single flat grid holding every detailed card, so it has to be decomposed into per-tab groups before tabs can hide anything meaningful. Doing it the quick way would produce tabs that hide nothing.)*
 
 ### 1.4.9 (2026-11-11)
 

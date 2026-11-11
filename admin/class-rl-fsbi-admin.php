@@ -966,7 +966,7 @@ class RL_FSBI_Admin
 						<td><?php echo esc_html($point['label']); ?><?php if ('current' === $point['payout_status']) : ?><span class="rl-fsbi-wp-payout-badge rl-fsbi-wp-payout-current"><?php echo esc_html__('CURRENT PAYOUT', 'rl-freemius-bi'); ?></span><?php elseif ('next' === $point['payout_status']) : ?><span class="rl-fsbi-wp-payout-badge rl-fsbi-wp-payout-next"><?php echo esc_html__('NEXT PAYOUT', 'rl-freemius-bi'); ?></span><?php endif; ?><?php if ($point['partial'] && ! empty($point['projection_height'])) : ?><br /><small class="rl-fsbi-wp-projection-note"><?php echo esc_html(sprintf(/* translators: %s: projected net revenue */ __('Linear projection: %s', 'rl-freemius-bi'), $format_plain($point['projection']))); ?></small><?php endif; ?></td>
 						<td><?php echo esc_html($format_num($point['gross'])); ?></td>
 						<td><?php echo esc_html($format_num($point['refunds'])); ?></td>
-						<td title="<?php echo esc_attr(sprintf(/* translators: 1: commission as % of gross, 2: rows using the derived rate */ __('%1$s%% of gross; %2$s rows use the synced rate (derived).', 'rl-freemius-bi'), number_format_i18n((float) $point['commission_pct'], 2), number_format_i18n((int) $point['derived_rows']))); ?>"><?php echo esc_html($format_num($point['commission'])); ?><?php if ($point['derived_rows'] > 0) : ?><span class="rl-fsbi-wp-derived" aria-hidden="true">*</span><?php endif; ?></td>
+						<td title="<?php echo esc_attr($this->describe_commission_tooltip($point)); ?>"><?php echo esc_html($format_num($point['commission'])); ?><?php if ($point['derived_rows'] > 0) : ?><span class="rl-fsbi-wp-derived" aria-hidden="true">*</span><?php endif; ?></td>
 						<td><?php echo esc_html($format_num($point['gateway'])); ?></td>
 						<td><strong><?php echo esc_html($format_num($point['value'])); ?></strong></td>
 					</tr>
@@ -1032,6 +1032,44 @@ class RL_FSBI_Admin
 			<a href="<?php echo esc_url($data['dashboard_url']); ?>"><?php echo esc_html__('Open full dashboard', 'rl-freemius-bi'); ?></a>
 		</p>
 <?php
+	}
+
+	/**
+	 * Explain where a month's commission figure came from.
+	 *
+	 * @param array $point One row of the widget trend.
+	 * @return string
+	 */
+	private function describe_commission_tooltip($point)
+	{
+		$pct = number_format_i18n((float) ($point['commission_pct'] ?? 0), 2);
+		$rate = number_format_i18n((float) ($point['rate'] ?? 0), 2);
+
+		if (empty($point['derived_rows'])) {
+			return sprintf(
+				/* translators: 1: percentage of gross, 2: rate */
+				__('%1$s%% of gross, recorded by Freemius on every payment of the month (rate %2$s%%).', 'rl-freemius-bi'),
+				$pct,
+				$rate
+			);
+		}
+
+		if ((int) $point['derived_rows'] >= (int) ($point['sale_rows'] ?? 0)) {
+			return sprintf(
+				/* translators: %s: rate */
+				__('Derived: Freemius returned no commission on this month\'s payments, so the %s%% rate synced from your account balance is applied to every sale. Re-syncing the payments does not change this - the field is simply not in the API response.', 'rl-freemius-bi'),
+				$rate
+			);
+		}
+
+		return sprintf(
+			/* translators: 1: percentage of gross, 2: derived rows, 3: total sale rows, 4: rate */
+			__('%1$s%% of gross. %2$s of %3$s sales use the derived %4$s%% rate because Freemius returned no commission for them; the rest are recorded.', 'rl-freemius-bi'),
+			$pct,
+			number_format_i18n((int) $point['derived_rows']),
+			number_format_i18n((int) ($point['sale_rows'] ?? 0)),
+			$rate
+		);
 	}
 
 	/**
@@ -1135,6 +1173,7 @@ class RL_FSBI_Admin
 				'commission' => $row['commission'],
 				'gateway' => $row['gateway'],
 				'derived_rows' => $row['derived_rows'],
+				'sale_rows' => $row['sale_rows'],
 				'commission_pct' => $row['commission_pct'],
 				'partial' => 0 === $i,
 				'label' => 0 === $i
@@ -1309,6 +1348,7 @@ class RL_FSBI_Admin
 		$gateway = 0.0;
 		$net = 0.0;
 		$derived_rows = 0;
+		$sale_rows = 0;
 
 		// Freemius records its cut in the payments "fee" column (14.80% of gross
 		// on every row that has one) and stores net = gross - fee. Rows synced
@@ -1341,6 +1381,7 @@ class RL_FSBI_Admin
 			}
 
 			$gross += $row_gross;
+			$sale_rows++;
 
 			if (abs($row_net) > 0.00001) {
 				$commission += $row_fee;
@@ -1362,6 +1403,7 @@ class RL_FSBI_Admin
 			'gateway' => round($gateway, 2),
 			'net' => round($net, 2),
 			'derived_rows' => $derived_rows,
+			'sale_rows' => $sale_rows,
 			'rate' => $rate,
 			// Only meaningful once the month has rows; used for the sanity check.
 			'commission_pct' => $gross > 0 ? round(($commission / $gross) * 100, 2) : 0.0,
