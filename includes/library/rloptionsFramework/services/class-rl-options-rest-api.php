@@ -19,6 +19,18 @@
 class RL_Options_Rest_Api {
 
 	/**
+	 * Namespace used before routes were scoped per instance (kept for compatibility).
+	 */
+	public const LEGACY_NAMESPACE = 'rl-options/v1';
+
+	/**
+	 * Whether the shared legacy namespace was already registered in this request.
+	 *
+	 * @var bool
+	 */
+	private static bool $legacy_routes_registered = false;
+
+	/**
 	 * Framework instance.
 	 *
 	 * @var RL_Options_Framework
@@ -51,41 +63,76 @@ class RL_Options_Rest_Api {
 	/**
 	 * Register REST routes for country geo data endpoints.
 	 *
+	 * Each instance owns its namespace (`rl-options-{scope}/v1`) so two plugins
+	 * cannot overwrite each other's permission callback, and the shared
+	 * `rl-options/v1` namespace is still registered once for backwards
+	 * compatibility with existing JavaScript and integrations.
+	 *
 	 * Routes:
-	 * - GET /wp-json/rl-options/v1/countries
-	 * - GET /wp-json/rl-options/v1/countries/{code}/subdivisions
-	 * - GET /wp-json/rl-options/v1/countries/{code}/municipalities
+	 * - GET /wp-json/{namespace}/countries
+	 * - GET /wp-json/{namespace}/countries/{code}/subdivisions
+	 * - GET /wp-json/{namespace}/countries/{code}/municipalities
 	 */
 	public function register_routes(): void {
+		$this->register_routes_for( $this->framework->rest_namespace() );
+
+		if ( ! self::$legacy_routes_registered ) {
+			self::$legacy_routes_registered = true;
+			$this->register_routes_for( self::LEGACY_NAMESPACE );
+		}
+	}
+
+	/**
+	 * Register the geo routes under one namespace.
+	 *
+	 * @param string $namespace REST namespace.
+	 */
+	private function register_routes_for( string $namespace ): void {
 		register_rest_route(
-			'rl-options/v1',
+			$namespace,
 			'/countries',
 			[
 				'methods'             => 'GET',
-				'permission_callback' => '__return_true',
+				'permission_callback' => [ $this, 'can_read_reference_data' ],
 				'callback'            => [ $this, 'rest_get_countries' ],
 			]
 		);
 
 		register_rest_route(
-			'rl-options/v1',
+			$namespace,
 			'/countries/(?P<code>[A-Za-z]{2})/subdivisions',
 			[
 				'methods'             => 'GET',
-				'permission_callback' => '__return_true',
+				'permission_callback' => [ $this, 'can_read_reference_data' ],
 				'callback'            => [ $this, 'rest_get_subdivisions' ],
 			]
 		);
 
 		register_rest_route(
-			'rl-options/v1',
+			$namespace,
 			'/countries/(?P<code>[A-Za-z]{2})/municipalities',
 			[
 				'methods'             => 'GET',
-				'permission_callback' => '__return_true',
+				'permission_callback' => [ $this, 'can_read_reference_data' ],
 				'callback'            => [ $this, 'rest_get_municipalities' ],
 			]
 		);
+	}
+
+	/**
+	 * Permission callback for the read-only reference data routes.
+	 *
+	 * The framework is an admin surface, so the geo reference data is only exposed
+	 * to users who can open the options page. Hosts that serve it elsewhere can
+	 * bypass the check with the `rl_options_framework_rest_reference_permission` filter.
+	 *
+	 * @param WP_REST_Request|null $request Incoming request (unused).
+	 * @return bool
+	 */
+	public function can_read_reference_data( $request = null ): bool {
+		$allowed = current_user_can( (string) $this->framework->get_config( 'capability' ) );
+
+		return (bool) apply_filters( 'rl_options_framework_rest_reference_permission', $allowed, $this->framework );
 	}
 
 	/**
@@ -156,7 +203,7 @@ class RL_Options_Rest_Api {
 	 * @return array<string,array>
 	 */
 	public function get_country_reference_data(): array {
-		$cache_key = 'rl_of_country_reference_v1';
+		$cache_key = $this->framework->cache_key( 'country_reference_v1' );
 		$cached    = get_transient( $cache_key );
 		if ( is_array( $cached ) && ! empty( $cached ) ) {
 			return $cached;
@@ -221,7 +268,7 @@ class RL_Options_Rest_Api {
 			return [];
 		}
 
-		$cache_key = 'rl_of_subdivisions_' . strtolower( $country_code );
+		$cache_key = $this->framework->cache_key( 'subdivisions_' . strtolower( $country_code ) );
 		$cached    = get_transient( $cache_key );
 		if ( is_array( $cached ) && ! empty( $cached ) ) {
 			return $cached;
@@ -267,7 +314,7 @@ class RL_Options_Rest_Api {
 			return [];
 		}
 
-		$cache_key = 'rl_of_municipalities_' . strtolower( $country_code ) . '_' . $subdivision;
+		$cache_key = $this->framework->cache_key( 'municipalities_' . strtolower( $country_code ) . '_' . $subdivision );
 		$cached    = get_transient( $cache_key );
 		if ( is_array( $cached ) && ! empty( $cached ) ) {
 			return $cached;

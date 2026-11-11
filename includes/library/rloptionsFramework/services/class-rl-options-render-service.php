@@ -78,7 +78,6 @@ class RL_Options_Render_Service
 						/* translators: %s: filter name */
 						printf(esc_html__('Use the %s filter to add settings tabs.', RL_Options_Framework::text_domain()), '<code>' . esc_html($this->framework->config['option_name'] . '_framework_tabs') . '</code>'); 
 					?></p>
-					</p>
 				</div>
 				<?php return; ?>
 			<?php endif; ?>

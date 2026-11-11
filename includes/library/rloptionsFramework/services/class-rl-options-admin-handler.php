@@ -64,9 +64,7 @@ class RL_Options_Admin_Handler {
 			if ( count( $parts ) === 2 ) {
 				$this->framework->get_storage_service()->reset_section_to_defaults( $parts[0], $parts[1] );
 				
-				// Fire generic post-reset hooks
-				do_action( $this->framework->get_config( 'option_name' ) . '_settings_reset' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound
-				do_action( 'rl_options_framework_settings_reset', $this->framework->get_config(), $this->framework ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+				$this->dispatch_reset_hooks();
 
 				$message_param = $this->framework->get_config( 'form_field_prefix' ) . '_message';
 				wp_safe_redirect(
@@ -82,54 +80,13 @@ class RL_Options_Admin_Handler {
 			}
 		}
 
-		$input = isset( $_POST[ $this->framework->get_config( 'form_field_prefix' ) ] ) ? wp_unslash( $_POST[ $this->framework->get_config( 'form_field_prefix' ) ] ) : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$input = $this->submitted_input();
 		RL_Logger::debug( 'Form field prefix: ' . $this->framework->get_config( 'form_field_prefix' ) );
-
-		if ( ! is_array( $input ) ) {
-			RL_Logger::warn( 'Input is not an array; defaulting to empty array.' );
-			$input = [];
-		}
-		$this->framework->set_validation_context( $input );
-
 		RL_Logger::debug( 'Submitted field count: ' . count( $input ) );
 
-		$saved = get_option( $this->framework->get_config( 'option_name' ), [] );
-		if ( ! is_array( $saved ) ) {
-			$saved = [];
-		}
-		RL_Logger::debug( 'Existing saved fields: ' . count( $saved ) );
-
-		$validation_errors = [];
-		$field_errors      = [];
-
-		foreach ( $fields_map as $field_id => $field ) {
-			if ( ! $this->framework->is_storable_field( $field ) ) {
-				continue;
-			}
-
-			$value = $input[ $field_id ] ?? null;
-			$value = $this->framework->prepare_value_for_validation( $field, $value );
-
-			$error = '';
-
-			// Validate field.
-			if ( ! $this->framework->validate_field_value( $field, $value, $error ) ) {
-				$validation_errors[ $field_id ] = $error;
-				$field_errors[ $field_id ]      = [
-					'field_id'    => $field_id,
-					'field_label' => $this->framework->get_field_label( $field ),
-					'tab_id'      => $field['__tab_id'] ?? '',
-					'section_id'  => $field['__section_id'] ?? '',
-					'message'     => $error,
-				];
-				RL_Logger::warn( 'Validation failed for field.', [ 'field_id' => $field_id, 'error' => $error ] );
-				continue;
-			}
-
-			// Sanitize and save.
-			$sanitized_value       = $this->framework->sanitize_field_value( $field, $value );
-			$saved[ $field_id ]    = $sanitized_value;
-		}
+		$result            = $this->process_submission( $input );
+		$validation_errors = $result['errors'];
+		$saved             = $result['values'];
 
 		// If validation errors, redirect with error message.
 		if ( ! empty( $validation_errors ) ) {
@@ -154,9 +111,7 @@ class RL_Options_Admin_Handler {
 		RL_Logger::info( 'update_option result: ' . ( $update_result ? 'SUCCESS' : 'FAILED (or unchanged)' ) );
 		RL_Logger::info( 'Total fields saved: ' . count( $saved ) );
 
-		// Fire generic post-save hooks for host integrations.
-		do_action( $this->framework->get_config( 'option_name' ) . '_settings_saved', $saved ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound
-		do_action( 'rl_options_framework_settings_saved', $saved, $this->framework->get_config(), $this->framework ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+		$this->dispatch_saved_hooks( $saved );
 
 		RL_Logger::debug( '========== SAVE HANDLER END ==========' );
 
@@ -181,10 +136,10 @@ class RL_Options_Admin_Handler {
 	 */
 	public function handle_ajax_save(): void {
 		RL_Logger::debug( '========== AJAX SAVE HANDLER CALLED ==========' );
-		RL_Logger::debug( 'Expected nonce action: ' . $this->framework->get_config( 'ajax_action' ) . '_nonce' );
+		RL_Logger::debug( 'Expected nonce action: ' . $this->framework->nonce_action() );
 
 		// Verify nonce (accept AJAX nonce and fallback to form nonce).
-		$ajax_nonce_action = $this->framework->get_config( 'ajax_action' ) . '_nonce';
+		$ajax_nonce_action = $this->framework->nonce_action();
 		$form_nonce_action = $this->framework->get_config( 'page_slug' ) . '_save_options';
 		$form_nonce_field  = $this->framework->get_config( 'form_field_prefix' ) . '_nonce';
 
@@ -211,7 +166,8 @@ class RL_Options_Admin_Handler {
 			wp_send_json_error(
 				[
 					'message' => __( 'You are not allowed to manage these settings.', RL_Options_Framework::text_domain() ),
-				]
+				],
+				403
 			);
 		}
 
@@ -237,9 +193,8 @@ class RL_Options_Admin_Handler {
 			}
 
 			// Fire generic post-save hooks for host integrations to react to the import
-			$saved = get_option( $this->framework->get_config( 'option_name' ), [] );
-			do_action( $this->framework->get_config( 'option_name' ) . '_settings_saved', $saved ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound
-			do_action( 'rl_options_framework_settings_saved', $saved, $this->framework->get_config(), $this->framework ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+			$imported = get_option( $this->framework->get_config( 'option_name' ), [] );
+			$this->dispatch_saved_hooks( is_array( $imported ) ? $imported : [] );
 
 			wp_send_json_success(
 				[
@@ -251,12 +206,10 @@ class RL_Options_Admin_Handler {
 
 		// Check for reset payload
 		$reset_input_name = $this->framework->get_config( 'form_field_prefix' ) . '_reset_settings';
-		if ( isset( $_POST[ $reset_input_name ] ) && $_POST[ $reset_input_name ] === '1' ) {
+		if ( '1' === sanitize_text_field( wp_unslash( $_POST[ $reset_input_name ] ?? '' ) ) ) {
 			$this->framework->reset_to_defaults();
 
-			// Fire generic post-reset hooks for host integrations to react to the reset
-			do_action( $this->framework->get_config( 'option_name' ) . '_settings_reset' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound
-			do_action( 'rl_options_framework_settings_reset', $this->framework->get_config(), $this->framework ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+			$this->dispatch_reset_hooks();
 
 			wp_send_json_success(
 				[
@@ -274,9 +227,7 @@ class RL_Options_Admin_Handler {
 			if ( count( $parts ) === 2 ) {
 				$this->framework->get_storage_service()->reset_section_to_defaults( $parts[0], $parts[1] );
 				
-				// Fire generic post-reset hooks
-				do_action( $this->framework->get_config( 'option_name' ) . '_settings_reset' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound
-				do_action( 'rl_options_framework_settings_reset', $this->framework->get_config(), $this->framework ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+				$this->dispatch_reset_hooks();
 
 				wp_send_json_success(
 					[
@@ -287,51 +238,13 @@ class RL_Options_Admin_Handler {
 			}
 		}
 
-		$input = isset( $_POST[ $this->framework->get_config( 'form_field_prefix' ) ] ) ? wp_unslash( $_POST[ $this->framework->get_config( 'form_field_prefix' ) ] ) : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$input = $this->submitted_input();
 		RL_Logger::debug( 'Submitted field count: ' . count( $input ) );
 
-		if ( ! is_array( $input ) ) {
-			RL_Logger::warn( 'Input is not an array.' );
-			$input = [];
-		}
-		$this->framework->set_validation_context( $input );
-
-		$saved = get_option( $this->framework->get_config( 'option_name' ), [] );
-		if ( ! is_array( $saved ) ) {
-			$saved = [];
-		}
-
-		$validation_errors = [];
-		$field_errors      = [];
-
-		foreach ( $fields_map as $field_id => $field ) {
-			if ( ! $this->framework->is_storable_field( $field ) ) {
-				continue;
-			}
-
-			$value = $input[ $field_id ] ?? null;
-			$value = $this->framework->prepare_value_for_validation( $field, $value );
-
-			$error = '';
-
-			// Validate field.
-			if ( ! $this->framework->validate_field_value( $field, $value, $error ) ) {
-				$validation_errors[ $field_id ] = $error;
-				$field_errors[ $field_id ]      = [
-					'field_id'    => $field_id,
-					'field_label' => $this->framework->get_field_label( $field ),
-					'tab_id'      => $field['__tab_id'] ?? '',
-					'section_id'  => $field['__section_id'] ?? '',
-					'message'     => $error,
-				];
-				RL_Logger::warn( 'AJAX validation failed for field.', [ 'field_id' => $field_id, 'error' => $error ] );
-				continue;
-			}
-
-			// Sanitize and save.
-			$sanitized_value    = $this->framework->sanitize_field_value( $field, $value );
-			$saved[ $field_id ] = $sanitized_value;
-		}
+		$result            = $this->process_submission( $input );
+		$validation_errors = $result['errors'];
+		$field_errors      = $result['field_errors'];
+		$saved             = $result['values'];
 
 		// If validation errors, return error.
 		if ( ! empty( $validation_errors ) ) {
@@ -349,9 +262,7 @@ class RL_Options_Admin_Handler {
 		RL_Logger::info( 'AJAX update_option result: ' . ( $update_result ? 'SUCCESS' : 'FAILED (or unchanged)' ) );
 		RL_Logger::info( 'Total fields saved: ' . count( $saved ) );
 
-		// Fire generic post-save hooks for host integrations.
-		do_action( $this->framework->get_config( 'option_name' ) . '_settings_saved', $saved ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound
-		do_action( 'rl_options_framework_settings_saved', $saved, $this->framework->get_config(), $this->framework ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+		$this->dispatch_saved_hooks( $saved );
 
 		RL_Logger::debug( '========== AJAX SAVE END ==========' );
 
@@ -369,9 +280,13 @@ class RL_Options_Admin_Handler {
 	 * Handles dynamic option loading for fields
 	 * that provide options via callbacks.
 	 */
-	public function handle_ajax_field_options(): void {
+	public function handle_ajax_field_options( bool $shared_endpoint = false ): void {
 		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
-		if ( empty( $nonce ) || ! wp_verify_nonce( $nonce, $this->framework->get_config( 'ajax_action' ) . '_nonce' ) ) {
+		if ( ! $this->request_nonce_is_valid( $nonce, $shared_endpoint ) ) {
+			if ( $this->defer_to_other_host( $shared_endpoint ) ) {
+				return;
+			}
+
 			wp_send_json_error(
 				[ 'message' => __( 'Security check failed.', RL_Options_Framework::text_domain() ) ],
 				403
@@ -379,6 +294,10 @@ class RL_Options_Admin_Handler {
 		}
 
 		if ( ! current_user_can( $this->framework->get_config( 'capability' ) ) ) {
+			if ( $this->defer_to_other_host( $shared_endpoint ) ) {
+				return;
+			}
+
 			wp_send_json_error(
 				[ 'message' => __( 'You are not allowed to perform this action.', RL_Options_Framework::text_domain() ) ],
 				403
@@ -393,6 +312,10 @@ class RL_Options_Admin_Handler {
 
 		$fields_map = $this->framework->get_fields_index();
 		if ( $field_id === '' || empty( $fields_map[ $field_id ] ) ) {
+			if ( $this->defer_to_other_host( $shared_endpoint ) ) {
+				return;
+			}
+
 			wp_send_json_error(
 				[ 'message' => __( 'Unknown field.', RL_Options_Framework::text_domain() ) ],
 				400
@@ -416,9 +339,13 @@ class RL_Options_Admin_Handler {
 	 * Provides real-time field validation feedback
 	 * without saving the entire form.
 	 */
-	public function handle_ajax_field_validate(): void {
+	public function handle_ajax_field_validate( bool $shared_endpoint = false ): void {
 		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
-		if ( empty( $nonce ) || ! wp_verify_nonce( $nonce, $this->framework->get_config( 'ajax_action' ) . '_nonce' ) ) {
+		if ( ! $this->request_nonce_is_valid( $nonce, $shared_endpoint ) ) {
+			if ( $this->defer_to_other_host( $shared_endpoint ) ) {
+				return;
+			}
+
 			wp_send_json_error(
 				[ 'message' => __( 'Security check failed.', RL_Options_Framework::text_domain() ) ],
 				403
@@ -426,6 +353,10 @@ class RL_Options_Admin_Handler {
 		}
 
 		if ( ! current_user_can( $this->framework->get_config( 'capability' ) ) ) {
+			if ( $this->defer_to_other_host( $shared_endpoint ) ) {
+				return;
+			}
+
 			wp_send_json_error(
 				[ 'message' => __( 'You are not allowed to perform this action.', RL_Options_Framework::text_domain() ) ],
 				403
@@ -440,6 +371,10 @@ class RL_Options_Admin_Handler {
 
 		$fields_map = $this->framework->get_fields_index();
 		if ( $field_id === '' || empty( $fields_map[ $field_id ] ) ) {
+			if ( $this->defer_to_other_host( $shared_endpoint ) ) {
+				return;
+			}
+
 			wp_send_json_error(
 				[ 'message' => __( 'Unknown field.', RL_Options_Framework::text_domain() ) ],
 				400
@@ -447,9 +382,9 @@ class RL_Options_Admin_Handler {
 		}
 
 		$field = $fields_map[ $field_id ];
-		$value = $input[ $field_id ] ?? null;
-		$value = $this->framework->prepare_value_for_validation( $field, $value );
 		$this->framework->set_validation_context( $input );
+
+		$value = $this->framework->prepare_value_for_validation( $field, $input[ $field_id ] ?? null );
 
 		$error    = '';
 		$is_valid = $this->framework->validate_field_value( $field, $value, $error );
@@ -470,5 +405,125 @@ class RL_Options_Admin_Handler {
 				'message'  => $error,
 			]
 		);
+	}
+
+	/**
+	 * Verify the AJAX nonce for this instance.
+	 *
+	 * The legacy shared endpoint also accepts the pre-2.6 nonce action, so cached
+	 * JavaScript served by an older bundled copy keeps working after an upgrade.
+	 *
+	 * @param string $nonce           Posted nonce.
+	 * @param bool   $shared_endpoint Whether the request came from the shared legacy hook.
+	 */
+	private function request_nonce_is_valid( string $nonce, bool $shared_endpoint ): bool {
+		if ( '' === $nonce ) {
+			return false;
+		}
+
+		if ( wp_verify_nonce( $nonce, $this->framework->nonce_action() ) ) {
+			return true;
+		}
+
+		return $shared_endpoint && (bool) wp_verify_nonce( $nonce, 'rl_save_options_ajax_nonce' );
+	}
+
+	/**
+	 * Whether a shared-endpoint request should be left to another host's instance.
+	 *
+	 * Shared endpoints are answered by every framework instance in the request; a
+	 * rejection must not end the response while another host may still own it.
+	 *
+	 * @param bool $shared_endpoint Whether the request came from the shared legacy hook.
+	 */
+	private function defer_to_other_host( bool $shared_endpoint ): bool {
+		return $shared_endpoint && RL_Options_Framework::legacy_ajax_listeners() > 1;
+	}
+
+	/**
+	 * Read the submitted field values from the request.
+	 *
+	 * @return array Submitted values, unslashed but not yet sanitized.
+	 */
+	private function submitted_input(): array {
+		$prefix = (string) $this->framework->get_config( 'form_field_prefix' );
+
+		// Slashed by WordPress; each value is sanitized against the field schema later.
+		$input = isset( $_POST[ $prefix ] ) ? wp_unslash( $_POST[ $prefix ] ) : []; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+
+		if ( ! is_array( $input ) ) {
+			RL_Logger::warn( 'Submitted input is not an array; ignoring it.' );
+			return [];
+		}
+
+		return $input;
+	}
+
+	/**
+	 * Validate every registered field and sanitize the submitted values.
+	 *
+	 * Shared by the form and AJAX save paths so the two cannot drift apart.
+	 *
+	 * @param array $input Submitted values.
+	 * @return array{values: array<string,mixed>, errors: array<string,string>, field_errors: array<string,array<string,string>>}
+	 */
+	private function process_submission( array $input ): array {
+		$this->framework->set_validation_context( $input );
+
+		$stored = get_option( $this->framework->get_config( 'option_name' ), [] );
+		if ( ! is_array( $stored ) ) {
+			$stored = [];
+		}
+
+		$errors       = [];
+		$field_errors = [];
+
+		foreach ( $this->framework->get_fields_index() as $field_id => $field ) {
+			if ( ! $this->framework->is_storable_field( $field ) ) {
+				continue;
+			}
+
+			$value = $this->framework->prepare_value_for_validation( $field, $input[ $field_id ] ?? null );
+			$error = '';
+
+			if ( ! $this->framework->validate_field_value( $field, $value, $error ) ) {
+				$errors[ $field_id ]       = $error;
+				$field_errors[ $field_id ] = [
+					'field_id'    => $field_id,
+					'field_label' => $this->framework->get_field_label( $field ),
+					'tab_id'      => $field['__tab_id'] ?? '',
+					'section_id'  => $field['__section_id'] ?? '',
+					'message'     => $error,
+				];
+				RL_Logger::warn( 'Validation failed for field.', [ 'field_id' => $field_id, 'error' => $error ] );
+				continue;
+			}
+
+			$stored[ $field_id ] = $this->framework->sanitize_field_value( $field, $value );
+		}
+
+		return [
+			'values'       => $stored,
+			'errors'       => $errors,
+			'field_errors' => $field_errors,
+		];
+	}
+
+	/**
+	 * Fire the generic post-save hooks host integrations listen to.
+	 *
+	 * @param array $saved Saved values.
+	 */
+	private function dispatch_saved_hooks( array $saved ): void {
+		do_action( $this->framework->get_config( 'option_name' ) . '_settings_saved', $saved ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound
+		do_action( 'rl_options_framework_settings_saved', $saved, $this->framework->get_config(), $this->framework ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+	}
+
+	/**
+	 * Fire the generic post-reset hooks host integrations listen to.
+	 */
+	private function dispatch_reset_hooks(): void {
+		do_action( $this->framework->get_config( 'option_name' ) . '_settings_reset' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound
+		do_action( 'rl_options_framework_settings_reset', $this->framework->get_config(), $this->framework ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 	}
 }

@@ -29,14 +29,6 @@ class RL_Options_Assets_Service {
 	}
 
 	/**
-	 * Enqueue admin assets for options page.
-	 *
-	 * WordPress admin_enqueue_scripts hook callback.
-	 *
-	 * @param string $hook Current admin page hook.
-	 */
-	
-	/**
 	 * Enqueue global assets like the standalone JS logger.
 	 * Runs on both admin and frontend.
 	 */
@@ -45,7 +37,7 @@ class RL_Options_Assets_Service {
 		$config      = $this->framework->get_config();
 		$assets_url  = $this->resolve_assets_url();
 		$debug_level = $this->resolve_debug_level();
-		$handle      = $config['page_slug'] . '-rl-logger';
+		$handle      = $this->framework->asset_handle_base() . '-rl-logger';
 
 		// Always register the logger: other framework scripts depend on this handle,
 		// and an unregistered dependency makes WordPress drop the dependent script.
@@ -80,6 +72,13 @@ class RL_Options_Assets_Service {
 		);
 	}
 
+	/**
+	 * Enqueue the options page assets.
+	 *
+	 * WordPress admin_enqueue_scripts hook callback.
+	 *
+	 * @param string $hook Current admin page hook.
+	 */
 	public function enqueue_assets(string $hook): void
 	{
 		$this->enqueue_global_assets();
@@ -88,8 +87,9 @@ class RL_Options_Assets_Service {
 			return;
 		}
 
-		$use_local_assets = true; // Always use local assets for wp.org guidelines
-
+		// Vendor assets always ship with the library: WordPress.org guidelines forbid
+		// loading them from a CDN, so the `use_local_assets_toggle` setting is kept
+		// for host compatibility but never switches delivery.
 		wp_enqueue_style('dashicons');
 
 		wp_enqueue_style('wp-color-picker');
@@ -105,7 +105,7 @@ class RL_Options_Assets_Service {
 		$popper_handle = $handle_prefix . '-popper';
 
 		wp_enqueue_style(
-			$config['page_slug'] . '-framework',
+			$this->framework->asset_handle_base() . '-framework',
 			$assets_url . 'css/options-framework.css',
 			['dashicons'],
 			$config['version']
@@ -167,13 +167,14 @@ class RL_Options_Assets_Service {
 
 		// Only depend on the logger when it is actually enqueued (debug mode).
 		$framework_deps = ['jquery', 'wp-color-picker', 'jquery-ui-datepicker', $sweetalert_handle, $tippy_handle];
-		$logger_handle  = $config['page_slug'] . '-rl-logger';
+		$handle_base    = $this->framework->asset_handle_base();
+		$logger_handle  = $handle_base . '-rl-logger';
 		if (wp_script_is($logger_handle, 'enqueued')) {
 			$framework_deps[] = $logger_handle;
 		}
 
 		wp_enqueue_script(
-			$config['page_slug'] . '-framework',
+			$handle_base . '-framework',
 			$assets_url . 'js/options-framework.js',
 			$framework_deps,
 			$config['version'],
@@ -193,25 +194,25 @@ class RL_Options_Assets_Service {
 		if ( $has_code_field && function_exists( 'wp_enqueue_code_editor' ) ) {
 			$code_settings = wp_enqueue_code_editor( [ 'type' => 'text/html' ] );
 			if ( is_array( $code_settings ) ) {
-				wp_localize_script( $config['page_slug'] . '-framework', 'rlCodeEditorSettings', $code_settings );
+				wp_localize_script( $handle_base . '-framework', 'rlCodeEditorSettings', $code_settings );
 			}
 		}
 
 		wp_localize_script(
-			$config['page_slug'] . '-framework',
+			$handle_base . '-framework',
 			'rlFramework',
 			[
 				'page' => $config['page_slug'],
 				'optionField' => $config['form_field_prefix'],
 				'ajax_url' => admin_url('admin-ajax.php'),
-				'ajax_action' => $config['ajax_action'],
+				'ajax_action' => $this->framework->ajax_action(),
 				'provider_action' => $this->framework->provider_action(),
 				'validate_action' => $this->framework->validate_action(),
-				'nonce' => wp_create_nonce($config['ajax_action'] . '_nonce'),
+				'nonce' => wp_create_nonce($this->framework->nonce_action()),
 				'sync_history' => !empty($config['sync_history']),
 				'swal_fallback' => !empty($config['swal_fallback']),
 				'debug_level' => $this->resolve_debug_level(),
-				'rest_base' => esc_url_raw(rest_url('rl-options/v1/')),
+				'rest_base' => esc_url_raw(rest_url($this->framework->rest_namespace() . '/')),
 				'color_palette' => apply_filters('rl_options_color_palette', (array) ($config['color_palette'] ?? []), $config),
 			]
 		);

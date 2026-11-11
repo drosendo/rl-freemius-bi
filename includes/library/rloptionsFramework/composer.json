@@ -4,7 +4,7 @@
     "keywords": ["wordpress", "options", "settings", "admin", "framework", "plugin"],
     "type": "library",
     "license": "GPL-2.0-or-later",
-    "version": "2.5.1",
+    "version": "2.6.0",
     "authors": [
         {
             "name": "Rosendo Labs",
@@ -22,6 +22,7 @@
     "autoload": {
         "classmap": [
             "class-rl-logger.php",
+            "class-rl-options-framework-loader.php",
             "class-rl-options-framework.php",
             "class-rl-field-presets.php",
             "class-rl-field-types.php",

@@ -99,7 +99,8 @@ class RL_Options_Storage_Service {
 	 * @return bool|WP_Error True on success, WP_Error on failure.
 	 */
 	public function import_settings( string $json ) {
-		$data   = json_decode( $json, true );
+		// Bound the nesting depth: a deep import payload would otherwise exhaust the stack.
+		$data   = json_decode( $json, true, 32 );
 		$config = $this->framework->config;
 
 		if ( json_last_error() !== JSON_ERROR_NONE ) {

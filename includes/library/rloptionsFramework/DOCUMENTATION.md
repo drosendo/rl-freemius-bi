@@ -61,20 +61,39 @@ $framework->init();
 
 ### Bundling the library in more than one plugin
 
-All classes are global (`RL_Options_Framework`, `RL_Field_*`, `RL_Logger`), so WordPress keeps whichever
-copy loads first — two plugins bundling different library versions would otherwise run one plugin's
-settings page with the other plugin's build. `main.php` therefore:
+All classes are global (`RL_Options_Framework`, `RL_Field_*`, `RL_Logger`), so only one copy of a
+major line can load. Since 2.6.0 the copies coordinate instead of racing:
 
-- declares `RL_OPTIONS_FRAMEWORK_VERSION` and `RL_OPTIONS_FRAMEWORK_FILE` for the copy that loaded;
-- when a second copy is required, reports the conflict (path + version of the winning copy) through
-  `error_log()` when `WP_DEBUG` is on and the `rl_options_framework_duplicate_copy` action;
-- scopes shared vendor handles per instance (`asset_handle_prefix`, see
-  [Configuration](#3-configuration)).
+- every copy registers itself with `RL_Options_Framework_Loader` when `main.php` is included — without
+  declaring any class yet;
+- the winner is resolved once, on `plugins_loaded` (priority `-1000`), as the **highest version** of
+  its family, so load order no longer decides which build runs;
+- the winning copy loads its classes and declares `RL_OPTIONS_FRAMEWORK_VERSION`,
+  `RL_OPTIONS_FRAMEWORK_FILE` and `RL_OPTIONS_FRAMEWORK_DIR`; losing copies are reported through
+  `rl_options_framework_duplicate_copy` (`error_log()` when `WP_DEBUG` is on);
+- if the winning copy cannot be loaded, the next newest copy is used instead of failing.
+
+**Families (major lines).** Copies compete only inside a family — 2.x is `rl-options-framework`. A
+future major registers a different family and its own class names, so it can coexist with the previous
+major rather than replace it.
+
+**Hosts.** Instantiate on `plugins_loaded` or later and no change is needed. Instantiating earlier still
+works (the loader resolves the winner on first use), but only the copies included up to that point can
+compete. Two hosts sharing the site never share identifiers:
+
+| Concern | Per-host name |
+| --- | --- |
+| AJAX save action | `rl_of_{option_name}_save` (`ajax_action()`), nonce via `nonce_action()` |
+| Async provider / validation actions | `rl_of_{option_name}_field_options` / `_field_validate` |
+| Assets | `rl_of_{option_name}-framework`, `-rl-logger`, `-builder`, `-builder-script` (`asset_handle_base()`); vendor prefix defaults to the same base (`asset_handle_prefix`) |
+| Geo cache | `rl_of_{option_name}_country_reference_v1` and friends (`cache_key()`), overridable with `rl_options_framework_transient_scope` |
+| REST | `rl-options-{option_name}/v1` (`rest_namespace()`); the legacy `rl-options/v1` namespace is still registered once |
+| Shared AJAX endpoints | `wp_ajax_rl_options_framework_field_*` — every instance listens, only the owner answers |
 
 A host that must guarantee its own build can compare `RL_OPTIONS_FRAMEWORK_FILE` with its expected path
-on `admin_init`. The durable fix is to ship the library as a Composer package
-(`rosendolabs/rl-options-framework`) pinned per host instead of copying the folder — see the
-Installation section of the [README](./README.md).
+on `plugins_loaded` or later. Shipping the library as a Composer package
+(`rosendolabs/rl-options-framework`) remains the simplest way to guarantee a single build; when both
+approaches are used the loader still decides between the bundled copies.
 
 ---
 
@@ -126,6 +145,7 @@ The framework provides several filters you can use with `add_filter` to modify i
 | `rl_options_color_palette` | Filter global default color palette array for color pickers and swatches. | `array $palette`, `array $config` |
 | `rl_options_framework_array_field_types` | Field types allowed to store array values (everything else rejects array payloads as invalid). | `string[] $types`, `array $field`, `RL_Options_Framework $framework` |
 | `rl_options_framework_non_storing_field_types` | Field types that are rendered/validated but never persisted. | `string[] $types`, `array $field`, `RL_Options_Framework $framework` |
+| `rl_options_framework_transient_scope` | Geo reference cache scope; defaults to the host's `option_name`, return one shared value for several plugins. | `string $scope`, `RL_Options_Framework $framework` |
 
 ### Global Actions
 
@@ -139,7 +159,8 @@ The framework provides several filters you can use with `add_filter` to modify i
 | `rl_options_framework_settings_reset` | Fires after any framework option resets. Passes `$config`, `$framework`. |
 | `rl_options_framework_field_dependency_resolved` | Fires when an async dependency field is resolved. |
 | `rl_options_framework_country_reference_warmed` | Fires when the country reference cache is refreshed. |
-| `rl_options_framework_duplicate_copy` | Fires when `main.php` is loaded by a second plugin copy and skips it. Passes `$message`, `$loaded_file`, `$loaded_version`. |
+| `rl_options_framework_copy_loaded` | Fires once the winning copy is loaded. Passes `$winner` (copy data: `version`, `file`, `dir`, `family`), `$losers`, `$family`. |
+| `rl_options_framework_duplicate_copy` | Fires for every copy that was not loaded. Passes `$message`, `$loaded_file`, `$loaded_version` (the winner's path and version, empty when nothing loaded). |
 
 ### Example
 
@@ -188,18 +209,18 @@ Every key accepted by the constructor, with its default:
 | `capability` | `'manage_options'` | Capability required to view and save |
 | `parent_menu` | `'options-general.php'` | Parent menu file (e.g. `'woocommerce'`, `'edit.php?post_type=x'`) |
 | `text_domain` | `'rl-options-framework'` | Text domain used by framework-owned strings |
-| `ajax_action` | `'rl_save_options_ajax'` | `wp_ajax_` action used by the AJAX save |
+| `ajax_action` | `rl_of_{option_name}_save` | `wp_ajax_` action used by the AJAX save (scoped per host; an explicit value is kept unless already claimed) |
 | `assets_url` | `''` (auto) | Explicit URL to the framework `assets/` directory |
 | `plugin_url` | `''` | Optional host plugin URL (informational) |
 | `version` | `RL_Options_Framework::VERSION` | Asset cache-buster (`?ver=`) |
-| `asset_handle_prefix` | `''` → `page_slug` | Prefix for shared vendor handles (`-sweetalert2`, `-tippy`, `-popper`); set it when two plugins bundle the framework |
+| `asset_handle_prefix` | `''` → `rl_of_{option_name}` | Prefix for shared vendor handles (`-sweetalert2`, `-tippy`, `-popper`); override only when a specific name is required |
 | `context` | `'auto'` | Asset URL resolution: `auto`, `plugin`, `theme` |
 | `register_menu` | `true` | Register the admin menu/submenu automatically |
 | `sync_history` | `false` | Keep `?page&tab` in the URL via `history.replaceState()` |
 | `debug_level` | `'error'` | `error`, `warn`, `info`, `debug` (PHP + JS logging) |
 | `swal_fallback` | `true` | Fall back to `window.alert` if SweetAlert2 is unavailable |
 | `debug_field_id` | `'enable_debug'` | Saved-option key that turns verbose debug on at runtime |
-| `use_local_assets_toggle` | `true` | Expose a Support-tab toggle for local vs CDN vendor assets |
+| `use_local_assets_toggle` | `true` | Expose a Support-tab toggle for vendor asset delivery (assets always ship locally; kept for host compatibility) |
 | `local_assets_field_id` | `'rloptions_local_assets'` | Saved-option key for that toggle |
 | `color_palette` | `[]` | Global default palette for `color` / `color_palette` fields |
 | `builder` | `false` | Enable the opt-in drag-and-drop schema builder (Section 24) |
@@ -253,6 +274,7 @@ add_action('my_project_options_framework_boot', function(RL_Options_Framework $f
 > Keep sanitize/validate logic in framework validation pipeline.
 > Use preset/bundle registry for reusable field config, not renderer classes.
 > Add new field types by creating a new file in [fields](fields) and registering it.
+> `register_field_renderer()` may be called before `init()`: the registry is created on first use and reused when the framework boots.
 ### Type contract
 
 47 renderers ship out of the box (plus 6 compatibility aliases). The saved value column tells you
@@ -882,14 +904,28 @@ Global geo reference service (`RL_Options_Rest_Api`) with normalized outputs for
 - Transient cache is effectively eternal by default (`TTL = 0`).
 - Data refreshes when transients are cleared or cache payload is empty.
 - Source timeout and graceful fallback are built-in.
+- Cache keys are scoped per host (`rl_of_{option_name}_…`, see `cache_key()`), so plugins with
+  different reference-data filters cannot poison each other. Filter `rl_options_framework_transient_scope`
+  to share one cache between plugins.
 
 ### REST endpoints
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/wp-json/rl-options/v1/countries` | `GET` | Country list |
-| `/wp-json/rl-options/v1/countries/{code}/subdivisions` | `GET` | Country subdivisions |
-| `/wp-json/rl-options/v1/countries/{code}/municipalities?subdivision=...` | `GET` | Municipalities |
+| `/wp-json/rl-options-{option_name}/v1/countries` | `GET` | Country list |
+| `/wp-json/rl-options-{option_name}/v1/countries/{code}/subdivisions` | `GET` | Country subdivisions |
+| `/wp-json/rl-options-{option_name}/v1/countries/{code}/municipalities?subdivision=...` | `GET` | Municipalities |
+
+Each host registers its own namespace, so two plugins cannot overwrite each other's permission
+callback. The pre-2.6 `/wp-json/rl-options/v1/*` namespace is still registered once per request for
+existing integrations. The localized JS reads the scoped base from `rlFramework.rest_base`.
+
+All three routes require the configured `capability` (`manage_options` by default), because the
+framework is an admin surface. Hosts that serve the reference data elsewhere can opt out:
+
+```php
+add_filter('rl_options_framework_rest_reference_permission', '__return_true');
+```
 
 ### PHP helper functions
 
@@ -908,6 +944,7 @@ rl_options_framework_get_country_municipalities('PT', 'lisboa');
 - `rl_options_framework_country_subdivisions`
 - `rl_options_framework_country_municipalities`
 - `rl_options_framework_resolved_provider_options`
+- `rl_options_framework_rest_reference_permission`
 
 #### Actions
 
@@ -1399,13 +1436,22 @@ The builder canvas loads the same stylesheet, so a preview always matches the fr
 ### Version & Text Domain
 
 ```php
-public const VERSION = '2.5.1';
+public const VERSION = '2.6.0';
 public static function version(): string;
 public static function text_domain(): string;
 ```
 
 Single source of truth for the framework version (used as the default asset cache-buster) and
 for the configured text domain, which stateless field renderers resolve statically.
+
+Constants defined by the winning copy when the loader resolves it (`plugins_loaded`, priority
+`-1000`):
+
+| Constant | Value |
+|----------|-------|
+| `RL_OPTIONS_FRAMEWORK_VERSION` | Version of the loaded copy |
+| `RL_OPTIONS_FRAMEWORK_FILE` | Absolute path to the loaded copy's `main.php` |
+| `RL_OPTIONS_FRAMEWORK_DIR` | Absolute path to the loaded copy's directory |
 
 ### Constructor & Initialization
 
@@ -1535,10 +1581,33 @@ with the `rl_options_framework_non_storing_field_types` filter.
 ```php
 public function provider_action(): string
 public function validate_action(): string
+public function ajax_action(): string
+public function nonce_action(): string
 ```
 
-Instance-scoped AJAX actions used by the bundled JS for async option providers and inline
-validation. They are already localized as `rlFramework.provider_action` / `.validate_action`.
+Instance-scoped AJAX names used by the bundled JS. `provider_action()` / `validate_action()` drive
+the async option provider and inline validation endpoints; `ajax_action()` is the save endpoint
+(`rl_of_{option_name}_save` unless `ajax_action` is configured) and `nonce_action()` its nonce. The
+save action and nonce are localized as `rlFramework.ajax_action` / `.nonce`.
+
+### Host scoping
+
+```php
+public function option_scope(): string
+public function asset_handle_base(): string
+public function rest_namespace(): string
+public function transient_scope(): string
+public function cache_key(string $suffix): string
+public static function legacy_ajax_listeners(): int
+```
+
+Identifiers derived from `option_name` so two hosts on one site never collide:
+
+- `option_scope()` — sanitized `option_name`;
+- `asset_handle_base()` — `rl_of_{option_name}`, the prefix of every framework-owned handle;
+- `rest_namespace()` — `rl-options-{option_name}/v1`;
+- `transient_scope()` / `cache_key()` — the (filterable) geo cache scope and key builder;
+- `legacy_ajax_listeners()` — how many instances share the legacy AJAX hooks in this request.
 
 ### Field Renderer Registration
 
@@ -2071,7 +2140,8 @@ form cannot work inside the settings page.
 **Check:**
 1. Is REST API registered? `get_transient('rl_options_rest_initialized')`
 2. Is `options_provider` config correct? Should have `endpoint` key
-3. Check Network tab: is `/wp-json/rl-options/v1/*` responding?
+3. Check Network tab: is `/wp-json/rl-options-{option_name}/v1/*` responding? (The legacy
+   `/wp-json/rl-options/v1/*` namespace still answers.)
 4. Is field `depends_on` correct?
 
 ### Issue: Geo fields (country/state/city) showing no options

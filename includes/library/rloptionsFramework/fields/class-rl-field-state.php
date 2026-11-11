@@ -55,7 +55,6 @@ class RL_Field_State implements RL_Field_Interface, RL_Field_Processing_Interfac
 	public function validate(array $field, $value, string &$error, array $context = []): bool
 	{
 		$field_label = $context['field_label'] ?? 'Field';
-		$text_domain = $context['text_domain'] ?? 'default';
 
 		if ($value === '' || $value === null) {
 			return true;

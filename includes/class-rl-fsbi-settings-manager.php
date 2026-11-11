@@ -41,8 +41,8 @@ class RL_FSBI_Settings_Manager {
 			return;
 		}
 
-		// The framework loads its own field interfaces (fields/load.php). Requiring
-		// them again here redeclared them and fatalled.
+		// Registered at plugin load so it can compete in the 2.6.0 copy race; this
+		// is idempotent. The framework loads its own field interfaces itself.
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/main.php';
 		// The framework ships its own Password field from 2.5.1; this plugin used to
 		// add one because it did not, and the two class names collided.
@@ -74,6 +74,13 @@ class RL_FSBI_Settings_Manager {
 			}
 		);
 
+		// The framework only accepts array payloads for the field types it ships as
+		// multi-value; an unknown type is assumed scalar and every save is rejected
+		// with "<label> has an invalid value". Declare ours through its filter.
+		if ( ! has_filter( 'rl_options_framework_array_field_types', array( __CLASS__, 'declare_array_field_types' ) ) ) {
+			add_filter( 'rl_options_framework_array_field_types', array( __CLASS__, 'declare_array_field_types' ) );
+		}
+
 		$this->framework->init();
 
 		// Register custom field renderers after init so field_registry is initialized
@@ -83,6 +90,19 @@ class RL_FSBI_Settings_Manager {
 		$this->add_sections();
 		$this->add_fields();
 		$this->register_framework_hooks();
+	}
+
+	/**
+	 * Declare plugin-supplied field types that store an array of values.
+	 *
+	 * @param array $types Multi-value field types known to the framework.
+	 * @return array
+	 */
+	public static function declare_array_field_types( $types ) {
+		$types   = is_array( $types ) ? $types : array();
+		$types[] = 'checkbox_list';
+
+		return array_values( array_unique( $types ) );
 	}
 
 	/**

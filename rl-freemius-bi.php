@@ -54,6 +54,19 @@ register_activation_hook( __FILE__, 'activate_rl_fsbi' );
 register_deactivation_hook( __FILE__, 'deactivate_rl_fsbi' );
 
 /**
+ * Register this plugin's copy of the options framework as early as possible.
+ *
+ * 2.6.0 decides which bundled copy wins on `plugins_loaded` (priority -1000), so
+ * a copy that is only required later never enters the race and the site ends up
+ * running another plugin's build. Requiring the entry point here registers this
+ * copy; no framework class is used until the settings manager instantiates it.
+ */
+function rl_fsbi_register_options_framework() {
+	require_once RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/main.php';
+}
+rl_fsbi_register_options_framework();
+
+/**
  * Apply pending database schema upgrades on regular plugin updates.
  *
  * Activation hooks do not run when the plugin files are replaced, so without

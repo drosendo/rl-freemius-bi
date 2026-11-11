@@ -96,10 +96,13 @@ composer require rosendolabs/rl-options-framework
 ```
 
 > [!IMPORTANT]
-> Prefer Composer when more than one plugin uses the framework. All classes are global, so with
-> copy & require the first plugin to load wins and the second silently reuses that build. `main.php`
-> reports the conflict (path + version) via the `rl_options_framework_duplicate_copy` action, and
-> vendor handles are scoped per instance through `asset_handle_prefix`.
+> All classes are global, so only one copy of a major line can load. From 2.6.0 the bundled copies
+> coordinate: each one registers with `RL_Options_Framework_Loader` and the **newest** copy wins
+> regardless of load order (resolved on `plugins_loaded`). Losing copies are reported through the
+> `rl_options_framework_duplicate_copy` action. Composer is still the cleanest option when several
+> plugins share the same version, since it guarantees a single build.
+
+See [Bundling the library in more than one plugin](./DOCUMENTATION.md#bundling-the-library-in-more-than-one-plugin).
 
 ---
 
@@ -595,18 +598,18 @@ Show or hide any field, section, or tab based on another field's value.
 | `capability` | `string` | `'manage_options'` | Required capability |
 | `parent_menu` | `string` | `'options-general.php'` | Parent menu page |
 | `text_domain` | `string` | `'rl-options-framework'` | i18n text domain |
-| `ajax_action` | `string` | `'rl_save_options_ajax'` | AJAX action name |
+| `ajax_action` | `string` | `rl_of_{option_name}_save` | AJAX save action; the default is scoped per host, and an explicit value is kept (suffixed if another instance already claimed it) |
 | `assets_url` | `string` | Auto-detected | URL to the `assets/` folder |
 | `plugin_url` | `string` | `''` | Optional host plugin URL (informational) |
 | `version` | `string` | `RL_Options_Framework::VERSION` | For cache-busting enqueued assets |
-| `asset_handle_prefix` | `string` | `page_slug` | Prefix for shared vendor handles (`-sweetalert2`, `-tippy`, `-popper`); set it when two plugins bundle the library |
+| `asset_handle_prefix` | `string` | `rl_of_{option_name}` | Prefix for shared vendor handles (`-sweetalert2`, `-tippy`, `-popper`); override it only if you need a specific name |
 | `context` | `string` | `'auto'` | Asset resolution: `auto`, `plugin` (needs `init($plugin)` with `get_plugin_url()`), `theme` |
 | `register_menu` | `bool` | `true` | Register the admin submenu automatically |
 | `sync_history` | `bool` | `false` | Keep the active tab in the URL |
 | `debug_level` | `string` | `'error'` | `error`, `warn`, `info`, `debug` (PHP + JS logging) |
 | `swal_fallback` | `bool` | `true` | Use `window.alert` when SweetAlert2 is unavailable |
 | `debug_field_id` | `string` | `'enable_debug'` | Saved-option key that enables verbose debug |
-| `use_local_assets_toggle` | `bool` | `true` | Add a Support-tab toggle for local vs CDN vendor assets |
+| `use_local_assets_toggle` | `bool` | `true` | Add a Support-tab toggle for vendor asset delivery (assets always ship locally) |
 | `local_assets_field_id` | `string` | `'rloptions_local_assets'` | Saved-option key for that toggle |
 | `color_palette` | `array` | `[]` | Global default palette for `color` / `color_palette` fields |
 
@@ -701,6 +704,36 @@ Developed by **[David Rosendo](https://github.com/drosendo)** · a **[RosendoLab
 ---
 
 ## 📦 Changelog
+
+### 2.6.0
+
+Several bundled copies can now coexist without stepping on each other.
+
+- **The newest copy wins regardless of load order.** Copies register with
+  `RL_Options_Framework_Loader` at include time and the winner is resolved once on `plugins_loaded`
+  (priority `-1000`); losing copies are reported through `rl_options_framework_duplicate_copy`
+- **Major lines coexist.** Copies compete only inside their family, so a future major can ship next to
+  the 2.x line instead of replacing it
+- **No cross-host collisions.** Save action and nonce (`rl_of_{option_name}_save`), asset handles
+  (`rl_of_{option_name}-framework` / `-rl-logger` / `-builder`), geo cache keys
+  (`rl_of_{option_name}_…`) and REST routes (`rl-options-{option_name}/v1`) are scoped per host; the
+  legacy `rl-options/v1` namespace and the shared AJAX endpoints keep answering for compatibility
+- No host code change is required; see the migration notes in [CHANGELOG.md](./CHANGELOG.md) if you
+  hardcoded the old action, handle or route names
+
+### 2.5.2
+
+Hardening and internal cleanup — one behaviour change to note.
+
+- **Geo REST routes now require the options-page capability** (`/wp-json/rl-options/v1/*` was public).
+  Opt out with `rl_options_framework_rest_reference_permission` if you serve that data elsewhere
+- `register_field_renderer()` works before `init()` — the registry is created on first use and reused
+  on boot, so custom fields registered on `plugins_loaded` are no longer dropped
+- One shared save pipeline for form and AJAX saves; a capability failure on the AJAX save now returns
+  403 instead of 200
+- Import JSON is decoded with a nesting limit; reset flags are sanitized before comparison
+- Media and gallery previews are built from DOM attributes instead of string concatenation
+- Dead code removed (unused locals, orphaned docblock) and the empty-tabs notice markup fixed
 
 ### 2.5.1
 

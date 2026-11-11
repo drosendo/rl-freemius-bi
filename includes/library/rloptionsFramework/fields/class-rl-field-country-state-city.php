@@ -20,7 +20,6 @@ class RL_Field_Country_State_City implements RL_Field_Interface, RL_Field_Proces
 		}
 		$field_id = (string) ($field['id'] ?? '');
 		$field_name = (string) ($context['field_name'] ?? '');
-		$text_domain = (string) ($context['text_domain'] ?? 'default');
 		$group = is_array($value) ? $value : [];
 		$country_val = sanitize_text_field((string) ($group['country'] ?? ($field['default']['country'] ?? '')));
 		$state_val = sanitize_text_field((string) ($group['state'] ?? ($field['default']['state'] ?? '')));
@@ -96,7 +95,6 @@ class RL_Field_Country_State_City implements RL_Field_Interface, RL_Field_Proces
 	public function validate(array $field, $value, string &$error, array $context = []): bool
 	{
 		$field_label = $context['field_label'] ?? 'Field';
-		$text_domain = $context['text_domain'] ?? 'default';
 
 		$group = is_array($value) ? $value : [];
 		$country = sanitize_text_field((string) ($group['country'] ?? ''));

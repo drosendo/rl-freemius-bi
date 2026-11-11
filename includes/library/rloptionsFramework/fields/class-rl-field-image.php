@@ -16,7 +16,6 @@ class RL_Field_Image implements RL_Field_Interface
 	{
 		$input_id = (string) ($context['input_id'] ?? '');
 		$field_name = (string) ($context['field_name'] ?? '');
-		$text_domain = (string) ($context['text_domain'] ?? 'default');
 		$button_text = __('Choose Image', RL_Options_Framework::text_domain());
 		$remove_text = __('Remove', RL_Options_Framework::text_domain());
 

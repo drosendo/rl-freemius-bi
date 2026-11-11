@@ -308,16 +308,19 @@ class RL_Options_Builder {
 		}
 
 		// The canvas renders real field markup, so it needs the real field styles.
-		$framework_style = (string) $this->framework->get_config( 'page_slug' ) . '-framework';
+		$handle_base     = $this->framework->asset_handle_base();
+		$framework_style = $handle_base . '-framework';
+		$builder_style   = $handle_base . '-builder';
+		$builder_script  = $handle_base . '-builder-script';
 
 		wp_enqueue_style( 'dashicons' );
 		wp_enqueue_style( 'wp-color-picker' );
 		wp_enqueue_style( $framework_style, $assets_url . 'css/options-framework.css', [ 'dashicons', 'wp-color-picker' ], RL_Options_Framework::VERSION );
-		wp_enqueue_style( 'rl-options-builder', $assets_url . 'css/options-builder.css', [ 'dashicons', $framework_style ], RL_Options_Framework::VERSION );
-		wp_enqueue_script( 'rl-options-builder', $assets_url . 'js/options-builder.js', [], RL_Options_Framework::VERSION, true );
+		wp_enqueue_style( $builder_style, $assets_url . 'css/options-builder.css', [ 'dashicons', $framework_style ], RL_Options_Framework::VERSION );
+		wp_enqueue_script( $builder_script, $assets_url . 'js/options-builder.js', [], RL_Options_Framework::VERSION, true );
 
 		wp_localize_script(
-			'rl-options-builder',
+			$builder_script,
 			'rlBuilder',
 			[
 				'nonce'       => wp_create_nonce( $this->save_action() . '_nonce' ),

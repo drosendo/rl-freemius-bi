@@ -269,11 +269,11 @@
 				$clear.show();
 
 				if (mediaType === 'video') {
-					$preview.html('<video src="' + attachment.url + '" style="max-width:240px;height:auto;" controls></video>');
+					$preview.empty().append($('<video>', { src: attachment.url, controls: true, css: { maxWidth: '240px', height: 'auto' } }));
 				} else if (mediaType === 'audio') {
-					$preview.html('<audio src="' + attachment.url + '" controls></audio>');
+					$preview.empty().append($('<audio>', { src: attachment.url, controls: true }));
 				} else {
-					$preview.html('<img src="' + attachment.url + '" style="max-width:160px;height:auto;display:block;" />');
+					$preview.empty().append($('<img>', { src: attachment.url, css: { maxWidth: '160px', height: 'auto', display: 'block' } }));
 				}
 			});
 
@@ -306,9 +306,10 @@
 						return;
 					}
 					$items.append(
-						'<span class="rl-gallery-item" data-id="' + attachment.id + '">' +
-						'<img src="' + (attachment.sizes && attachment.sizes.thumbnail ? attachment.sizes.thumbnail.url : attachment.url) + '" alt="" />' +
-						'<button type="button" class="rl-gallery-remove" aria-label="Remove image">&times;</button></span>'
+						$('<span>', { class: 'rl-gallery-item', 'data-id': attachment.id }).append(
+							$('<img>', { src: attachment.sizes && attachment.sizes.thumbnail ? attachment.sizes.thumbnail.url : attachment.url, alt: '' }),
+							$('<button>', { type: 'button', class: 'rl-gallery-remove', 'aria-label': 'Remove image', text: '\u00d7' })
+						)
 					);
 				});
 
@@ -2118,7 +2119,7 @@
 				const attachment = mediaUploader.state().get('selection').first().toJSON();
 				
 				$input.val(attachment.url).trigger('change');
-				$preview.html('<img src="' + attachment.url + '" style="max-width:200px;height:auto;display:block;" />');
+				$preview.empty().append($('<img>', { src: attachment.url, css: { maxWidth: '200px', height: 'auto', display: 'block' } }));
 				$removeBtn.show();
 				
 				rlLog('Image selected:', attachment.url);

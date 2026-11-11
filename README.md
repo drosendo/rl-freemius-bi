@@ -990,19 +990,21 @@ bumping `Version:` means no site will ever see it.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
 
-### Unreleased - RL Options Framework 2.5.1
+### Unreleased - RL Options Framework 2.6.0
 
-`includes/library/rloptionsFramework/` is now **upstream 2.5.1, verbatim** from [drosendo/rl-options-framework](https://github.com/drosendo/rl-options-framework). Nothing in it is edited by this plugin, and nothing should be: the plugin adapts to what the library offers.
+`includes/library/rloptionsFramework/` is now **upstream 2.6.0, verbatim** from [drosendo/rl-options-framework](https://github.com/drosendo/rl-options-framework). Nothing in it is edited by this plugin, and nothing should be: the plugin adapts to what the library offers.
 
 Adaptations on our side:
 
 - Class names are the library's own — `RL_Options_Framework`, `RL_Logger`, `RL_Field_Interface`, `RL_Field_Processing_Interface`.
 - The framework ships a `Password` field from 2.5.1, so the one this plugin added when the library had none is deleted.
 - The two field interfaces are loaded by the library (`fields/load.php`), so requiring them again here redeclared them and fatalled. Those requires are gone.
+- **The library's entry point is required at plugin load, not from the settings manager.** 2.6.0 arbitrates between bundled copies on `plugins_loaded` (priority −1000) and the newest copy wins; a copy that registers after that moment loses to whatever the site already decided. Requiring `main.php` in the plugin file enters the race without instantiating anything early, and the settings manager's require stays as an idempotent fallback.
+- **`checkbox_list` declares itself as a multi-value type** through `rl_options_framework_array_field_types`. From 2.6.0 the field processor treats any type it does not ship as scalar and rejects an array payload, so every save was refused with **"Tracked Plugins has an invalid value."** — the settings screen could not save at all until the type was declared through that filter.
 
-What the update brings: a blank optional `number`/`slider` no longer aborts the whole save; a field that renders its own `<form>` can no longer orphan the Save button; vendor handles are prefixed per instance; a second bundled copy is reported through `rl_options_framework_duplicate_copy` instead of being reused silently.
+What 2.5.1 brought: a blank optional `number`/`slider` no longer aborts the whole save; a field that renders its own `<form>` can no longer orphan the Save button; vendor handles are prefixed per instance; a second bundled copy is reported through `rl_options_framework_duplicate_copy` instead of being reused silently. 2.6.0 adds the copy loader behind all of that.
 
-Verified: `RL_OPTIONS_FRAMEWORK_VERSION` = 2.5.1, settings page renders 60 `rl_options[...]` fields with a working Save, dashboard loads with five KPIs, no fatals.
+Verified: `RL_OPTIONS_FRAMEWORK_VERSION` = 2.6.0 resolved from this plugin's own directory, settings page renders 60 `rl_options[...]` fields in a single form with no nested forms, a checkbox change survives Save **and a reload** (unchecking plugin 9001 persisted, then restored), dashboard loads with five KPIs and six tabs, no fatals.
 
 ### Unreleased - one vertical rhythm for every card
 

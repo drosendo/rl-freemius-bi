@@ -69,7 +69,7 @@
  * ```
  *
  * @package RL_Options_Framework
- * @version 2.5.1
+ * @version 2.6.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -127,7 +127,7 @@ final class RL_Options_Framework
 	/**
 	 * Framework version. Single source of truth for asset cache busting.
 	 */
-	public const VERSION = '2.5.1';
+	public const VERSION = '2.6.0';
 
 	/**
 	 * Resolved text domain, shared by framework-owned field renderers.
@@ -151,11 +151,25 @@ final class RL_Options_Framework
 	private array $raw_tabs = [];
 
 	/**
-	 * Whether the legacy global AJAX endpoints were already registered.
+	 * Save actions already claimed in this request, keyed by action name.
 	 *
-	 * @var bool
+	 * @var array<string,string>
 	 */
-	private static bool $legacy_ajax_registered = false;
+	private static array $claimed_ajax_actions = [];
+
+	/**
+	 * Instances listening on the shared legacy AJAX endpoints.
+	 *
+	 * @var int
+	 */
+	private static int $legacy_ajax_listeners = 0;
+
+	/**
+	 * Host-scoped save action resolved for this instance.
+	 *
+	 * @var string
+	 */
+	private string $ajax_action = '';
 
 	/**
 	 * Field types that never persist a value.
@@ -183,20 +197,143 @@ final class RL_Options_Framework
 	/**
 	 * Prefix for shared vendor script/style handles (SweetAlert2, Tippy, Popper).
 	 *
-	 * Defaults to the page slug, which is unique per options page, so two plugins
-	 * bundling this library never register the same handle. The first registration
-	 * otherwise wins and the other plugin silently loads a foreign copy.
+	 * Defaults to {@see asset_handle_base()}, which derives from `option_name`, so
+	 * two plugins bundling this library never register the same handle. The first
+	 * registration otherwise wins and the other plugin silently loads a foreign copy.
 	 */
 	public function asset_handle_prefix(): string
 	{
 		$prefix = (string) ( $this->config['asset_handle_prefix'] ?? '' );
 		if ( '' === $prefix ) {
-			$prefix = (string) ( $this->config['page_slug'] ?? '' );
+			return $this->asset_handle_base();
 		}
 
 		$prefix = sanitize_key( $prefix );
 
-		return '' !== $prefix ? $prefix : 'rl-options-framework';
+		return '' !== $prefix ? $prefix : $this->asset_handle_base();
+	}
+
+	/**
+	 * Stable per-host identifier used to scope actions, handles, caches and routes.
+	 *
+	 * Derived from `option_name`, which is unique per settings store; two plugins
+	 * on the same site therefore never share endpoint or cache names.
+	 */
+	public function option_scope(): string
+	{
+		$scope = sanitize_key( (string) ( $this->config['option_name'] ?? '' ) );
+
+		return '' !== $scope ? $scope : 'rl_framework_settings';
+	}
+
+	/**
+	 * Prefix for framework-owned script/style handles (logger, options page, builder).
+	 */
+	public function asset_handle_base(): string
+	{
+		return 'rl_of_' . $this->option_scope();
+	}
+
+	/**
+	 * AJAX action used to save the options form for this instance.
+	 *
+	 * Hosts that leave `ajax_action` at its default get a scope derived from
+	 * `option_name`; an explicit value is honoured unless another instance of this
+	 * request already claimed it, in which case it is suffixed to stay unique.
+	 */
+	public function ajax_action(): string
+	{
+		if ( '' !== $this->ajax_action ) {
+			return $this->ajax_action;
+		}
+
+		$configured = (string) ( $this->config['ajax_action'] ?? '' );
+
+		return ( '' !== $configured && 'rl_save_options_ajax' !== $configured )
+			? $configured
+			: 'rl_of_' . $this->option_scope() . '_save';
+	}
+
+	/**
+	 * Nonce action paired with {@see ajax_action()}.
+	 */
+	public function nonce_action(): string
+	{
+		return $this->ajax_action() . '_nonce';
+	}
+
+	/**
+	 * REST namespace owned by this instance.
+	 */
+	public function rest_namespace(): string
+	{
+		return 'rl-options-' . $this->option_scope() . '/v1';
+	}
+
+	/**
+	 * Scope applied to transient cache keys.
+	 *
+	 * Hosts that want to share reference data between plugins can filter this to a
+	 * common value with `rl_options_framework_transient_scope`.
+	 */
+	public function transient_scope(): string
+	{
+		$scope = sanitize_key( (string) apply_filters( 'rl_options_framework_transient_scope', $this->option_scope(), $this ) );
+
+		return '' !== $scope ? $scope : $this->option_scope();
+	}
+
+	/**
+	 * Build a transient key that cannot be shared with another host.
+	 *
+	 * @param string $suffix Cache kind, e.g. `country_reference_v1`.
+	 */
+	public function cache_key( string $suffix ): string
+	{
+		return 'rl_of_' . $this->transient_scope() . '_' . ltrim( $suffix, '_' );
+	}
+
+	/**
+	 * Instances listening on the shared legacy AJAX endpoints in this request.
+	 */
+	public static function legacy_ajax_listeners(): int
+	{
+		return self::$legacy_ajax_listeners;
+	}
+
+	/**
+	 * Pick the save action for this instance and guarantee it is unique.
+	 *
+	 * The pre-2.6 default (`rl_save_options_ajax`) was shared by every plugin, so a
+	 * save request could be handled by two hosts at once. It is treated as "not
+	 * configured" and replaced by a scope derived from `option_name`.
+	 */
+	private function resolve_ajax_action(): string
+	{
+		$configured = (string) ( $this->config['ajax_action'] ?? '' );
+
+		$action = ( '' !== $configured && 'rl_save_options_ajax' !== $configured )
+			? $configured
+			: 'rl_of_' . $this->option_scope() . '_save';
+
+		$owner = self::$claimed_ajax_actions[ $action ] ?? '';
+		if ( '' !== $owner && $owner !== $this->option_scope() ) {
+			$scoped = $action . '_' . $this->option_scope();
+			RL_Logger::warn(
+				sprintf(
+					'AJAX action "%1$s" is already used by the settings "%2$s"; "%3$s" uses "%4$s" instead.',
+					$action,
+					$owner,
+					$this->option_scope(),
+					$scoped
+				)
+			);
+			$action = $scoped;
+		}
+
+		self::$claimed_ajax_actions[ $action ] = $this->option_scope();
+
+		return $action;
 	}
 
 	/**
@@ -327,10 +464,10 @@ final class RL_Options_Framework
 			'capability'        => 'manage_options',
 			'parent_menu'       => 'options-general.php',
 			'text_domain'       => 'rl-options-framework',
-			'ajax_action'       => 'rl_save_options_ajax',
-			'assets_url'        => '',
-			'plugin_url'        => '',
-			'version'           => self::VERSION,
+			'ajax_action'         => 'rl_save_options_ajax',
+			'assets_url'          => '',
+			'plugin_url'          => '',
+			'version'             => self::VERSION,
 			// Prefix for shared vendor handles (SweetAlert2, Tippy, Popper).
 			// Empty falls back to the page slug so plugin copies cannot collide.
 			'asset_handle_prefix' => '',
@@ -356,6 +493,9 @@ final class RL_Options_Framework
 
 		// Field renderers are stateless; they resolve the text domain statically.
 		self::$text_domain = (string) $this->config['text_domain'];
+
+		// Claim a unique save action for this request; see ajax_action().
+		$this->ajax_action = $this->resolve_ajax_action();
 	}
 
 	/**
@@ -409,9 +549,7 @@ final class RL_Options_Framework
 		$this->presets = new RL_Field_Presets();
 
 		// Initialize field renderer registry (ACF-style single class per field type).
-		require_once __DIR__ . '/fields/load.php';
-		$this->field_registry = new RL_Field_Registry();
-		RL_Field_Bootstrap::register_defaults($this->field_registry);
+		$this->ensure_field_registry();
 
 		// Initialize render service for page rendering logic.
 		$this->render_service = new RL_Options_Render_Service($this);
@@ -444,18 +582,22 @@ final class RL_Options_Framework
 		add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
 		add_action('wp_enqueue_scripts', [$this, 'enqueue_frontend_assets']);
 		add_action('admin_post_' . $this->config['page_slug'] . '_save', [$this, 'handle_save']);
-		add_action('wp_ajax_' . $this->config['ajax_action'], [$this, 'handle_ajax_save']);
+		add_action('wp_ajax_' . $this->ajax_action(), [$this, 'handle_ajax_save']);
 
 		// Instance-scoped AJAX endpoints so multiple frameworks can coexist.
 		add_action('wp_ajax_' . $this->provider_action(), [$this, 'handle_ajax_field_options']);
 		add_action('wp_ajax_' . $this->validate_action(), [$this, 'handle_ajax_field_validate']);
 
-		// Legacy global endpoints: registered once for backward compatibility.
-		if (!self::$legacy_ajax_registered) {
-			self::$legacy_ajax_registered = true;
-			add_action('wp_ajax_rl_options_framework_field_options', [$this, 'handle_ajax_field_options']);
-			add_action('wp_ajax_rl_options_framework_field_validate', [$this, 'handle_ajax_field_validate']);
-		}
+		// Legacy shared endpoints: every instance listens, but a request is only
+		// answered by the instance that owns its nonce and field (see admin handler),
+		// so two hosts can no longer save each other's settings.
+		++self::$legacy_ajax_listeners;
+		add_action('wp_ajax_rl_options_framework_field_options', function () {
+			$this->handle_ajax_field_options(true);
+		});
+		add_action('wp_ajax_rl_options_framework_field_validate', function () {
+			$this->handle_ajax_field_validate(true);
+		});
 
 		add_action('admin_notices', [$this, 'render_notices']);
 
@@ -697,23 +839,40 @@ final class RL_Options_Framework
 	/**
 	 * Access field registry.
 	 *
-	 * @return RL_Field_Registry|null
+	 * Created on first use so renderers can be registered before the framework
+	 * is initialized without being silently dropped.
+	 *
+	 * @return RL_Field_Registry
 	 */
-	public function field_registry(): ?RL_Field_Registry
+	public function field_registry(): RL_Field_Registry
 	{
+		return $this->ensure_field_registry();
+	}
+
+	/**
+	 * Get the field registry, booting the built-in renderers on first use.
+	 */
+	private function ensure_field_registry(): RL_Field_Registry
+	{
+		if (null === $this->field_registry) {
+			require_once __DIR__ . '/fields/load.php';
+
+			$this->field_registry = new RL_Field_Registry();
+			RL_Field_Bootstrap::register_defaults($this->field_registry);
+		}
+
 		return $this->field_registry;
 	}
 
 	/**
 	 * Register a custom field renderer.
+	 *
+	 * Safe to call before init(): the registry is created on demand and reused
+	 * when the framework boots.
 	 */
 	public function register_field_renderer(RL_Field_Interface $renderer): void
 	{
-		if (!$this->field_registry) {
-			return;
-		}
-
-		$this->field_registry->register($renderer);
+		$this->ensure_field_registry()->register($renderer);
 	}
 
 	/**
@@ -851,20 +1010,24 @@ final class RL_Options_Framework
 	 * Resolve async options for a single field.
 	 *
 	 * Delegates to admin handler service.
+	 *
+	 * @param bool $shared_endpoint True when answering the legacy shared AJAX hook.
 	 */
-	public function handle_ajax_field_options(): void
+	public function handle_ajax_field_options(bool $shared_endpoint = false): void
 	{
-		$this->admin_handler->handle_ajax_field_options();
+		$this->admin_handler->handle_ajax_field_options($shared_endpoint);
 	}
 
 	/**
 	 * Validate one field on change (inline validation endpoint).
 	 *
 	 * Delegates to admin handler service.
+	 *
+	 * @param bool $shared_endpoint True when answering the legacy shared AJAX hook.
 	 */
-	public function handle_ajax_field_validate(): void
+	public function handle_ajax_field_validate(bool $shared_endpoint = false): void
 	{
-		$this->admin_handler->handle_ajax_field_validate();
+		$this->admin_handler->handle_ajax_field_validate($shared_endpoint);
 	}
 
 	/**

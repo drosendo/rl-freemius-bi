@@ -16,7 +16,6 @@ class RL_Field_Datetime implements RL_Field_Interface, RL_Field_Processing_Inter
 	{
 		$input_id = (string) ($context['input_id'] ?? '');
 		$field_name = (string) ($context['field_name'] ?? '');
-		$text_domain = (string) ($context['text_domain'] ?? 'default');
 
 		$current_value = trim((string) ($value !== null && $value !== '' ? $value : ($field['default'] ?? '')));
 		$date_value = '';
@@ -63,7 +62,6 @@ class RL_Field_Datetime implements RL_Field_Interface, RL_Field_Processing_Inter
 	public function validate(array $field, $value, string &$error, array $context = []): bool
 	{
 		$field_label = $context['field_label'] ?? 'Field';
-		$text_domain = $context['text_domain'] ?? 'default';
 
 		if ($value === '' || $value === null) {
 			return true;
