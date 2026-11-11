@@ -2090,9 +2090,9 @@ class RL_FSBI_Admin
 		// revenue earned in September is paid on 10 November, October on
 		// 10 December, November on 10 January. The defaults follow that rule;
 		// the settings only exist for an account with a different arrangement.
-		$day = trim((string) $this->settings->get_option('rl_fsbi_payout_day', ''));
-		$day = '' === $day ? 10 : (int) $day;
-		$day = min(28, max(1, $day));
+		// The day is not a setting any more: a stored 15 from an earlier default
+		// kept overriding the rule and dated October's payout 15 December.
+		$day = 10;
 		$lag = trim((string) $this->settings->get_option('rl_fsbi_payout_lag_months', ''));
 		$lag = '' === $lag ? 2 : (int) $lag;
 		$lag = min(6, max(0, $lag));
@@ -4019,6 +4019,12 @@ class RL_FSBI_Admin
 
 		$summary = $this->settings->get_option(RL_FSBI_Detection::OPTION_SUMMARY, array());
 		$accepted = (string) $this->settings->get_option(RL_FSBI_Detection::OPTION_ACCEPTED, '');
+
+		// It is a one-time screen: once accepted there is nothing left to decide,
+		// and the values live in Settings.
+		if ('' !== $accepted) {
+			return;
+		}
 
 		$accept_url = wp_nonce_url(add_query_arg('action', 'rl_fsbi_detection_accept', admin_url('admin-post.php')), 'rl_fsbi_detection_accept');
 		$redetect_url = wp_nonce_url(add_query_arg('action', 'rl_fsbi_detection_redetect', admin_url('admin-post.php')), 'rl_fsbi_detection_redetect');
@@ -7728,7 +7734,9 @@ class RL_FSBI_Admin
 			if (in_array($status, array('cancelled', 'canceled', 'expired', 'inactive'), true)) {
 				continue;
 			}
-			$canceled_at = is_array($meta) && ! empty($meta['canceled_at']) ? strtotime((string) $meta['canceled_at']) : false;
+			$canceled_at = ! empty($subscription->canceled_at)
+				? strtotime((string) $subscription->canceled_at)
+				: (is_array($meta) && ! empty($meta['canceled_at']) ? strtotime((string) $meta['canceled_at']) : false);
 			if (false !== $canceled_at && $canceled_at <= $as_of_timestamp) {
 				continue;
 			}
@@ -8468,7 +8476,11 @@ class RL_FSBI_Admin
 			$meta       = json_decode((string) ($subscription->metadata ?? ''), true);
 			$status     = strtolower((string) ($subscription->status ?? ''));
 
-			$cancel_stamp = is_array($meta) && ! empty($meta['canceled_at']) ? strtotime((string) $meta['canceled_at']) : false;
+			// The sync writes canceled_at to its own column; reading only the stored
+			// payload missed cancellations set after the row was first imported.
+			$cancel_stamp = ! empty($subscription->canceled_at)
+				? strtotime((string) $subscription->canceled_at)
+				: (is_array($meta) && ! empty($meta['canceled_at']) ? strtotime((string) $meta['canceled_at']) : false);
 			if (false === $cancel_stamp && in_array($status, array('cancelled', 'canceled'), true) && ! empty($subscription->updated_at)) {
 				$cancel_stamp = strtotime((string) $subscription->updated_at);
 			}

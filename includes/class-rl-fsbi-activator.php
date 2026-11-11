@@ -95,8 +95,22 @@ class RL_FSBI_Activator {
 			}
 		}
 
+		// Payout dates follow Freemius (10th of X+2); an old stored day override is
+		// dropped here rather than only being ignored at read time.
+		$settings['rl_fsbi_payout_day'] = '10';
+		if ( '' === trim( (string) ( $settings['rl_fsbi_payout_lag_months'] ?? '' ) ) ) {
+			$settings['rl_fsbi_payout_lag_months'] = '2';
+		}
+
 		update_option( 'rl_fsbi_settings', $settings );
-		update_option( 'rl_fsbi_plugin_version', RL_FSBI_VERSION );
+
+		// Only record the version when the rate is actually present, otherwise a
+		// deployment that ran before detection produced a summary would mark the
+		// upgrade done and never apply it.
+		$rate = trim( (string) ( $settings['rl_fsbi_fs_revenue_share'] ?? '' ) );
+		if ( '' !== $rate || 'legacy' !== $model ) {
+			update_option( 'rl_fsbi_plugin_version', RL_FSBI_VERSION );
+		}
 	}
 
 	/**
