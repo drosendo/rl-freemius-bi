@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.4.6  
+**Version:** 1.4.7  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -349,7 +349,7 @@ Displays:
 
 Built on the RL Options Framework, featuring:
 - **API Configuration:** Freemius Developer ID, Public API Key, Secret API Key with automated connection validation
-- **Plugin Scope:** Selective plugin tracking toggles from discovered plugins
+- **Plugin Scope:** Selective plugin tracking toggles from discovered plugins, a per-product **WordPress.org slug** with its last lookup result, and a per-product **monthly new subscription target** (empty = no target)
 - **Multi-Currency & Display:** Consolidated base currency, currency conversion provider, number formatting
 - **Synchronization:** Background WP-Cron schedule, frequency, and data retention settings
 - **Newsletter:** Multi-provider email marketing integration (Mailchimp and Kit.com / ConvertKit V4 API) with automatic tag discovery, default tag assignment, plan-to-tag mapping, website origin custom field tracking (`WEBSITE` / `website`), and independent diagnostic sample test runners with live `rlLOG` streaming.
@@ -501,7 +501,25 @@ Computed from the `rl_fsbi_trials` table: a trial is converted when Freemius rep
 ### Multi-Currency Segregation
 Per-currency buckets stay separate everywhere (`mrr_native_by_currency`, distribution charts) and are never added together as if they shared a currency. When one consolidated figure is needed — MRR and ARR — each bucket is converted to the reporting currency using the rate stored for that date and only then summed.
 
-### KPI definitions
+### The WordPress Dashboard Widget ("Portfolio Performance")
+
+Registered with `wp_add_dashboard_widget()` on the main WordPress dashboard, so nothing has to be opened to see how the portfolio is doing. It is rendered entirely from the local synced tables — no Freemius request is made on a wp-admin page load — and its payload is cached for 5 minutes under a key that includes the sync generation and the current date.
+
+| Figure | How it is calculated |
+| --- | --- |
+| Net Revenue | Every payment in the current, previous and month-before window, fees removed, each converted at **that transaction day's** rate to the reporting currency, then summed. |
+| MRR / ARR | Active subscriptions' renewal amounts, monthlyised by billing cycle and converted. ARR = MRR × 12. |
+| Active Subscribers | Subscriptions counted active as of today by `calculate_subscription_stats()` — the same row set the product dashboard KPI uses. |
+| All plugins in scope (N) | Shown under MRR, ARR and Active Subscribers; N is the number of tracked plugins, and hovering lists each product's own subscribers or MRR. |
+| New subscriptions: X / TARGET | **First-time paid subscriptions started in the current month**, excluding renewals, refunds and trial starts. TARGET is the sum of the per-product targets set under Plugin Scope and disappears entirely when none is set. |
+| · Y reactivations | Customers whose earlier subscription had already ended and who subscribed again. Counted separately and **not** included in X. |
+| Current / Next payout | Net revenue of the month belonging to the payout marked CURRENT or NEXT in the table, with its expected date. The public Freemius API documents no payout endpoint and no payout date, so the date is derived from **Settings → Payout day of month** and **Payout lag (months)** and is always labelled `estimated`. |
+| N renewals due in the next 30 days · M with failed payment | Active subscriptions renewing inside 30 days, and active subscriptions carrying at least one failed payment — the same definition the reconciled Retention block uses. The line is hidden when both are 0 and links to the Retention block of the dashboard. |
+| Current month bar | Labelled `Nov (to 11 Nov)` so a month in progress is not read as a drop, with a dashed **Projection** bar = net so far ÷ days elapsed × days in the month. |
+
+The three-month chart, the months table and the per-plugin breakdown (subscribers, MRR, new this month, reactivations) all sit inside the widget; each product name links to its own dashboard and the footer links to the portfolio dashboard. The metric grid follows the widget's own width through a container query rather than the viewport, because a WordPress dashboard column is not proportional to the window.
+
+## KPI definitions
 - **MRR** — every active subscription's renewal amount, monthlyised by billing cycle, converted to the reporting currency and summed.
 - **ARR** — MRR × 12.
 - **AOV** — net revenue for the period divided by all payments taken in it (new + renewal). Renders as `—` when the period has no payments, never `0.00`.
@@ -971,6 +989,23 @@ bumping `Version:` means no site will ever see it.
 - **WordPress.org slugs are per plugin.** The single global field became a per-product editor on the **Plugin Scope** tab, prefilled with each Freemius slug and validated against the wp.org API on save — an unknown slug is rejected rather than stored, since it would render a widget full of zeros. With no slug the widget is not rendered at all (no card, no canvas, no note) and no wp.org request is made.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
+
+### 1.4.7 (2026-11-11)
+
+**The "Portfolio Performance" widget on the WordPress dashboard now answers more than three months of revenue.**
+
+- **New subscriptions this month.** A line reading `New subscriptions: 12 / 8 · 1 reactivation · November 2026`: first-time paid subscriptions only (renewals, refunds and trial starts excluded), against the sum of the per-product targets, with reactivations counted separately and *not* added to the total. The target is a new field per product under **Plugin Scope**; leave every one empty and the `/ TARGET` part disappears. Hovering the line, and the expandable **Per-plugin breakdown**, give the same figures per product.
+- **The current month is marked as partial.** The bar and the row read `Nov (to 11 Nov)` instead of `Nov`, and a dashed **Projection** bar shows net so far ÷ days elapsed × days in the month. A month in progress is no longer read as a collapse against finished months.
+- **Payout dates.** `Current payout: 2,666.39 EUR · 15 Nov 2026` and `Next payout: 2,219.00 EUR · 15 Dec 2026`. The public Freemius API has **no payout endpoint and no payout date** (checked against `api.freemius.com/v1/openapi.json`: 112 paths, none for payouts or balances), so the date comes from two new settings — **Payout day of month** (15) and **Payout lag in months** (2) — and every date carries an `estimated` badge plus a tooltip saying exactly that. No date is invented.
+- **Retention alert.** `22 renewals due in the next 30 days · 1 with failed payment`, linking to the Retention block of the dashboard (the block gained the `rl-fsbi-block-retention` anchor). Failed payment uses the same definition as the reconciled counts: active subscriptions carrying a failed payment, restricted to the rows the Active Subscriptions KPI counts. Hidden when both numbers are 0.
+- **Scope labels and links.** MRR, ARR and Active Subscribers each carry `All plugins in scope (N)` with a per-product tooltip; each plugin name in the breakdown links to `admin.php?page=rl-freemius-bi-plugin-{id}#dashboard`, and the footer has **Open full dashboard**.
+- **No new API traffic.** The widget is built from the synced tables and cached for 5 minutes under a key containing the sync generation and the current date, so a wp-admin page load never reaches Freemius.
+
+**Fixed: the product dashboard collapsed below 1220px.** The WordPress.org and Freemius Installs cards carry `grid-column: span 3`. On the single-column layout that breakpoint switches to, a `span 3` child still forces three implicit tracks, so every card was squeezed into the leftover ~110px. Measured before: `109.484px 450.266px 357.25px` at a 1200px viewport. All direct children now reset to `1 / -1` there: 765px and 941px wide cards at 1024px and 1200px, three columns unchanged at 1440px.
+
+**Fixed: Debug Mode could stay on forever after an upgrade.** The setting used to be written on by default. A one-shot migration now clears it once per release; an administrator who turns it back on keeps it on until the next release. Verified: `enable_debug = true` → off after the first `admin_init`, and re-enabling afterwards survives.
+
+**The WordPress.org widget stops being silent about its own state.** Each row on **Plugin Scope** now reports the stored slug *and the last lookup result* — `Saved: smart-variations-images — last check found 1,000 active installs (2026-11-11 13:47:42)`, or the HTTP failure that stopped it — read from the cached snapshot, so no request is made to render the page. With the widget itself reporting unreachable/not-found inline and logging every probe under Debug Mode, a slug that does not render can be diagnosed from the settings screen alone.
 
 ### 1.4.6 (2026-11-11)
 
