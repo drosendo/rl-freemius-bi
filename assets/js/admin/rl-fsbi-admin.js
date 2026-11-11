@@ -1785,8 +1785,8 @@
 			this.drawDoughnutChart('currency', 'rl-fsbi-currency-chart', charts.currency_distribution?.labels || [], charts.currency_distribution?.values || [], currency);
 			this.drawDoughnutChart('country', 'rl-fsbi-country-chart', charts.country_distribution?.labels || [], charts.country_distribution?.values || [], null, false);
 			this.drawDoughnutChart('plan', 'rl-fsbi-plan-chart', charts.plan_distribution?.labels || [], charts.plan_distribution?.values || [], null, false);
-			this.drawLineChart('wporg', 'rl-fsbi-wporg-chart', charts.wporg_growth?.labels || [], [
-				{ label: 'Payment events', data: charts.wporg_growth?.values || [], borderColor: '#22c89b', backgroundColor: 'rgba(34,200,155,0.18)' },
+			this.drawLineChart('salesvolume', 'rl-fsbi-sales-volume-chart', charts.daily_sales_volume?.labels || [], [
+				{ label: 'Payment events', data: charts.daily_sales_volume?.values || [], borderColor: '#22c89b', backgroundColor: 'rgba(34,200,155,0.18)' },
 			], true);
 		},
 
@@ -1806,7 +1806,7 @@
 		chartTitle: function(key, canvasId) {
 			const titles = {
 				'rl-fsbi-sales-activity-chart': 'Sales activity: purchases, renewals, trials and refunds per day',
-				'rl-fsbi-wporg-chart': 'Freemius sales volume: payment events per day over the last 90 days',
+				'rl-fsbi-sales-volume-chart': 'Freemius sales volume: payment events per day over the last 90 days',
 				'rl-fsbi-portfolio-chart': 'Net revenue over the last 12 months',
 				'rl-fsbi-revenue-overview-chart': 'Revenue overview over the last 12 months',
 				'rl-fsbi-forecast-chart': 'Forecast revenue from upcoming renewals over the next 12 months',
@@ -2510,29 +2510,10 @@
 		 * @returns {void}
 		 */
 		updateWporgWidget: function(wporg) {
-			const note = document.getElementById('rl-fsbi-wporg-note');
-			const explain = (message) => {
-				if (note) {
-					note.textContent = message;
-					note.hidden = false;
-				}
-			};
-
-			if (!wporg.available) {
-				const reasons = {
-					no_slug: 'Add the WordPress.org plugin slug under Settings → Synchronization to show directory installs here.',
-					scope: 'Pick a single plugin to see its WordPress.org figures.',
-					not_found: 'No plugin with that slug was found on WordPress.org.',
-					unreachable: 'WordPress.org did not answer. Figures will retry on the next page load.'
-				};
-				explain(reasons[wporg.reason] || reasons.unreachable);
-
-				['rl-fsbi-wporg-active', 'rl-fsbi-wporg-downloads', 'rl-fsbi-wporg-version', 'rl-fsbi-wporg-updated'].forEach((id) => this.setText(id, '—'));
+			// The card is only in the DOM when the product has a WordPress.org
+			// slug, so nothing renders — and nothing was fetched — otherwise.
+			if (!wporg || !wporg.available) {
 				return;
-			}
-
-			if (note) {
-				note.hidden = true;
 			}
 
 			this.setText('rl-fsbi-wporg-active', Number(wporg.active_installs || 0).toLocaleString());

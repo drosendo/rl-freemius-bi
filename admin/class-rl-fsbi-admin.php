@@ -131,16 +131,28 @@ class RL_FSBI_Admin
 		// served once, from here.
 		wp_deregister_style('tippy-js');
 		wp_deregister_style('tippy-css');
-		wp_register_style('tippy-css', RL_FSBI_PLUGIN_URL . 'assets/vendor/tippy/tippy.css', array(), $this->vendor_asset_version('tippy/tippy.css'));
-		wp_enqueue_style('tippy-css');
 
-		wp_deregister_script('popper-js');
-		wp_register_script('popper-js', RL_FSBI_PLUGIN_URL . 'assets/vendor/popper/popper.min.js', array(), $this->vendor_asset_version('popper/popper.min.js'), true);
-		wp_enqueue_script('popper-js');
+		$css = $this->locate_vendor_asset('tippy/tippy.css');
+		if ('' !== $css['url']) {
+			wp_register_style('tippy-css', $css['url'], array(), $css['version']);
+			wp_enqueue_style('tippy-css');
+		}
 
-		wp_deregister_script('tippy-js');
-		wp_register_script('tippy-js', RL_FSBI_PLUGIN_URL . 'assets/vendor/tippy/tippy.umd.min.js', array('popper-js'), $this->vendor_asset_version('tippy/tippy.umd.min.js'), true);
-		wp_enqueue_script('tippy-js');
+		$popper = $this->locate_vendor_asset('popper/popper.min.js');
+		$popper_registered = false;
+		if ('' !== $popper['url']) {
+			wp_deregister_script('popper-js');
+			wp_register_script('popper-js', $popper['url'], array(), $popper['version'], true);
+			wp_enqueue_script('popper-js');
+			$popper_registered = true;
+		}
+
+		$tippy = $this->locate_vendor_asset('tippy/tippy.umd.min.js');
+		if ('' !== $tippy['url']) {
+			wp_deregister_script('tippy-js');
+			wp_register_script('tippy-js', $tippy['url'], $popper_registered ? array('popper-js') : array(), $tippy['version'], true);
+			wp_enqueue_script('tippy-js');
+		}
 	}
 
 	/**
@@ -165,19 +177,32 @@ class RL_FSBI_Admin
 	}
 
 	/**
-	 * Version stamp for a bundled vendor file.
+	 * Locate a bundled vendor file, preferring the plugin's own copy.
 	 *
-	 * Using filemtime keeps the cached copy honest after an update without
-	 * hardcoding a version that can drift from the file on disk.
+	 * A deploy that copies only changed files can leave `assets/vendor/` behind,
+	 * which is how the tooltip libraries 404'd on a live site while working
+	 * locally. Falling back to the copy that has shipped inside the settings
+	 * framework since the first release means a partial upload degrades to the
+	 * older file instead of breaking tooltips with two 404s.
 	 *
-	 * @param string $relative Path under assets/vendor/.
-	 * @return string
+	 * @param string $relative Path under the vendor directory, e.g. tippy/tippy.css.
+	 * @return array{url:string,version:string} Empty url when nothing is found.
 	 */
-	private function vendor_asset_version($relative)
+	private function locate_vendor_asset($relative)
 	{
-		$path = RL_FSBI_PLUGIN_DIR . 'assets/vendor/' . ltrim($relative, '/');
+		$relative = ltrim($relative, '/');
+		$candidates = array(
+			RL_FSBI_PLUGIN_DIR . 'assets/vendor/' . $relative => RL_FSBI_PLUGIN_URL . 'assets/vendor/' . $relative,
+			RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/assets/vendor/' . $relative => RL_FSBI_PLUGIN_URL . 'includes/library/rloptionsFramework/assets/vendor/' . $relative,
+		);
 
-		return file_exists($path) ? (string) filemtime($path) : $this->version;
+		foreach ($candidates as $path => $url) {
+			if (file_exists($path)) {
+				return array('url' => $url, 'version' => (string) filemtime($path));
+			}
+		}
+
+		return array('url' => '', 'version' => $this->version);
 	}
 
 	/**
@@ -644,6 +669,8 @@ class RL_FSBI_Admin
 		}
 
 		$forced_plugin_id = (int) $forced_plugin_id;
+		// Decides whether the WordPress.org card is rendered at all.
+		$GLOBALS['rl_fsbi_has_wporg'] = $forced_plugin_id > 0 && '' !== $this->settings->get_wporg_slug($forced_plugin_id);
 		$GLOBALS['rl_fsbi_forced_plugin_id'] = $forced_plugin_id;
 		$GLOBALS['rl_fsbi_plugins_catalog']  = $this->get_plugins_catalog();
 		$GLOBALS['rl_fsbi_raw_catalog']      = $this->settings->get_option('rl_fsbi_plugins_catalog', array());
@@ -3535,9 +3562,10 @@ class RL_FSBI_Admin
 			$this->settings->get_option('rl_fsbi_conversion_currency', 'EUR')
 		);
 		$data['plans']         = $this->get_plans_for_filter($plugin_id);
-		$data['wporg']         = $plugin_id > 0
-			? $this->get_wporg_snapshot((string) $this->settings->get_option('rl_fsbi_wporg_slug', ''))
-			: array('available' => false, 'slug' => '', 'reason' => 'scope');
+		// No slug means this product is not on WordPress.org: no widget, and no
+		// outbound request to look up figures nobody asked to see.
+		$wporg_slug = $plugin_id > 0 ? $this->settings->get_wporg_slug($plugin_id) : '';
+		$data['wporg'] = '' !== $wporg_slug ? $this->get_wporg_snapshot($wporg_slug) : null;
 		$data['plan_filter']   = $plan_filter;
 
 		$last_sync_utc = (string) $this->settings->get_option('rl_fsbi_last_sync_at_utc', (string) get_option('rl_fsbi_last_sync_at_utc', ''));
@@ -5793,7 +5821,7 @@ class RL_FSBI_Admin
 
 		$currency_distribution = $this->build_distribution_series($payments, 'currency', 'gross', $commission_rate, $report_currency);
 		$country_distribution = $this->build_distribution_series($payments, 'country_code', 'net', $commission_rate, $report_currency);
-		$plan_distribution = $this->build_plan_distribution_series($subscriptions);
+		$plan_distribution = $this->build_plan_distribution_series($subscriptions, $subscription_stats['active_ids'] ?? array());
 		$daily_sales_volume = $this->build_daily_sales_volume_series($annual_payments);
 
 		$raw_currency_distribution = array();
@@ -6132,6 +6160,7 @@ class RL_FSBI_Admin
 	private function calculate_subscription_stats($subscriptions, $as_of_date = null, $period_start = null)
 	{
 		$active = 0;
+		$active_ids = array();
 		$monthly = 0;
 		$annual = 0;
 		$canceled_this_month = 0;
@@ -6161,6 +6190,7 @@ class RL_FSBI_Admin
 
 			if (in_array($status, array('active', 'paid', 'trialing', 'trial_ended'), true) && $months > 0) {
 				$active++;
+				$active_ids[] = (int) ($subscription->id ?? 0);
 				if (1 === $months) {
 					$monthly++;
 				}
@@ -6196,6 +6226,7 @@ class RL_FSBI_Admin
 
 		return array(
 			'active' => $active,
+			'active_ids' => $active_ids,
 			'monthly' => $monthly,
 			'annual' => $annual,
 			'canceled_this_month' => $canceled_this_month,
@@ -7313,9 +7344,14 @@ class RL_FSBI_Admin
 		$at_risk_amount = 0.0;
 		$failed   = 0;
 
+		// Restricted to the rows the Active Subscriptions KPI counted. Reading
+		// the raw status instead produced 337 "failed payment" subscriptions
+		// against a KPI of 190, because the KPI also requires a known billing
+		// cycle and excludes expired subscriptions.
+		$active_ids = isset($subscription_stats['active_ids']) ? array_flip((array) $subscription_stats['active_ids']) : array();
+
 		foreach ($subscriptions as $subscription) {
-			$status = strtolower((string) ($subscription->status ?? ''));
-			if (! in_array($status, array('active', 'paid', 'trialing', 'trial_ended'), true)) {
+			if (! empty($active_ids) && ! isset($active_ids[(int) ($subscription->id ?? 0)])) {
 				continue;
 			}
 
@@ -7497,12 +7533,19 @@ class RL_FSBI_Admin
 		);
 	}
 
-	private function build_plan_distribution_series($subscriptions)
+	private function build_plan_distribution_series($subscriptions, $active_ids = array())
 	{
 		$bucket = array();
 		$names  = $this->get_plan_name_map();
+		$allowed = ! empty($active_ids) ? array_flip((array) $active_ids) : array();
 
 		foreach ($subscriptions as $subscription) {
+			// Same population as the Active Subscriptions KPI, so the shares add
+			// up to it instead of to every subscription ever recorded.
+			if (! empty($allowed) && ! isset($allowed[(int) ($subscription->id ?? 0)])) {
+				continue;
+			}
+
 			$plan_id = ! empty($subscription->plan_id) ? (string) $subscription->plan_id : 'unknown';
 			$label = isset($names[$plan_id]) ? $names[$plan_id] : 'Plan ' . $plan_id;
 			if (! isset($bucket[$label])) {

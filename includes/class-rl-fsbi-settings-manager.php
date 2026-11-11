@@ -205,6 +205,15 @@ class RL_FSBI_Settings_Manager {
 			);
 
 			$this->framework->add_section(
+				'plugin_scope',
+				'wporg_slugs',
+				array(
+					'title'       => esc_html__( 'WordPress.org Slugs', 'rl-freemius-bi' ),
+					'description' => esc_html__( 'Only some Freemius products are also listed on WordPress.org. Give each one its directory slug and the dashboard will show a separate "WordPress.org (free)" widget for it; leave a slug empty and that widget is not rendered and no WordPress.org request is made.', 'rl-freemius-bi' ),
+				)
+			);
+
+			$this->framework->add_section(
 				'currency_settings',
 				'currency_config',
 				array(
@@ -562,14 +571,12 @@ class RL_FSBI_Settings_Manager {
 		);
 
 		$this->framework->add_field(
-			'sync_settings',
-			'sync_config',
+			'plugin_scope',
+			'wporg_slugs',
 			array(
-				'id'      => 'rl_fsbi_wporg_slug',
-				'type'    => 'text',
-				'label'   => esc_html__( 'WordPress.org Plugin Slug', 'rl-freemius-bi' ),
-				'desc'    => esc_html__( 'Optional. The slug of the free plugin on WordPress.org (the part after /plugin/ in its URL). It powers the "WordPress.org (free)" widget with active installs and the 90-day download history, fetched once a day from the public WordPress.org API. WordPress.org installs and Freemius installs are different populations and are never added together.', 'rl-freemius-bi' ),
-				'default' => '',
+				'id'   => 'rl_fsbi_wporg_slugs_panel',
+				'type' => 'html',
+				'html' => $this->get_wporg_slugs_panel_html(),
 			)
 		);
 
@@ -1465,6 +1472,181 @@ class RL_FSBI_Settings_Manager {
 				<input type="hidden" name="action" value="rl_fsbi_user_backfill" />
 				<?php wp_nonce_field( 'rl_fsbi_user_backfill' ); ?>
 				<button type="submit" class="button"><?php echo esc_html__( 'Run user backfill now', 'rl-freemius-bi' ); ?></button>
+			</form>
+		</div>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Save the per-plugin WordPress.org slugs, validating each against the API.
+	 *
+	 * An unknown slug is dropped rather than stored: a typo would otherwise
+	 * render a WordPress.org widget full of zeros, which is worse than the
+	 * widget being absent.
+	 *
+	 * @return void
+	 */
+	public function handle_save_wporg_slugs(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You are not allowed to change these settings.', 'rl-freemius-bi' ) );
+		}
+
+		check_admin_referer( 'rl_fsbi_save_wporg_slugs' );
+
+		$input = isset( $_POST['wporg'] ) && is_array( $_POST['wporg'] ) ? wp_unslash( $_POST['wporg'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$saved = array();
+		$rejected = array();
+
+		foreach ( $input as $plugin_id => $slug ) {
+			$plugin_id = (int) $plugin_id;
+			$slug      = sanitize_title( (string) $slug );
+
+			if ( $plugin_id <= 0 || '' === $slug ) {
+				continue;
+			}
+
+			if ( $this->wporg_slug_exists( $slug ) ) {
+				$saved[ $plugin_id ] = $slug;
+			} else {
+				$rejected[] = $slug;
+			}
+		}
+
+		$this->update_option( 'rl_fsbi_wporg_slugs', $saved );
+
+		// Drop cached snapshots so the change shows immediately.
+		foreach ( array_merge( array_values( $saved ), $rejected ) as $slug ) {
+			delete_transient( 'rl_fsbi_wporg_' . md5( sanitize_title( (string) $slug ) ) );
+		}
+
+		$message = '1';
+		if ( ! empty( $rejected ) ) {
+			$message = sprintf(
+				/* translators: %s: comma separated slugs */
+				__( 'Not saved, no such plugin on WordPress.org: %s', 'rl-freemius-bi' ),
+				implode( ', ', array_map( 'sanitize_text_field', $rejected ) )
+			);
+		}
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'               => $this->framework ? $this->framework->get_config( 'page_slug' ) : 'rl-freemius-bi-settings',
+					'tab'                => 'plugin_scope',
+					'rl_fsbi_wporg_saved' => rawurlencode( $message ),
+				),
+				admin_url( 'admin.php' )
+			)
+		);
+		exit;
+	}
+
+	/**
+	 * Whether a slug resolves to a published WordPress.org plugin.
+	 *
+	 * @param string $slug Plugin slug.
+	 * @return bool
+	 */
+	private function wporg_slug_exists( string $slug ): bool {
+		$url = add_query_arg(
+			array(
+				'action'        => 'plugin_information',
+				'request[slug]' => $slug,
+			),
+			'https://api.wordpress.org/plugins/info/1.2/'
+		);
+
+		$response = wp_remote_get( $url, array( 'timeout' => 15, 'headers' => array( 'Accept' => 'application/json' ) ) );
+		if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+			return false;
+		}
+
+		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+
+		return is_array( $body ) && empty( $body['error'] );
+	}
+
+	/**
+	 * Stored WordPress.org slug for a tracked plugin.
+	 *
+	 * @param int $plugin_id Freemius plugin id.
+	 * @return string Empty when the product is not on WordPress.org.
+	 */
+	public function get_wporg_slug( $plugin_id ): string {
+		$map = $this->get_option( 'rl_fsbi_wporg_slugs', array() );
+		if ( ! is_array( $map ) ) {
+			return '';
+		}
+
+		$slug = isset( $map[ (int) $plugin_id ] ) ? (string) $map[ (int) $plugin_id ] : '';
+
+		return sanitize_title( $slug );
+	}
+
+	/**
+	 * Per-plugin slug editor for the Plugin Scope tab.
+	 *
+	 * @return string
+	 */
+	private function get_wporg_slugs_panel_html(): string {
+		$catalog = $this->get_option( 'rl_fsbi_plugins_catalog', array() );
+		$catalog = is_array( $catalog ) ? $catalog : array();
+
+		$message = isset( $_GET['rl_fsbi_wporg_saved'] ) ? sanitize_text_field( wp_unslash( $_GET['rl_fsbi_wporg_saved'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		ob_start();
+		?>
+		<div class="rl-fsbi-wporg-slugs">
+			<style>
+				.rl-fsbi-wporg-slugs{max-width:820px;background:#fff;border:1px solid #c3c4c7;border-radius:6px;padding:14px 18px}
+				.rl-fsbi-wporg-slugs table{width:100%;border-collapse:collapse;font-size:13px}
+				.rl-fsbi-wporg-slugs th,.rl-fsbi-wporg-slugs td{text-align:left;padding:8px 6px;border-bottom:1px solid #f0f0f1;vertical-align:middle}
+				.rl-fsbi-wporg-slugs th{font-weight:600;width:44%}
+				.rl-fsbi-wporg-slugs input[type=text]{width:100%;max-width:280px}
+				.rl-fsbi-wporg-slugs .rl-fsbi-wporg-note{color:#646970;font-size:12px;display:block;margin-top:3px}
+			</style>
+
+			<?php if ( '1' === $message ) : ?>
+				<div class="notice notice-success inline" style="margin:0 0 10px;"><p><?php esc_html_e( 'WordPress.org slugs saved.', 'rl-freemius-bi' ); ?></p></div>
+			<?php elseif ( '' !== $message ) : ?>
+				<div class="notice notice-warning inline" style="margin:0 0 10px;"><p><?php echo esc_html( $message ); ?></p></div>
+			<?php endif; ?>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<input type="hidden" name="action" value="rl_fsbi_save_wporg_slugs" />
+				<?php wp_nonce_field( 'rl_fsbi_save_wporg_slugs' ); ?>
+
+				<table>
+					<tbody>
+					<?php foreach ( $catalog as $plugin ) :
+						$plugin_id    = isset( $plugin['id'] ) ? (int) $plugin['id'] : 0;
+						$title        = isset( $plugin['title'] ) ? (string) $plugin['title'] : 'Plugin #' . $plugin_id;
+						$freemius     = isset( $plugin['slug'] ) ? sanitize_title( (string) $plugin['slug'] ) : '';
+						$stored       = $this->get_wporg_slug( $plugin_id );
+						?>
+						<tr>
+							<th scope="row">
+								<?php echo esc_html( $title ); ?>
+								<?php if ( '' !== $freemius ) : ?>
+									<span class="rl-fsbi-wporg-note"><?php echo esc_html( sprintf( /* translators: %s: Freemius product slug */ __( 'Freemius slug: %s', 'rl-freemius-bi' ), $freemius ) ); ?></span>
+								<?php endif; ?>
+							</th>
+							<td>
+								<input type="text" name="wporg[<?php echo esc_attr( (string) $plugin_id ); ?>]"
+									value="<?php echo esc_attr( $stored ); ?>"
+									placeholder="<?php echo esc_attr( $freemius ); ?>"
+									aria-label="<?php echo esc_attr( sprintf( /* translators: %s: plugin title */ __( 'WordPress.org slug for %s', 'rl-freemius-bi' ), $title ) ); ?>" />
+								<span class="rl-fsbi-wporg-note"><?php esc_html_e( 'Leave empty if this product is not on WordPress.org.', 'rl-freemius-bi' ); ?></span>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+					</tbody>
+				</table>
+
+				<p class="submit" style="margin:12px 0 0;">
+					<button type="submit" class="button button-primary"><?php esc_html_e( 'Save Slugs', 'rl-freemius-bi' ); ?></button>
+				</p>
 			</form>
 		</div>
 		<?php

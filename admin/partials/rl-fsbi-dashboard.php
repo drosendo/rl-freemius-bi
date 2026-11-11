@@ -137,7 +137,7 @@ if ( ! defined( 'WPINC' ) ) {
 				<div><dt><?php echo esc_html__( 'Active subscriptions', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-active">—</dd></div>
 				<div><dt><?php echo esc_html__( 'Renewals due (30 days)', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-upcoming">—</dd></div>
 				<div><dt><?php echo esc_html__( 'At-risk renewals', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Renewals due in the next 30 days on subscriptions that carry a failed payment or an outstanding balance.', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo esc_attr__( 'Renewals due in the next 30 days on subscriptions that carry a failed payment or an outstanding balance.', 'rl-freemius-bi' ); ?>"><span class="dashicons dashicons-info"></span></span></dt><dd id="rl-fsbi-ret-atrisk">—</dd></div>
-				<div><dt><?php echo esc_html__( 'Failed payments', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'Active subscriptions that have ever recorded a failed payment.', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo esc_attr__( 'Active subscriptions that have ever recorded a failed payment.', 'rl-freemius-bi' ); ?>"><span class="dashicons dashicons-info"></span></span></dt><dd id="rl-fsbi-ret-failed">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Active subs with a failed payment', 'rl-freemius-bi' ); ?><span class="rl-fsbi-info-tooltip" title="<?php esc_attr_e( 'How many of the active subscriptions counted above have recorded at least one failed payment. It is a count of subscriptions, not of failed attempts, and can never exceed the active total.', 'rl-freemius-bi' ); ?>" data-tippy-content="<?php echo esc_attr__( 'How many of the active subscriptions counted above have recorded at least one failed payment. It is a count of subscriptions, not of failed attempts, and can never exceed the active total.', 'rl-freemius-bi' ); ?>"><span class="dashicons dashicons-info"></span></span></dt><dd id="rl-fsbi-ret-failed">—</dd></div>
 				<div><dt><?php echo esc_html__( 'Cancellations this month', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-cancellations">—</dd></div>
 				<div><dt><?php echo esc_html__( 'Churn rate', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-ret-churn">—</dd></div>
 			</dl>
@@ -352,7 +352,8 @@ if ( ! defined( 'WPINC' ) ) {
 		</div>
 
 		<div class="rl-fsbi-card">
-			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Plan Distribution', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Active Subscriptions by Plan', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'The same active subscriptions the Churn Rate and Active Subscriptions figures use, so the shares add up to that total.', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-plan-chart"></canvas>
 		</div>
 		</div>
@@ -360,9 +361,10 @@ if ( ! defined( 'WPINC' ) ) {
 		<div class="rl-fsbi-card rl-fsbi-span-3">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Freemius Sales Volume (Daily, Last 90 Days)', 'rl-freemius-bi' ); ?></div>
 			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Number of payment events recorded per day. This is Freemius billing activity, not WordPress.org install counts.', 'rl-freemius-bi' ); ?></div>
-			<canvas id="rl-fsbi-wporg-chart"></canvas>
+			<canvas id="rl-fsbi-sales-volume-chart"></canvas>
 		</div>
 
+		<?php if ( ! empty( $GLOBALS['rl_fsbi_has_wporg'] ) ) : ?>
 		<div class="rl-fsbi-card rl-fsbi-wporg-widget" id="rl-fsbi-wporg-widget">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'WordPress.org (free)', 'rl-freemius-bi' ); ?></div>
 			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'From the public WordPress.org plugins API. These are installs of the free plugin from the WordPress.org directory — a different population from the Freemius install records beside them, so the two are shown separately and never added together.', 'rl-freemius-bi' ); ?></div>
@@ -372,11 +374,11 @@ if ( ! defined( 'WPINC' ) ) {
 				<div><dt><?php echo esc_html__( 'Version', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-wporg-version">—</dd></div>
 				<div><dt><?php echo esc_html__( 'Last updated', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-wporg-updated">—</dd></div>
 			</dl>
-			<p class="rl-fsbi-card-sub rl-fsbi-wporg-note" id="rl-fsbi-wporg-note" hidden></p>
-			<div class="rl-fsbi-wporg-chart-wrap">
+			<div class="rl-fsbi-wporg-history-wrap">
 				<canvas id="rl-fsbi-wporg-installs-chart" aria-label="<?php echo esc_attr__( 'WordPress.org daily downloads', 'rl-freemius-bi' ); ?>" role="img"></canvas>
 			</div>
 		</div>
+		<?php endif; ?>
 
 		<div class="rl-fsbi-card rl-fsbi-installs-widget">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Freemius Installs', 'rl-freemius-bi' ); ?></div>

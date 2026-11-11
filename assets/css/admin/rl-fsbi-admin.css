@@ -568,7 +568,7 @@
 	grid-column: span 3;
 }
 
-.rl-fsbi-wporg-chart-wrap {
+.rl-fsbi-wporg-history-wrap {
 	position: relative;
 	height: 120px;
 	margin-top: 10px;
@@ -885,7 +885,7 @@
 }
 
 #rl-fsbi-sales-activity-chart,
-#rl-fsbi-wporg-chart {
+#rl-fsbi-sales-volume-chart {
 	width: 100% !important;
 	height: 260px !important;
 	display: block;
