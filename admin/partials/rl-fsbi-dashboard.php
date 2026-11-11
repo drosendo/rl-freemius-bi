@@ -410,6 +410,7 @@ if ( ! defined( 'WPINC' ) ) {
 				<div><dt><?php echo esc_html__( 'Version', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-wporg-version">—</dd></div>
 				<div><dt><?php echo esc_html__( 'Last updated', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-wporg-updated">—</dd></div>
 			</dl>
+			<p class="rl-fsbi-wporg-status" id="rl-fsbi-wporg-status" hidden></p>
 			<div class="rl-fsbi-wporg-history-wrap">
 				<canvas id="rl-fsbi-wporg-installs-chart" aria-label="<?php echo esc_attr__( 'WordPress.org daily downloads', 'rl-freemius-bi' ); ?>" role="img"></canvas>
 			</div>

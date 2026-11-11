@@ -411,6 +411,16 @@
 	font-size: 11px;
 }
 
+.rl-fsbi-wporg-status {
+	margin: 8px 0 0;
+	padding: 6px 10px;
+	border-radius: 4px;
+	font-size: 12px;
+	color: #8a6d1f;
+	background: rgba(245, 158, 11, 0.12);
+	border-left: 3px solid var(--fsbi-amber, #f59e0b);
+}
+
 .rl-fsbi-hero-card .rl-fsbi-card-sub {
 	color: rgba(255, 255, 255, 0.86);
 }

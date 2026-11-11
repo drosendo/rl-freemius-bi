@@ -2556,8 +2556,11 @@
 			// The card is only in the DOM when the product has a WordPress.org
 			// slug, so nothing renders — and nothing was fetched — otherwise.
 			if (!wporg || !wporg.available) {
+				this.setWporgStatus(wporg);
 				return;
 			}
+
+			this.setWporgStatus(wporg);
 
 			this.setText('rl-fsbi-wporg-active', Number(wporg.active_installs || 0).toLocaleString());
 			this.setText('rl-fsbi-wporg-downloads', Number(wporg.total_downloads || 0).toLocaleString());
@@ -2608,6 +2611,44 @@
 					},
 				},
 			});
+		},
+
+		/**
+		 * Say why the WordPress.org card has no numbers, instead of leaving it blank.
+		 *
+		 * @function setWporgStatus
+		 * @memberof FSBI
+		 * @param {Object} wporg - WordPress.org snapshot from the payload.
+		 * @returns {void}
+		 */
+		setWporgStatus: function(wporg) {
+			const el = document.getElementById('rl-fsbi-wporg-status');
+			if (!el) {
+				return;
+			}
+
+			if (wporg && wporg.available) {
+				el.hidden = true;
+				el.textContent = '';
+				return;
+			}
+
+			const reason = (wporg && wporg.reason) || '';
+			const detail = (wporg && wporg.detail) || '';
+			let message = '';
+
+			if (reason === 'not_found') {
+				message = 'WordPress.org has no plugin with the slug "' + (wporg.slug || '') + '". Correct it on Settings → Plugin Scope.';
+			} else if (reason === 'no_slug') {
+				message = 'No WordPress.org slug is set for this product.';
+			} else if (reason) {
+				message = 'Could not read WordPress.org right now'
+					+ (detail ? ' (' + detail + ')' : '')
+					+ '. It is retried automatically on the next load.';
+			}
+
+			el.hidden = !message;
+			el.textContent = message;
 		},
 
 		/**

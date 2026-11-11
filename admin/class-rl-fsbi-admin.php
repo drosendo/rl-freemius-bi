@@ -7203,6 +7203,14 @@ class RL_FSBI_Admin
 
 		$snapshot = array('available' => false, 'slug' => $slug, 'reason' => 'unreachable');
 
+		if (is_wp_error($response)) {
+			$snapshot['detail'] = $response->get_error_message();
+		} else {
+			$snapshot['detail'] = 'HTTP ' . (int) wp_remote_retrieve_response_code($response);
+		}
+
+		$this->log_wporg('info request', $info_url, $snapshot['detail']);
+
 		if (! is_wp_error($response) && 200 === (int) wp_remote_retrieve_response_code($response)) {
 			$body = json_decode((string) wp_remote_retrieve_body($response), true);
 
@@ -7252,9 +7260,29 @@ class RL_FSBI_Admin
 			}
 		}
 
-		set_transient($cache_key, $snapshot, DAY_IN_SECONDS);
+		// A failure is not worth a day. Caching it that long left the widget
+		// empty until the cache expired, with no way to retry but re-saving the
+		// slug, so a single blip at api.wordpress.org lasted 24 hours.
+		set_transient($cache_key, $snapshot, ! empty($snapshot['available']) ? DAY_IN_SECONDS : 5 * MINUTE_IN_SECONDS);
 
 		return $snapshot;
+	}
+
+	/**
+	 * Record a WordPress.org lookup when Debug Mode is on.
+	 *
+	 * @param string $label  What was requested.
+	 * @param string $url    Request URL.
+	 * @param string $detail Outcome, e.g. "HTTP 200".
+	 * @return void
+	 */
+	private function log_wporg($label, $url, $detail)
+	{
+		if (! $this->settings->is_debug_mode()) {
+			return;
+		}
+
+		error_log(sprintf('[rl-fsbi] wp.org %s -> %s (%s)', $label, $detail, $url)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 	}
 
 	/**
