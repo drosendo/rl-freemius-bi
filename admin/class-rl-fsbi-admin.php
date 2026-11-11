@@ -1087,11 +1087,13 @@ class RL_FSBI_Admin
 		}
 
 		return sprintf(
-			/* translators: 1: effective percentage, 2: configured rate, 3: number of sales */
-			__('Derived from the %2$s%% revenue share on (gross + VAT) plus the fixed fee, over %3$s sales; refunds return the percentage part only. Effective rate this month: %1$s%%.', 'rl-freemius-bi'),
+			/* translators: 1: effective percentage, 2: configured rate, 3: number of sales, 4: percentage part, 5: fixed part */
+			__('Derived from the %2$s%% revenue share on (gross + VAT), over %3$s sales; refunds return the percentage part only. Effective rate this month: %1$s%%. Percentage part %4$s + fixed fee part %5$s.', 'rl-freemius-bi'),
 			number_format_i18n((float) ($point['commission_pct'] ?? 0), 2),
 			number_format_i18n((float) ($point['rate'] ?? 0), 2),
-			number_format_i18n((int) ($point['sale_rows'] ?? 0))
+			number_format_i18n((int) ($point['sale_rows'] ?? 0)),
+			number_format_i18n((float) ($point['commission_pct_part'] ?? 0), 2),
+			number_format_i18n((float) ($point['commission_fixed_part'] ?? 0), 2)
 		) . $assumed_note;
 	}
 
@@ -1194,6 +1196,8 @@ class RL_FSBI_Admin
 				'refunds' => $refunds,
 				'fees' => $fees,
 				'commission' => $row['commission'],
+				'commission_pct_part' => $row['commission_pct_part'],
+				'commission_fixed_part' => $row['commission_fixed_part'],
 				'gateway' => $row['gateway'],
 				'vat' => $row['vat'],
 				'commission_configured' => $row['configured'],
@@ -1372,6 +1376,8 @@ class RL_FSBI_Admin
 		$gross = 0.0;
 		$refunds = 0.0;
 		$commission = 0.0;
+		$commission_pct_part = 0.0;
+		$commission_fixed_part = 0.0;
 		$gateway = 0.0;
 		$vat_total = 0.0;
 		$net = 0.0;
@@ -1409,6 +1415,7 @@ class RL_FSBI_Admin
 				$commission_part = $row_configured ? ($row_gross + $row_vat) * ($row_rate / 100) : 0.0;
 				$refunds += $row_gross;
 				$commission -= $commission_part;
+				$commission_pct_part -= $commission_part;
 				$vat_total -= $row_vat;
 				// A chargeback carries its own dispute fee, which is a cost of the
 				// month and belongs in Gateway, not in the refunded amount.
@@ -1423,8 +1430,12 @@ class RL_FSBI_Admin
 			$sale_rows++;
 
 			if ($row_configured) {
-				$row_commission = ($row_gross + $row_vat) * ($row_rate / 100) + $this->get_freemius_fixed_fee($source_currency);
+				$row_pct = ($row_gross + $row_vat) * ($row_rate / 100);
+				$row_fixed = $convert($this->get_freemius_fixed_fee($source_currency));
+				$row_commission = $row_pct + $row_fixed;
 				$commission += $row_commission;
+				$commission_pct_part += $row_pct;
+				$commission_fixed_part += $row_fixed;
 				$net += $row_gross - $row_commission - $row_gateway;
 			} else {
 				// No revenue share known: report gross minus refunds and gateway
@@ -1438,6 +1449,8 @@ class RL_FSBI_Admin
 			'gross' => round($gross, 2),
 			'refunds' => round($refunds, 2),
 			'commission' => round($commission, 2),
+			'commission_pct_part' => round($commission_pct_part, 2),
+			'commission_fixed_part' => round($commission_fixed_part, 2),
 			'gateway' => round($gateway, 2),
 			'vat' => round($vat_total, 2),
 			'net' => round($net, 2),
@@ -1588,9 +1601,24 @@ class RL_FSBI_Admin
 	 */
 	private function get_freemius_fixed_fee($currency)
 	{
+		$model = $this->get_commission_model();
 		$configured = $this->settings->get_option('rl_fsbi_fs_fixed_fee', '');
+		$has_configured = '' !== $configured && null !== $configured;
 
-		if ('' !== $configured && null !== $configured) {
+		// The legacy progressive plan carries no per-transaction fee, and the
+		// fixed fee is part of the current plan's pricing only. Applying the
+		// default here inflated September and October by roughly a tenth of a
+		// unit per sale. A fee is used when the model has one built in
+		// (current), or when an administrator sets one explicitly.
+		if ('legacy' === $model && ! $has_configured) {
+			return 0.0;
+		}
+
+		if ('flat' === $model && ! $has_configured) {
+			return 0.0;
+		}
+
+		if ($has_configured) {
 			return max(0.0, (float) $configured);
 		}
 

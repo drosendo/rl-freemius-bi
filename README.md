@@ -994,6 +994,18 @@ bumping `Version:` means no site will ever see it.
 
 **When Freemius reports no rate, account age is the evidence.** A first payment before the current pricing started (2026-10-05) means the account was onboarded under the legacy tiers, so the model is preselected as **Legacy progressive (assumed from account age)** with marginal 7.00% and lifetime average 7.95% for product 2228 - labelled as *assumed, not reported by Freemius*, with the hint to confirm in Freemius -> Earnings -> Payouts Information -> Fees Breakdown. It is applied only when the administrator presses Accept, and the Commission tooltip carries the same marker. For 2228 the first payment is 2019-01-15 with the $1,000 and $5,000 boundaries crossed on 2019-02-08 and 2019-10-06.
 
+**The legacy plan carries no fixed fee.** The fixed per-transaction fee is part of the current plan's pricing only, so it is now charged for the current model (or a flat model where an administrator sets one) and never for legacy. It had been applied on top of the tiers, inflating September and October.
+
+Per-month breakdown with the legacy model, product 2228, split into its two components:
+
+| Month | Gross | VAT | Sales | Percentage part | Fixed part | Commission | Effective | Net |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Sep | 1,091.19 | 35.66 | 22 | 68.33 | **0.00** | 68.33 | 6.26% | 814.60 |
+| Oct | 799.45 | 39.21 | 16 | 58.71 | **0.00** | 58.71 | 7.34% | 706.47 |
+| Nov | 282.10 | 0.00 | 6 | 19.75 | **0.00** | 19.75 | 7.00% | 249.99 |
+
+October is exactly 7% of (799.45 + 39.21) = 58.71, the figure the API implies. November is 7% of 282.10 with no VAT. September reads 68.33 rather than 78.88 because refunds reverse the percentage part at the same tier: 7% of the gross + VAT of its sales is 78.88, minus 7% of the 150.64 refunded, which is 10.55. The effective percentage differs from 7% only because VAT coverage and refunds differ per month. Every row satisfies `gross - refunds - commission - gateway = net`.
+
 **Tiers are applied per payment, by position.** Detection records the date each tier boundary is crossed in the lifetime cumulative gross; the widget then charges each payment at the rate of the tier it falls into (27% up to the first $1,000, 17% up to $5,000, 7% after) instead of applying a lifetime average to everything. Refunds reverse the percentage part at the same tier as the sale they reverse.
 
 Verified with the legacy model accepted, product 2228 only: Sep 1,091.19 gross / 150.64 refunds / 57.62 gateway / 78.68 commission / 804.25 net; Oct 799.45 / 0 / 34.27 / 66.31 / 698.87; Nov 282.10 / 0 / 12.36 / 22.60 / 247.14. Every row satisfies `gross - refunds - commission - gateway = net`.
