@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.4.7  
+**Version:** 1.4.8  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -989,6 +989,35 @@ bumping `Version:` means no site will ever see it.
 - **WordPress.org slugs are per plugin.** The single global field became a per-product editor on the **Plugin Scope** tab, prefilled with each Freemius slug and validated against the wp.org API on save — an unknown slug is rejected rather than stored, since it would render a widget full of zeros. With no slug the widget is not rendered at all (no card, no canvas, no note) and no wp.org request is made.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
+
+### 1.4.8 (2026-11-11)
+
+**The widget's monthly columns now add up, and the reason they did not is the Freemius commission.**
+
+`Gross - Fees - Net` left a gap of **+55.96 in October**, and the synced refund rows made it worse in the other months (+22.00 November, +85.83 September). The gap is the **Freemius commission**, which the table never showed, and refunds are stored in two incompatible shapes:
+
+| Shape | Example | `gross` | `net` | `fee` |
+| --- | --- | --- | --- | --- |
+| `payment_type = refund` / `chargeback` | 2026-09 | **negative** | 0 | 0 |
+| `is_refund = 1`, no `payment_type` | 2026-11 | **positive 49.00** | positive 41.75 | 7.25 |
+
+Because `Net` was simply `SUM(net)`, the second shape **added revenue** instead of removing it, while `Refunds` (built from `SUM(|net|)`) counted nothing for the first shape. A single `summarise_month_payments()` now normalises refunds to always reduce the month, derives the commission as the balancing figure, and the table gained a **Commission** column:
+
+| Month | Gross | Refunds | Fees | Commission | Net |
+| --- | --- | --- | --- | --- | --- |
+| Sep | 3,260.19 | 150.64 | 373.89 | 69.27 | **2,666.39** |
+| Oct | 2,571.45 | 0.00 | 296.49 | 55.96 | **2,219.00** |
+| Nov (to 11 Nov) | 1,867.10 | 49.00 | 254.16 | 5.25 | **1,558.69** |
+
+Every row now satisfies `Gross - Refunds - Fees - Commission = Net`. September and October totals are unchanged; November drops by 83.50 because two refund rows had been adding revenue. The Net Revenue KPI is the sum of the same three rows and now applies the per-payment conversion it previously skipped, so the headline and the table can no longer disagree.
+
+**Other fixes in the widget**
+- **The projection is part of the current month's bar**, not a bar of its own: the solid portion is actual data, the dashed portion above it is the linear projection, labelled `Linear projection` and drawn only after 7 days of data.
+- **Months run oldest to newest** (Sep, Oct, Nov) instead of newest first.
+- **Targets are per plugin**: each row shows `1 / 5` with an icon and text — `on track (1 of 1.8 expected)` or `behind (1 of 2.2 expected)` — comparing progress against the pace needed by today, not a raw percentage. The headline keeps the aggregate and its tooltip names each product's own target and pace.
+- **The months table prints bare numbers with the currency named once** ("Net revenue by month, amounts in EUR"), so six columns fit a dashboard column without wrapping.
+
+**WordPress.org: a `Check now` link per product.** The Plugin Scope rows already show the last cached lookup; a cached failure could not tell anyone whether the fetch works today. `Check now` runs one request, prints the outcome — *"WordPress.org answered for smart-variations-images: 1,000 active installs, version 5.2.39."* — refreshes the cached snapshot, rebuilds the dashboard payload and reports the HTTP failure verbatim when it fails. Verified end to end: notice, row timestamp and the dashboard card (1,000 installs, 5.2.39, 90 points).
 
 ### 1.4.7 (2026-11-11)
 

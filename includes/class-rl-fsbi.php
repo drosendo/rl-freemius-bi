@@ -82,6 +82,7 @@ class RL_FSBI {
 		$this->loader->add_action( 'admin_post_rl_fsbi_user_backfill', $plugin_admin, 'handle_user_backfill_action' );
 		$this->loader->add_action( 'admin_post_rl_fsbi_save_wporg_slugs', $this, 'handle_save_wporg_slugs' );
 		$this->loader->add_action( 'admin_post_rl_fsbi_save_monthly_targets', $this, 'handle_save_monthly_targets' );
+		$this->loader->add_action( 'admin_post_rl_fsbi_check_wporg', $this, 'handle_check_wporg' );
 		$this->loader->add_action( 'rest_api_init', $this, 'register_rest_routes' );
 
 		// Lazy callbacks only: instantiating these here would build a settings
@@ -158,6 +159,16 @@ class RL_FSBI {
 	public function handle_save_monthly_targets() {
 		$settings = new RL_FSBI_Settings_Manager();
 		$settings->handle_save_monthly_targets();
+	}
+
+	/**
+	 * Passthrough for the "Check now" WordPress.org lookup.
+	 *
+	 * @return void
+	 */
+	public function handle_check_wporg() {
+		$settings = new RL_FSBI_Settings_Manager();
+		$settings->handle_check_wporg();
 	}
 
 	public function register_rest_routes() {

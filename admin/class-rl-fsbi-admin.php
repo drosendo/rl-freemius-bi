@@ -365,6 +365,11 @@ class RL_FSBI_Admin
 		$format_plain = function ($value) use ($currency) {
 			return number_format_i18n((float) $value, 2) . ' ' . $currency;
 		};
+		// The months table prints bare numbers and names the currency once, so
+		// six columns fit a WordPress dashboard column without wrapping.
+		$format_num = function ($value) {
+			return number_format_i18n((float) $value, 2);
+		};
 ?>
 		<style>
 			#rl_fsbi_portfolio_widget .inside {
@@ -519,14 +524,61 @@ class RL_FSBI_Admin
 				cursor: help
 			}
 
-			#rl_fsbi_portfolio_widget .rl-fsbi-wp-projection {
-				background: transparent;
-				border: 1px dashed #7d88b4;
-				max-height: 92px
+			/* The current month is one bar: solid where the data is real, dashed
+			   above it for the projection, so it cannot read as a separate month. */
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-bar-projected {
+				background: repeating-linear-gradient(135deg, rgba(125, 136, 180, 0.35) 0 4px, transparent 4px 9px);
+				border: 1px dashed #7d88b4
 			}
 
-			#rl_fsbi_portfolio_widget .rl-fsbi-wp-projection strong {
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-bar-actual {
+				position: absolute;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				background: #5f6bff;
+				border-radius: 0 0 4px 4px
+			}
+
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-bar-projected strong {
 				color: #b9c2e4
+			}
+
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-bar-projected strong em {
+				display: block;
+				color: #9aa4cc;
+				font-size: 8px;
+				font-style: normal;
+				font-weight: 400;
+				text-transform: uppercase;
+				letter-spacing: .04em
+			}
+
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-target {
+				display: inline-flex;
+				align-items: center;
+				gap: 4px;
+				font-size: 11px;
+				white-space: nowrap
+			}
+
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-target .dashicons {
+				font-size: 14px;
+				width: 14px;
+				height: 14px
+			}
+
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-target.is-good {
+				color: #4ade80
+			}
+
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-target.is-warn {
+				color: #fbbf24
+			}
+
+			#rl_fsbi_portfolio_widget .rl-fsbi-wp-target-none {
+				color: #7d88b4;
+				font-size: 11px
 			}
 
 			#rl_fsbi_portfolio_widget .rl-fsbi-wp-bar-partial small {
@@ -843,16 +895,28 @@ class RL_FSBI_Admin
 		<div class="rl-fsbi-wp-chart-wrap" role="img" aria-label="<?php echo esc_attr__('Three month net revenue trend, current month in progress', 'rl-freemius-bi'); ?>">
 			<div class="rl-fsbi-wp-chart">
 				<?php foreach ($data['trend'] as $point) : ?>
-					<div class="rl-fsbi-wp-bar <?php echo esc_attr('current' === $point['payout_status'] ? 'rl-fsbi-wp-current' : ('next' === $point['payout_status'] ? 'rl-fsbi-wp-next' : 'rl-fsbi-wp-neutral')); ?><?php echo $point['partial'] ? ' rl-fsbi-wp-bar-partial' : ''; ?>" style="height: <?php echo esc_attr($point['height']); ?>%;" title="<?php echo esc_attr($point['label'] . ': ' . $format_plain($point['value'])); ?>"><strong><?php echo esc_html($format($point['value'])); ?></strong><small><?php echo esc_html($point['label']); ?></small></div>
-					<?php if ($point['partial']) : ?>
-						<div class="rl-fsbi-wp-bar rl-fsbi-wp-projection rl-fsbi-wp-bar-partial" style="height: <?php echo esc_attr($point['projection_height']); ?>%;" title="<?php echo esc_attr(sprintf(/* translators: 1: month label, 2: projected net revenue */ __('%1$s projection: %2$s', 'rl-freemius-bi'), $point['label'], $format_plain($point['projection']))); ?>">
-							<strong><?php echo esc_html($format($point['projection'])); ?></strong>
-							<small><?php echo esc_html__('Projection', 'rl-freemius-bi'); ?></small>
-						</div>
-					<?php endif; ?>
+					<?php
+					$bar_class = 'current' === $point['payout_status'] ? 'rl-fsbi-wp-current' : ('next' === $point['payout_status'] ? 'rl-fsbi-wp-next' : 'rl-fsbi-wp-neutral');
+					$has_projection = ! empty($point['projection_height']);
+					$bar_height = $has_projection ? $point['projection_height'] : $point['height'];
+					$bar_title = $point['label'] . ': ' . $format_plain($point['value']);
+					if ($has_projection) {
+						/* translators: 1: month label, 2: projected net revenue */
+						$bar_title .= ' · ' . sprintf(__('Linear projection: %s', 'rl-freemius-bi'), $format_plain($point['projection']));
+					}
+					?>
+					<div class="rl-fsbi-wp-bar <?php echo esc_attr($bar_class); ?><?php echo $point['partial'] ? ' rl-fsbi-wp-bar-partial' : ''; ?><?php echo $has_projection ? ' rl-fsbi-wp-bar-projected' : ''; ?>" style="height: <?php echo esc_attr($bar_height); ?>%;" title="<?php echo esc_attr($bar_title); ?>">
+						<?php if ($has_projection) : ?>
+							<span class="rl-fsbi-wp-bar-actual" style="height: <?php echo esc_attr($point['partial_share']); ?>%;"></span>
+							<strong><?php echo esc_html($format($point['projection'])); ?><em><?php echo esc_html__('Linear projection', 'rl-freemius-bi'); ?></em></strong>
+						<?php else : ?>
+							<strong><?php echo esc_html($format($point['value'])); ?></strong>
+						<?php endif; ?>
+						<small><?php echo esc_html($point['label']); ?></small>
+					</div>
 				<?php endforeach; ?>
 			</div>
-			<div class="rl-fsbi-wp-axis-x"><?php echo esc_html__('Net revenue by month', 'rl-freemius-bi'); ?></div>
+			<div class="rl-fsbi-wp-axis-x"><?php echo esc_html(sprintf(/* translators: %s: currency code */ __('Net revenue by month, amounts in %s', 'rl-freemius-bi'), $currency)); ?></div>
 		</div>
 
 		<?php if (! empty($data['payouts'])) : ?>
@@ -879,18 +943,20 @@ class RL_FSBI_Admin
 					<th><?php echo esc_html__('Month', 'rl-freemius-bi'); ?></th>
 					<th><?php echo esc_html__('Gross', 'rl-freemius-bi'); ?></th>
 					<th><?php echo esc_html__('Refunds', 'rl-freemius-bi'); ?></th>
-					<th><?php echo esc_html__('Fees', 'rl-freemius-bi'); ?></th>
+					<th title="<?php echo esc_attr__('Payment processor fee.', 'rl-freemius-bi'); ?>"><?php echo esc_html__('Fees', 'rl-freemius-bi'); ?></th>
+					<th title="<?php echo esc_attr__('Freemius commission: gross minus refunds, fees and net. This is the component that used to be missing, which is why the row never added up.', 'rl-freemius-bi'); ?>"><?php echo esc_html__('Commission', 'rl-freemius-bi'); ?></th>
 					<th><?php echo esc_html__('Net', 'rl-freemius-bi'); ?></th>
 				</tr>
 			</thead>
 			<tbody>
 				<?php foreach ($data['trend'] as $point) : ?>
 					<tr class="<?php echo esc_attr('current' === $point['payout_status'] ? 'rl-fsbi-wp-current' : ('next' === $point['payout_status'] ? 'rl-fsbi-wp-next' : '')); ?>">
-						<td><?php echo esc_html($point['label']); ?><?php if ('current' === $point['payout_status']) : ?><span class="rl-fsbi-wp-payout-badge rl-fsbi-wp-payout-current"><?php echo esc_html__('CURRENT PAYOUT', 'rl-freemius-bi'); ?></span><?php elseif ('next' === $point['payout_status']) : ?><span class="rl-fsbi-wp-payout-badge rl-fsbi-wp-payout-next"><?php echo esc_html__('NEXT PAYOUT', 'rl-freemius-bi'); ?></span><?php endif; ?><?php if ($point['partial'] && ! empty($point['projection'])) : ?><br /><small class="rl-fsbi-wp-projection-note"><?php echo esc_html(sprintf(/* translators: %s: projected net revenue */ __('Projection: %s', 'rl-freemius-bi'), $format_plain($point['projection']))); ?></small><?php endif; ?></td>
-						<td><?php echo $format($point['gross']); ?></td>
-						<td><?php echo $format($point['refunds']); ?></td>
-						<td><?php echo $format($point['fees']); ?></td>
-						<td><strong><?php echo $format($point['value']); ?></strong></td>
+						<td><?php echo esc_html($point['label']); ?><?php if ('current' === $point['payout_status']) : ?><span class="rl-fsbi-wp-payout-badge rl-fsbi-wp-payout-current"><?php echo esc_html__('CURRENT PAYOUT', 'rl-freemius-bi'); ?></span><?php elseif ('next' === $point['payout_status']) : ?><span class="rl-fsbi-wp-payout-badge rl-fsbi-wp-payout-next"><?php echo esc_html__('NEXT PAYOUT', 'rl-freemius-bi'); ?></span><?php endif; ?><?php if ($point['partial'] && ! empty($point['projection_height'])) : ?><br /><small class="rl-fsbi-wp-projection-note"><?php echo esc_html(sprintf(/* translators: %s: projected net revenue */ __('Linear projection: %s', 'rl-freemius-bi'), $format_plain($point['projection']))); ?></small><?php endif; ?></td>
+						<td><?php echo esc_html($format_num($point['gross'])); ?></td>
+						<td><?php echo esc_html($format_num($point['refunds'])); ?></td>
+						<td><?php echo esc_html($format_num($point['fees'])); ?></td>
+						<td><?php echo esc_html($format_num($point['commission'])); ?></td>
+						<td><strong><?php echo esc_html($format_num($point['value'])); ?></strong></td>
 					</tr>
 				<?php endforeach; ?>
 			</tbody>
@@ -917,7 +983,28 @@ class RL_FSBI_Admin
 									<td><a href="<?php echo esc_url($plugin['url']); ?>"><?php echo esc_html($plugin['title']); ?></a></td>
 									<td><?php echo esc_html(number_format_i18n($plugin['subscribers'])); ?></td>
 									<td><?php echo $format($plugin['mrr']); ?></td>
-									<td><?php echo esc_html(number_format_i18n($plugin['new']) . ($plugin['target'] > 0 ? ' / ' . number_format_i18n($plugin['target']) : '')); ?></td>
+									<td>
+										<?php if ($plugin['target'] > 0) : ?>
+											<?php
+											$pace_class = 'good' === $plugin['pace'] ? 'is-good' : 'is-warn';
+											$pace_icon  = 'good' === $plugin['pace'] ? 'dashicons-yes-alt' : 'dashicons-warning';
+											$pace_label = 'good' === $plugin['pace']
+												/* translators: 1: new subscriptions so far, 2: number expected by today */
+												? sprintf(__('on track (%1$s of %2$s expected)', 'rl-freemius-bi'), number_format_i18n($plugin['new'], 1), number_format_i18n($plugin['expected'], 1))
+												/* translators: 1: new subscriptions so far, 2: number expected by today */
+												: sprintf(__('behind (%1$s of %2$s expected)', 'rl-freemius-bi'), number_format_i18n($plugin['new'], 1), number_format_i18n($plugin['expected'], 1));
+											?>
+											<span class="rl-fsbi-wp-target <?php echo esc_attr($pace_class); ?>" title="<?php echo esc_attr($pace_label); ?>">
+												<span class="dashicons <?php echo esc_attr($pace_icon); ?>" aria-hidden="true"></span>
+												<?php echo esc_html(number_format_i18n($plugin['new']) . ' / ' . number_format_i18n($plugin['target'])); ?>
+											</span>
+											<?php if ($plugin['projection'] > 0 && null !== $plugin['projection']) : ?>
+												<br /><small class="rl-fsbi-wp-projection-note"><?php echo esc_html(sprintf(/* translators: %s: projected month-end count */ __('Linear projection: %s', 'rl-freemius-bi'), number_format_i18n($plugin['projection']))); ?></small>
+											<?php endif; ?>
+										<?php else : ?>
+											<span class="rl-fsbi-wp-target-none"><?php echo esc_html(number_format_i18n($plugin['new'])); ?></span>
+										<?php endif; ?>
+									</td>
 									<td><?php echo esc_html(number_format_i18n($plugin['reactivations'])); ?></td>
 								</tr>
 							<?php endforeach; ?>
@@ -951,13 +1038,23 @@ class RL_FSBI_Admin
 					$lines[] = sprintf(/* translators: 1: plugin name, 2: subscriber count */ __('%1$s: %2$s subscribers', 'rl-freemius-bi'), $plugin['title'], number_format_i18n($plugin['subscribers']));
 					break;
 				case 'new':
-					$lines[] = sprintf(
+					$line = sprintf(
 						/* translators: 1: plugin name, 2: new subscriptions, 3: reactivations */
 						_n('%1$s: %2$s new, %3$s reactivation', '%1$s: %2$s new, %3$s reactivations', (int) $plugin['reactivations'], 'rl-freemius-bi'),
 						$plugin['title'],
 						number_format_i18n($plugin['new']),
 						number_format_i18n($plugin['reactivations'])
 					);
+					if (! empty($plugin['target'])) {
+						$line .= ' — ' . sprintf(
+							/* translators: 1: new subscriptions, 2: target, 3: pace */
+							__('%1$s of %2$s target, %3$s', 'rl-freemius-bi'),
+							number_format_i18n($plugin['new']),
+							number_format_i18n($plugin['target']),
+							'good' === $plugin['pace'] ? __('on track', 'rl-freemius-bi') : __('behind pace', 'rl-freemius-bi')
+						);
+					}
+					$lines[] = $line;
 					break;
 				default:
 					$lines[] = sprintf(/* translators: 1: plugin name, 2: MRR amount, 3: currency */ __('%1$s: %2$s %3$s MRR', 'rl-freemius-bi'), $plugin['title'], number_format_i18n((float) $plugin['mrr'], 2), $data['currency']);
@@ -1010,22 +1107,11 @@ class RL_FSBI_Admin
 			if (0 === $i) {
 				$current_month_payments = $month_payments;
 			}
-			$gross = 0.0;
-			$refunds = 0.0;
-			$fees = 0.0;
-			$net = 0.0;
-			foreach ($month_payments as $payment) {
-				$amounts = $this->resolve_payment_amounts($payment, 7.0);
-				$source_currency = strtoupper((string) ($payment->currency ?? $currency));
-				$date = (string) ($payment->transaction_date ?? $start);
-				$gross += $this->convert_currency_amount((float) $amounts['gross'], $source_currency, $currency, $date);
-				$fees += $this->convert_currency_amount((float) $amounts['fee'], $source_currency, $currency, $date);
-				$net += $this->convert_currency_amount((float) $amounts['net'], $source_currency, $currency, $date);
-				if ($this->is_refund_payment($payment)) {
-					$refund_value = abs((float) $amounts['net']) > 0 ? abs((float) $amounts['net']) : abs((float) $amounts['gross']);
-					$refunds += $this->convert_currency_amount($refund_value, $source_currency, $currency, $date);
-				}
-			}
+			$row = $this->summarise_month_payments($month_payments, $currency, $start);
+			$gross = $row['gross'];
+			$refunds = $row['refunds'];
+			$fees = $row['fees'];
+			$net = $row['net'];
 			$trend[] = array(
 				'month' => wp_date('M', strtotime($start)),
 				'key' => $month,
@@ -1033,6 +1119,7 @@ class RL_FSBI_Admin
 				'gross' => $gross,
 				'refunds' => $refunds,
 				'fees' => $fees,
+				'commission' => $row['commission'],
 				'partial' => 0 === $i,
 				'label' => 0 === $i
 					? sprintf(
@@ -1046,10 +1133,9 @@ class RL_FSBI_Admin
 			);
 		}
 
-		$net_revenue = 0.0;
-		foreach ($payments as $payment) {
-			$net_revenue += (float) $this->resolve_payment_amounts($payment, 7.0)['net'];
-		}
+		// Same three months, same per-payment conversion as the table below, so the
+		// headline and the rows cannot disagree.
+		$net_revenue = array_sum(array_column($trend, 'value'));
 
 		$subscriptions = $this->get_subscriptions_for_dashboard(0, null);
 		$mrr = $this->calculate_period_mrr($subscriptions, $today, $currency)['converted'];
@@ -1065,11 +1151,22 @@ class RL_FSBI_Admin
 			: $trend[0]['value'];
 		$trend[0]['projection'] = round($projection, 2);
 
+		// Charts read oldest to newest.
+		$trend = array_reverse($trend);
+
+		$show_projection = $day_of_month >= 7;
 		$max = max(1, max(array_column($trend, 'value')));
-		$max = max($max, (float) $trend[0]['projection']);
+		if ($show_projection) {
+			$max = max($max, (float) $trend[count($trend) - 1]['projection']);
+		}
 		foreach ($trend as &$point) {
 			$point['height'] = max(8, round(($point['value'] / $max) * 100, 1));
-			$point['projection_height'] = isset($point['projection']) ? max(8, round(((float) $point['projection'] / $max) * 100, 1)) : 0;
+			$point['projection_height'] = ($show_projection && $point['partial'] && isset($point['projection']))
+				? max(8, round(((float) $point['projection'] / $max) * 100, 1))
+				: 0;
+			$point['partial_share'] = ($point['projection_height'] > 0)
+				? round(($point['height'] / $point['projection_height']) * 100, 1)
+				: 0;
 		}
 		unset($point);
 
@@ -1096,15 +1193,25 @@ class RL_FSBI_Admin
 			$own_series = $this->build_new_subscription_series($own_payments, $own, 1);
 			$own_target = isset($targets[$plugin_id]) ? max(0, (int) $targets[$plugin_id]) : 0;
 
+			// Pace, not just a percentage: on the 10th of a 30-day month, 33% of
+			// the target is on track, not behind.
+			$expected_so_far = $own_target > 0 ? ($own_target * $day_of_month) / max(1, $days_in_month) : 0.0;
+			$own_new = (int) $own_series['current_new'];
+
 			$plugins[] = array(
 				'id' => $plugin_id,
 				'title' => $this->get_plugin_clean_title($plugin_id),
 				'url' => admin_url('admin.php?page=rl-freemius-bi-plugin-' . $plugin_id . '#dashboard'),
 				'subscribers' => (int) $own_stats['active'],
 				'mrr' => (float) $own_mrr,
-				'new' => (int) $own_series['current_new'],
+				'new' => $own_new,
 				'reactivations' => (int) $own_series['current_reactivation'],
 				'target' => $own_target,
+				'expected' => round($expected_so_far, 1),
+				'pace' => $own_target > 0
+					? ($own_new >= $expected_so_far ? 'good' : 'warn')
+					: 'none',
+				'projection' => $day_of_month >= 7 ? (int) round(($own_new / max(1, $day_of_month)) * $days_in_month) : 0,
 			);
 
 			$new_total += (int) $own_series['current_new'];
@@ -1158,6 +1265,63 @@ class RL_FSBI_Admin
 		set_transient($cache_key, $data, 5 * MINUTE_IN_SECONDS);
 
 		return $data;
+	}
+
+	/**
+	 * Gross, refunds, fees, Freemius commission and net for one month.
+	 *
+	 * Gross - refunds - fees - commission = net, by construction, which the
+	 * stored columns did not: "net" is Freemius' figure after its own cut, and
+	 * the synced refund rows come in two shapes — payment_type "refund" with a
+	 * negative gross and a zero net, and refunds flagged only by is_refund with
+	 * a positive gross and net, which used to *add* revenue. That is why the
+	 * widget's columns disagreed by +22.00, -55.96 and +85.83.
+	 *
+	 * Refunds are normalised here to always reduce the month, and the Freemius
+	 * commission is derived as the balancing item instead of being invisible.
+	 *
+	 * @param array  $payments Payment rows.
+	 * @param string $currency Reporting currency.
+	 * @param string $fallback_date Date used when a row has none.
+	 * @return array{gross:float,refunds:float,fees:float,commission:float,net:float}
+	 */
+	private function summarise_month_payments($payments, $currency, $fallback_date)
+	{
+		$gross = 0.0;
+		$refunds = 0.0;
+		$fees = 0.0;
+		$net = 0.0;
+
+		foreach ($payments as $payment) {
+			$amounts = $this->resolve_payment_amounts($payment, 7.0);
+			$source_currency = strtoupper((string) ($payment->currency ?? $currency));
+			$date = (string) ($payment->transaction_date ?? $fallback_date);
+			$is_refund = $this->is_refund_payment($payment);
+
+			$fee = $this->convert_currency_amount((float) $amounts['fee'], $source_currency, $currency, $date);
+			$fees += $fee;
+
+			if ($is_refund) {
+				$refund_gross = abs((float) $amounts['gross']);
+				$refund_net = abs((float) $amounts['net']);
+				$refunds += $this->convert_currency_amount($refund_gross, $source_currency, $currency, $date);
+				// A refund row whose net is zero still took money back; its effect
+				// is the gross amount. One with a net simply returns that net.
+				$net -= $this->convert_currency_amount($refund_net > 0 ? $refund_net : $refund_gross, $source_currency, $currency, $date);
+				continue;
+			}
+
+			$gross += $this->convert_currency_amount((float) $amounts['gross'], $source_currency, $currency, $date);
+			$net += $this->convert_currency_amount((float) $amounts['net'], $source_currency, $currency, $date);
+		}
+
+		return array(
+			'gross' => round($gross, 2),
+			'refunds' => round($refunds, 2),
+			'fees' => round($fees, 2),
+			'commission' => round($gross - $refunds - $fees - $net, 2),
+			'net' => round($net, 2),
+		);
 	}
 
 	/**
@@ -7700,7 +7864,7 @@ class RL_FSBI_Admin
 	 * @param string $slug WordPress.org plugin slug.
 	 * @return array{available:bool,slug:string,reason?:string,active_installs?:int,total_downloads?:int,version?:string,last_updated?:string,downloads?:array}
 	 */
-	private function get_wporg_snapshot($slug)
+	public function get_wporg_snapshot($slug)
 	{
 		$slug = sanitize_title($slug);
 		if ('' === $slug) {

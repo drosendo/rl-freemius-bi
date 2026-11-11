@@ -1645,6 +1645,76 @@ class RL_FSBI_Settings_Manager {
 	}
 
 	/**
+	 * Run the WordPress.org lookup for one product right now.
+	 *
+	 * The dashboard already reports the last cached result, but a cached
+	 * failure cannot tell an administrator whether the fetch works today. This
+	 * forces one request, drops the cached snapshot, rebuilds the dashboard
+	 * payload and reports the outcome on screen.
+	 *
+	 * @return void
+	 */
+	public function handle_check_wporg(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You are not allowed to do that.', 'rl-freemius-bi' ) );
+		}
+
+		check_admin_referer( 'rl_fsbi_check_wporg' );
+
+		$plugin_id = isset( $_GET['plugin_id'] ) ? (int) $_GET['plugin_id'] : 0;
+		$slug      = $plugin_id > 0 ? $this->get_wporg_slug( $plugin_id ) : '';
+
+		if ( '' === $slug ) {
+			$message = __( 'No WordPress.org slug is saved for that product.', 'rl-freemius-bi' );
+		} else {
+			// Drop the cached snapshot first so the row below this notice shows
+			// the result of this run rather than the previous one.
+			delete_transient( 'rl_fsbi_wporg_' . md5( $slug ) );
+
+			$admin = new RL_FSBI_Admin( 'rl-freemius-bi', defined( 'RL_FSBI_VERSION' ) ? RL_FSBI_VERSION : '' );
+			$snapshot = $admin->get_wporg_snapshot( $slug );
+
+			update_option( 'rl_fsbi_cache_generation', time(), false );
+
+			if ( ! empty( $snapshot['available'] ) ) {
+				$message = sprintf(
+					/* translators: 1: slug, 2: active install count, 3: plugin version */
+					__( 'WordPress.org answered for %1$s: %2$s active installs, version %3$s.', 'rl-freemius-bi' ),
+					$slug,
+					number_format_i18n( (int) ( $snapshot['active_installs'] ?? 0 ) ),
+					(string) ( $snapshot['version'] ?? '—' )
+				);
+			} elseif ( 'not_found' === ( $snapshot['reason'] ?? '' ) ) {
+				$message = sprintf(
+					/* translators: 1: slug, 2: HTTP status */
+					__( 'WordPress.org has no plugin called %1$s (%2$s).', 'rl-freemius-bi' ),
+					$slug,
+					(string) ( $snapshot['detail'] ?? '' )
+				);
+			} else {
+				$message = sprintf(
+					/* translators: 1: slug, 2: error detail */
+					__( 'Could not reach WordPress.org for %1$s: %2$s', 'rl-freemius-bi' ),
+					$slug,
+					(string) ( $snapshot['detail'] ?? 'unknown error' )
+				);
+			}
+		}
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'                  => $this->framework ? $this->framework->get_config( 'page_slug' ) : 'rl-freemius-bi-settings',
+					'tab'                   => 'plugin_scope',
+					'rl_fsbi_wporg_checked' => rawurlencode( $message ),
+				),
+				admin_url( 'admin.php' )
+			)
+		);
+		exit;
+	}
+
+	/**
 	 * Save the per-plugin monthly targets.
 	 *
 	 * An empty field means "no target" and is stored as nothing, so the widget
@@ -1854,6 +1924,10 @@ class RL_FSBI_Settings_Manager {
 				.rl-fsbi-wporg-slugs .rl-fsbi-wporg-note{color:#646970;font-size:12px;display:block;margin-top:3px}
 			</style>
 
+			<?php if ( isset( $_GET['rl_fsbi_wporg_checked'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
+				<div class="notice notice-info inline" style="margin:0 0 10px;"><p><?php echo esc_html( sanitize_text_field( wp_unslash( $_GET['rl_fsbi_wporg_checked'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?></p></div>
+			<?php endif; ?>
+
 			<?php if ( '1' === $message ) : ?>
 				<div class="notice notice-success inline" style="margin:0 0 10px;"><p><?php esc_html_e( 'WordPress.org slugs saved.', 'rl-freemius-bi' ); ?></p></div>
 			<?php elseif ( '' !== $message ) : ?>
@@ -1906,7 +1980,9 @@ class RL_FSBI_Settings_Manager {
 									} else {
 										echo ' — ' . esc_html__( 'not checked yet', 'rl-freemius-bi' );
 									}
-									?></span>
+									?>
+									<a href="<?php echo esc_url( wp_nonce_url( add_query_arg( array( 'action' => 'rl_fsbi_check_wporg', 'plugin_id' => $plugin_id ), admin_url( 'admin-post.php' ) ), 'rl_fsbi_check_wporg' ) ); ?>"><?php esc_html_e( 'Check now', 'rl-freemius-bi' ); ?></a>
+									</span>
 								<?php else : ?>
 									<span class="rl-fsbi-wporg-note"><?php esc_html_e( 'Nothing saved - the WordPress.org widget is not shown for this product. Leave empty if it is not on WordPress.org.', 'rl-freemius-bi' ); ?></span>
 								<?php endif; ?>
