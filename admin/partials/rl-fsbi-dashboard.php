@@ -461,18 +461,18 @@ if ( ! defined( 'WPINC' ) ) {
 		<div class="rl-fsbi-four-chart-row">
 		<div class="rl-fsbi-card">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Gross Revenue by Currency', 'rl-freemius-bi' ); ?></div>
-			<canvas id="rl-fsbi-currency-chart"></canvas>
+			<div class="rl-fsbi-doughnut-box"><canvas id="rl-fsbi-currency-chart"></canvas></div>
 		</div>
 
 		<div class="rl-fsbi-card">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Net Revenue by Country', 'rl-freemius-bi' ); ?></div>
-			<canvas id="rl-fsbi-country-chart"></canvas>
+			<div class="rl-fsbi-doughnut-box"><canvas id="rl-fsbi-country-chart"></canvas></div>
 		</div>
 
 		<div class="rl-fsbi-card">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Active Subscriptions by Plan', 'rl-freemius-bi' ); ?></div>
 			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'The same active subscriptions the Churn Rate and Active Subscriptions figures use, so the shares add up to that total.', 'rl-freemius-bi' ); ?></div>
-			<canvas id="rl-fsbi-plan-chart"></canvas>
+			<div class="rl-fsbi-doughnut-box"><canvas id="rl-fsbi-plan-chart"></canvas></div>
 		</div>
 		</div>
 

@@ -1124,17 +1124,24 @@
 	display: block;
 }
 
-/* A doughnut is a circle. The rules these replace pinned 300x260 (currency,
-   plan) and 500x230 (country), which drew ellipses. `aspect-ratio` keeps the
-   shape square whatever width the card ends up with. */
-#rl-fsbi-currency-chart,
-#rl-fsbi-country-chart,
-#rl-fsbi-plan-chart {
-	width: min(100%, 260px) !important;
-	height: auto !important;
+/* A doughnut is a circle, and the shape has to be decided before Chart.js
+   measures anything. Reshaping the canvas after it had sized its bitmap (260 wide
+   against a 461px-tall bitmap) is what turned these into ellipses: the browser
+   then stretched a tall drawing into a square box. The box below is the square
+   Chart.js draws into, so bitmap and box agree. */
+.rl-fsbi-doughnut-box {
+	position: relative;
+	width: min(100%, 260px);
 	aspect-ratio: 1 / 1;
-	display: block;
 	margin: 0 auto;
+}
+
+.rl-fsbi-doughnut-box > canvas {
+	position: absolute;
+	inset: 0;
+	width: 100% !important;
+	height: 100% !important;
+	display: block;
 }
 
 .rl-fsbi-mini-stat-grid .rl-fsbi-card {

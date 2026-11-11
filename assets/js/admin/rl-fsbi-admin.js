@@ -3570,7 +3570,11 @@
 		 * @returns {void}
 		 */
 		renderPieLegend: function(canvas, labels, values, palette, asMoney, currency) {
-			const wrap = canvas.parentElement;
+			// The canvas sits in a fixed-size square box so Chart.js draws into a
+			// square bitmap; the legend belongs on the card, under that box, not
+			// inside it.
+			const box = canvas.closest('.rl-fsbi-doughnut-box');
+			const wrap = box ? box.parentElement : canvas.parentElement;
 			if (!wrap) {
 				return;
 			}
