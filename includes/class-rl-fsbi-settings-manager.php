@@ -580,6 +580,25 @@ class RL_FSBI_Settings_Manager {
 			)
 		);
 
+		$this->framework->add_section(
+			'plugin_scope',
+			'monthly_targets',
+			array(
+				'title'       => esc_html__( 'Monthly New Subscription Targets', 'rl-freemius-bi' ),
+				'description' => esc_html__( 'Optional per-product goal for first-time paid subscriptions in a month. The Portfolio Performance widget on the WordPress dashboard compares the current month against the sum of these targets and shows a per-plugin breakdown; leave a target empty and that product contributes nothing to the total.', 'rl-freemius-bi' ),
+			)
+		);
+
+		$this->framework->add_field(
+			'plugin_scope',
+			'monthly_targets',
+			array(
+				'id'   => 'rl_fsbi_monthly_targets_panel',
+				'type' => 'html',
+				'html' => $this->get_monthly_targets_panel_html(),
+			)
+		);
+
 		$this->framework->add_field(
 			'support',
 			'rest_summary',
@@ -601,6 +620,34 @@ class RL_FSBI_Settings_Manager {
 				'default' => 5,
 				'min'     => 0,
 				'max'     => 100000,
+			)
+		);
+
+		$this->framework->add_field(
+			'sync_settings',
+			'sync_config',
+			array(
+				'id'      => 'rl_fsbi_payout_day',
+				'type'    => 'number',
+				'label'   => esc_html__( 'Payout Day of Month', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'The Freemius API exposes no payout schedule, so payout dates on the dashboard are estimates calculated from this rule. Day of the month you are normally paid (1-28).', 'rl-freemius-bi' ),
+				'default' => 15,
+				'min'     => 1,
+				'max'     => 28,
+			)
+		);
+
+		$this->framework->add_field(
+			'sync_settings',
+			'sync_config',
+			array(
+				'id'      => 'rl_fsbi_payout_lag_months',
+				'type'    => 'number',
+				'label'   => esc_html__( 'Payout Lag (Months)', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'How many months after the revenue month that revenue is paid out (0-6). Used only to estimate the date shown next to "Current payout" and "Next payout".', 'rl-freemius-bi' ),
+				'default' => 2,
+				'min'     => 0,
+				'max'     => 6,
 			)
 		);
 
@@ -1598,6 +1645,108 @@ class RL_FSBI_Settings_Manager {
 	}
 
 	/**
+	 * Save the per-plugin monthly targets.
+	 *
+	 * An empty field means "no target" and is stored as nothing, so the widget
+	 * can hide the "/ TARGET" part for a product nobody set a goal for.
+	 *
+	 * @return void
+	 */
+	public function handle_save_monthly_targets(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You are not allowed to change these settings.', 'rl-freemius-bi' ) );
+		}
+
+		check_admin_referer( 'rl_fsbi_save_monthly_targets' );
+
+		$input = isset( $_POST['target'] ) && is_array( $_POST['target'] ) ? wp_unslash( $_POST['target'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$saved = array();
+
+		foreach ( $input as $plugin_id => $value ) {
+			$plugin_id = (int) $plugin_id;
+			$value     = trim( sanitize_text_field( (string) $value ) );
+
+			if ( $plugin_id <= 0 || '' === $value ) {
+				continue;
+			}
+
+			$saved[ $plugin_id ] = max( 0, (int) $value );
+		}
+
+		$this->update_option( 'rl_fsbi_monthly_targets', $saved );
+
+		// Same reason as the slugs: the widget payload is cached, so without
+		// this a saved target would not show until the cache expired.
+		update_option( 'rl_fsbi_cache_generation', time(), false );
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'                   => $this->framework ? $this->framework->get_config( 'page_slug' ) : 'rl-freemius-bi-settings',
+					'tab'                    => 'plugin_scope',
+					'rl_fsbi_targets_saved'  => '1',
+				),
+				admin_url( 'admin.php' )
+			)
+		);
+		exit;
+	}
+
+	/**
+	 * Per-plugin monthly target editor for the Plugin Scope tab.
+	 *
+	 * @return string
+	 */
+	private function get_monthly_targets_panel_html(): string {
+		$catalog = $this->get_option( 'rl_fsbi_plugins_catalog', array() );
+		$catalog = is_array( $catalog ) ? $catalog : array();
+		$targets = $this->get_option( 'rl_fsbi_monthly_targets', array() );
+		$targets = is_array( $targets ) ? $targets : array();
+		$saved   = isset( $_GET['rl_fsbi_targets_saved'] ) && '1' === $_GET['rl_fsbi_targets_saved']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		ob_start();
+		?>
+		<div class="rl-fsbi-wporg-slugs">
+			<?php if ( $saved ) : ?>
+				<div class="notice notice-success inline" style="margin:0 0 10px;"><p><?php esc_html_e( 'Monthly targets saved.', 'rl-freemius-bi' ); ?></p></div>
+			<?php endif; ?>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<input type="hidden" name="action" value="rl_fsbi_save_monthly_targets" />
+				<?php wp_nonce_field( 'rl_fsbi_save_monthly_targets' ); ?>
+
+				<table>
+					<tbody>
+					<?php foreach ( $catalog as $plugin ) :
+						$plugin_id = isset( $plugin['id'] ) ? (int) $plugin['id'] : 0;
+						$title     = isset( $plugin['title'] ) ? (string) $plugin['title'] : 'Plugin #' . $plugin_id;
+						$stored    = isset( $targets[ $plugin_id ] ) ? (int) $targets[ $plugin_id ] : null;
+						?>
+						<tr>
+							<th scope="row"><?php echo esc_html( $title ); ?></th>
+							<td>
+								<input type="number" min="0" step="1" class="small-text"
+									name="target[<?php echo esc_attr( (string) $plugin_id ); ?>]"
+									value="<?php echo null === $stored ? '' : esc_attr( (string) $stored ); ?>"
+									placeholder="<?php echo esc_attr__( 'No target', 'rl-freemius-bi' ); ?>"
+									aria-label="<?php echo esc_attr( sprintf( /* translators: %s: plugin title */ __( 'Monthly new subscription target for %s', 'rl-freemius-bi' ), $title ) ); ?>" />
+								<span class="rl-fsbi-wporg-note"><?php esc_html_e( 'First-time paid subscriptions per month. Leave empty for no target.', 'rl-freemius-bi' ); ?></span>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+					</tbody>
+				</table>
+
+				<p class="submit" style="margin:12px 0 0;">
+					<button type="submit" class="button button-primary"><?php esc_html_e( 'Save Targets', 'rl-freemius-bi' ); ?></button>
+				</p>
+			</form>
+		</div>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
 	 * Ask WordPress.org about a slug.
 	 *
 	 * Three outcomes, because "I could not check" and "WordPress.org says no"
@@ -1736,7 +1885,28 @@ class RL_FSBI_Settings_Manager {
 									placeholder="<?php echo esc_attr__( 'e.g. my-plugin-slug', 'rl-freemius-bi' ); ?>"
 									aria-label="<?php echo esc_attr( sprintf( /* translators: %s: plugin title */ __( 'WordPress.org slug for %s', 'rl-freemius-bi' ), $title ) ); ?>" />
 								<?php if ( '' !== $stored ) : ?>
-									<span class="rl-fsbi-wporg-note"><?php echo esc_html( sprintf( /* translators: %s: stored slug */ __( 'Saved: %s', 'rl-freemius-bi' ), $stored ) ); ?></span>
+									<span class="rl-fsbi-wporg-note"><?php echo esc_html( sprintf( /* translators: %s: stored slug */ __( 'Saved: %s', 'rl-freemius-bi' ), $stored ) ); ?><?php
+									$last_check = get_transient( 'rl_fsbi_wporg_' . md5( $stored ) );
+									if ( is_array( $last_check ) ) {
+										echo ' — ';
+										if ( ! empty( $last_check['available'] ) ) {
+											echo esc_html( sprintf(
+												/* translators: 1: active install count, 2: last check time */
+												__( 'last check found %1$s active installs (%2$s)', 'rl-freemius-bi' ),
+												number_format_i18n( (int) ( $last_check['active_installs'] ?? 0 ) ),
+												(string) ( $last_check['fetched_at'] ?? '' )
+											) );
+										} else {
+											echo esc_html( sprintf(
+												/* translators: %s: reason the lookup failed */
+												__( 'last check failed: %s', 'rl-freemius-bi' ),
+												(string) ( $last_check['detail'] ?? $last_check['reason'] ?? '' )
+											) );
+										}
+									} else {
+										echo ' — ' . esc_html__( 'not checked yet', 'rl-freemius-bi' );
+									}
+									?></span>
 								<?php else : ?>
 									<span class="rl-fsbi-wporg-note"><?php esc_html_e( 'Nothing saved - the WordPress.org widget is not shown for this product. Leave empty if it is not on WordPress.org.', 'rl-freemius-bi' ); ?></span>
 								<?php endif; ?>

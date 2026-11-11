@@ -166,7 +166,7 @@ if ( ! defined( 'WPINC' ) ) {
 			</dl>
 		</section>
 
-		<section class="rl-fsbi-block rl-fsbi-block--retention" aria-labelledby="rl-fsbi-block-ret-title">
+		<section class="rl-fsbi-block rl-fsbi-block--retention" id="rl-fsbi-block-retention" aria-labelledby="rl-fsbi-block-ret-title">
 			<h2 class="rl-fsbi-block-title" id="rl-fsbi-block-ret-title"><?php echo esc_html__( 'Retention', 'rl-freemius-bi' ); ?></h2>
 			<p class="rl-fsbi-block-sub"><?php echo esc_html__( 'Who stayed, and who needs attention.', 'rl-freemius-bi' ); ?></p>
 			<dl class="rl-fsbi-block-metrics">
