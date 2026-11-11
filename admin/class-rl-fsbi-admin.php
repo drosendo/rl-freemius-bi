@@ -3478,7 +3478,7 @@ class RL_FSBI_Admin
 
 		$data['coupons']       = $this->build_coupon_report(
 			$payments,
-			(array) get_option('rl_fsbi_coupons_' . (int) $plugin_id, array()),
+			$this->collect_cached_coupon_definitions($plugin_id),
 			$coupon_rate,
 			$this->settings->get_option('rl_fsbi_conversion_currency', 'EUR')
 		);
@@ -6784,6 +6784,178 @@ class RL_FSBI_Admin
 		}
 
 		return $plans;
+	}
+
+	/**
+	 * Coupon definitions cached per plugin, merged for an all-plugin view.
+	 *
+	 * @param int $plugin_id Plugin scope, 0 for all.
+	 * @return array
+	 */
+	private function collect_cached_coupon_definitions($plugin_id)
+	{
+		global $wpdb;
+
+		$plugin_id = (int) $plugin_id;
+		if ($plugin_id > 0) {
+			return (array) get_option('rl_fsbi_coupons_' . $plugin_id, array());
+		}
+
+		$definitions = array();
+		foreach ((array) $wpdb->get_col("SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE 'rl_fsbi_coupons\_%'") as $option_name) {
+			foreach ((array) get_option($option_name, array()) as $row) {
+				if (! empty($row['id'])) {
+					$definitions[(int) $row['id']] = $row;
+				}
+			}
+		}
+
+		return array_values($definitions);
+	}
+
+	/**
+	 * Aggregated, non-personal summary for the read-only REST endpoint.
+	 *
+	 * Deliberately contains no identifiers: no emails, no user ids, no API
+	 * keys. Coupon codes are included because a discount code is marketing
+	 * collateral, not personal data.
+	 *
+	 * @param int    $plugin_id Plugin scope, 0 for all.
+	 * @param int    $months    Trailing months to report.
+	 * @param string $currency  Report currency for revenue figures.
+	 * @return array
+	 */
+	public function get_summary_report($plugin_id = 0, $months = 12, $currency = 'EUR')
+	{
+		$months  = max(1, min(36, (int) $months));
+		$currency = strtoupper(preg_replace('/[^A-Za-z]/', '', (string) $currency));
+		if ('' === $currency) {
+			$currency = 'EUR';
+		}
+
+		$repo = new RL_FSBI_Repository();
+		$now  = current_time('timestamp');
+		$end_date = wp_date('Y-m-d', $now);
+		$start_ts = strtotime(wp_date('Y-m-01', $now) . ' -' . ($months - 1) . ' months');
+		$start_date = wp_date('Y-m-d', $start_ts);
+
+		$payments      = $repo->get_payments($plugin_id, $start_date, $end_date, null);
+		$subscriptions = $this->get_subscriptions_for_dashboard($plugin_id, null);
+		$balances      = $this->get_balances_for_dashboard($plugin_id, null);
+
+		$commission_rate = $this->get_balance_commission_rate($balances);
+		if ($commission_rate <= 0) {
+			$commission_rate = $this->get_legacy_commission_rate($payments);
+		}
+
+		$labels = array();
+		for ($i = $months - 1; $i >= 0; $i--) {
+			$labels[] = wp_date('Y-m', strtotime('-' . $i . ' months', $now));
+		}
+
+		$per_month = array();
+		foreach ($labels as $label) {
+			$per_month[$label] = array(
+				'net_revenue' => 0.0,
+				'gross'       => 0.0,
+				'refunds'     => 0.0,
+				'refund_count' => 0,
+				'renewals'    => 0,
+			);
+		}
+
+		foreach ($payments as $payment) {
+			$month = substr((string) $payment->transaction_date, 0, 7);
+			if (! isset($per_month[$month])) {
+				continue;
+			}
+
+			$amounts = $this->resolve_payment_amounts_for_display($payment, $commission_rate, $currency);
+
+			if ($this->is_refund_payment($payment)) {
+				$per_month[$month]['refund_count']++;
+				$per_month[$month]['refunds'] += abs((float) $amounts['gross']);
+				continue;
+			}
+
+			$per_month[$month]['net_revenue'] += (float) $amounts['net'];
+			$per_month[$month]['gross']       += (float) $amounts['gross'];
+
+			if ($this->is_renewal_payment($payment)) {
+				$per_month[$month]['renewals']++;
+			}
+		}
+
+		$growth = $this->build_new_subscription_series($payments, $subscriptions, $months);
+
+		$cancellations = array();
+		foreach ($labels as $label) {
+			$month_start = strtotime($label . '-01 00:00:00');
+			$month_end   = min(strtotime($label . '-01 +1 month -1 second'), $now);
+			$window      = $this->count_churn_window($subscriptions, $month_start, $month_end);
+			$cancellations[] = $window['cancellations'];
+		}
+
+		$mrr_snapshot = $this->calculate_period_mrr($subscriptions, $end_date, $currency);
+
+		$coupons = $this->build_coupon_report(
+			$payments,
+			$this->collect_cached_coupon_definitions($plugin_id),
+			$commission_rate,
+			$currency
+		);
+
+		$net_by_month = array();
+		$gross_by_month = array();
+		$refunds_by_month = array();
+		foreach ($labels as $label) {
+			$net_by_month[$label]     = round($per_month[$label]['net_revenue'], 2);
+			$gross_by_month[$label]   = round($per_month[$label]['gross'], 2);
+			$refunds_by_month[$label] = round($per_month[$label]['refunds'], 2);
+		}
+
+		return array(
+			'generated_at'  => gmdate('c'),
+			'plugin_id'     => (int) $plugin_id,
+			'currency'      => $currency,
+			'period'        => array('start' => $start_date, 'end' => $end_date, 'months' => $months),
+			'new_subscriptions' => array(
+				'months'       => $growth['labels'],
+				'new'          => $growth['new'],
+				'reactivation' => $growth['reactivation'],
+				'total'        => $growth['total'],
+			),
+			'renewals'      => array(
+				'months' => $labels,
+				'counts' => array_values(array_map(static function ($row) {
+					return (int) $row['renewals'];
+				}, $per_month)),
+			),
+			'cancellations' => array(
+				'months' => $labels,
+				'counts' => $cancellations,
+			),
+			'refunds'       => array(
+				'months'  => $labels,
+				'amounts' => array_values($refunds_by_month),
+				'counts'  => array_values(array_map(static function ($row) {
+					return (int) $row['refund_count'];
+				}, $per_month)),
+			),
+			'mrr'           => round((float) $mrr_snapshot['converted'], 2),
+			'net_revenue_by_month' => $net_by_month,
+			'gross_revenue_by_month' => $gross_by_month,
+			'coupons'       => array_map(static function ($coupon) {
+				return array(
+					'code'      => (string) $coupon['code'],
+					'uses'      => (int) $coupon['uses'],
+					'revenue'   => (float) $coupon['revenue'],
+					'discount'  => (string) $coupon['discount'],
+					'remaining' => $coupon['remaining'],
+					'expires'   => (string) $coupon['expires'],
+				);
+			}, $coupons),
+		);
 	}
 
 	/**

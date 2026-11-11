@@ -764,6 +764,46 @@ FSBI.getFilters()            // Get current filter values
 - **Input Sanitization:** All user input is sanitized with `sanitize_text_field()` or `wp_kses_post()`
 - **Output Escaping:** All output is escaped with `esc_html()`, `esc_attr()`, etc.
 
+## Read-Only Summary Endpoint
+
+`GET /wp-json/rl-freemius-bi/v1/summary`
+
+A stable, non-personal contract for other systems. The response carries no email addresses, user ids, install secrets or API keys — only aggregates.
+
+| Parameter | Default | Notes |
+|---|---|---|
+| `plugin_id` | `0` (all tracked plugins) | Scope the figures to one product. |
+| `months` | `12` | Trailing months, clamped to `1`–`36`. |
+| `currency` | `EUR` | Any 3-letter code; anything else falls back to `EUR`. Conversion keeps the per-day rate rule used by the dashboard. |
+
+Authentication is the normal WordPress one: an administrator session cookie, or an **application password** for a script:
+
+```bash
+curl -u "admin:xxxx xxxx xxxx xxxx xxxx xxxx" \
+  "https://example.com/wp-json/rl-freemius-bi/v1/summary?plugin_id=9001"
+```
+
+Response shape:
+
+```json
+{
+  "generated_at": "2026-11-11T11:20:00+00:00",
+  "plugin_id": 9001,
+  "currency": "EUR",
+  "period": { "start": "2025-12-01", "end": "2026-11-11", "months": 12 },
+  "new_subscriptions": { "months": ["…"], "new": [0], "reactivation": [0], "total": [0] },
+  "renewals":    { "months": ["…"], "counts": [0] },
+  "cancellations": { "months": ["…"], "counts": [0] },
+  "refunds":     { "months": ["…"], "amounts": [0], "counts": [0] },
+  "mrr": 0,
+  "net_revenue_by_month": { "2026-11": 0 },
+  "gross_revenue_by_month": { "2026-11": 0 },
+  "coupons": [ { "code": "WINBACK30", "uses": 1, "revenue": 40.17, "discount": "30%", "remaining": 499, "expires": "2026-12-31 23:59:59" } ]
+}
+```
+
+`new` versus `reactivation` follows the same classification as the dashboard: a reactivation is a first payment from someone whose earlier subscription had already ended. Anonymous requests get `401`, authenticated users without `manage_options` get `403`, and the response is sent with `Cache-Control: private, max-age=300`.
+
 ## Performance Tips
 
 1. **Limit Date Ranges:** Use narrow date filters in the dashboard to reduce data load
@@ -887,6 +927,9 @@ bumping `Version:` means no site will ever see it.
   - **Never push automatically** — CSV export only, for sites that hold their own consent records.
 - Every sync, export and bulk path now runs through one `user_passes_consent()` check instead of six copies of `! empty($user['is_marketing_allowed'])`, so a new path cannot quietly bypass the rule.
 - **Nothing deletes subscribers automatically**, and that is now enforced rather than merely true. Removing Kit contacts needs an explicit *Allow Removing Kit Subscribers* setting (off by default), then a confirmation dialog, and the server rejects both prune endpoints when the setting is off. The prune scope default changed from *any active subscriber* to *only subscribers tagged by this plugin*, because the old default could unsubscribe the whole list.
+
+**Read-only summary endpoint.**
+- `GET /wp-json/rl-freemius-bi/v1/summary` returns new subscriptions per month split into new customers and reactivations, renewals, cancellations, refunds, MRR, coupon usage and net revenue per month in EUR — with no email addresses, user ids or keys. It accepts an application password as well as an admin session, clamps `months` to 1–36, falls back to EUR for an unrecognised currency, and refuses anonymous callers with `401`.
 
 ### 1.3.30 (2026-11-10)
 - **An autofilled email can no longer become a bogus Developer ID.** A vendor reported that the backfill failed after signing up, and that the browser had filled the Developer ID field with their email address. The field was a plain text input with no autocomplete hints, and the sanitizer kept only the digits — so `john1985@gmail.com` was saved as `1985`, a perfectly valid id belonging to someone else. Every request then authenticated as the wrong account, and the failure described the API rather than the field. The sanitizer now rejects non-numeric input and keeps the previous value, the backfill error names the missing or non-numeric credential, a notice on the plugin screens says the value was not saved, and the credential fields carry `autocomplete="off"` with a numeric keypad on mobile.

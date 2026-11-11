@@ -20,6 +20,11 @@ class RL_FSBI_REST_API
 	const REST_NAMESPACE = 'rl-fsbi/v1';
 
 	/**
+	 * Namespace of the read-only summary contract.
+	 */
+	const SUMMARY_NAMESPACE = 'rl-freemius-bi/v1';
+
+	/**
 	 * Cache lifetime for the assembled dataset and the segment counters.
 	 */
 	const CACHE_TTL = HOUR_IN_SECONDS;
@@ -117,6 +122,49 @@ class RL_FSBI_REST_API
 				'permission_callback' => array($this, 'can_read'),
 			)
 		);
+
+		// Public-facing summary. Registered under its own namespace because it
+		// is meant to be called by other systems, and its contract is stable and
+		// free of personal data.
+		register_rest_route(
+			self::SUMMARY_NAMESPACE,
+			'/summary',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array($this, 'get_summary'),
+				'permission_callback' => array($this, 'can_read'),
+			)
+		);
+	}
+
+	/**
+	 * Read-only aggregate summary.
+	 *
+	 * WordPress accepts an application password for any request that resolves
+	 * to a user, so a script can authenticate with one instead of a cookie.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function get_summary($request)
+	{
+		$plugin_id = (int) $request->get_param('plugin_id');
+		$plugin_id = max(0, $plugin_id);
+
+		$months = (int) ($request->get_param('months') ?: 12);
+		$months = max(1, min(36, $months));
+
+		$currency = strtoupper((string) ($request->get_param('currency') ?: 'EUR'));
+		if (! preg_match('/^[A-Z]{3}$/', $currency)) {
+			$currency = 'EUR';
+		}
+
+		$summary = $this->admin->get_summary_report($plugin_id, $months, $currency);
+
+		$response = rest_ensure_response($summary);
+		$response->header('Cache-Control', 'private, max-age=300');
+
+		return $response;
 	}
 
 	/**
