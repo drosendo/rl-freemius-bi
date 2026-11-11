@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.4.3  
+**Version:** 1.4.4  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -764,6 +764,21 @@ FSBI.getFilters()            // Get current filter values
 - **Input Sanitization:** All user input is sanitized with `sanitize_text_field()` or `wp_kses_post()`
 - **Output Escaping:** All output is escaped with `esc_html()`, `esc_attr()`, etc.
 
+## Deploying
+
+Assets are served from `assets/lib/`. When deploying with a file-sync tool, check its ignore list: a bare `vendor` pattern matches at **any depth** and will silently skip `assets/lib/` if it is ever renamed back, and it also skips `includes/library/rloptionsFramework/assets/vendor/`. In a WordPress tree a plugin's `vendor/` directory is shipped code, not local build noise.
+
+Verify after an upload:
+
+```bash
+for f in chartjs/chart.min.js datatables/jquery.dataTables.min.js datatables/jquery.dataTables.min.css tippy/tippy.umd.min.js tippy/tippy.css popper/popper.min.js; do
+  printf "%-38s " "$f"
+  curl -sI "https://example.com/wp-content/plugins/rl-freemius-bi/assets/lib/$f" | head -1
+done
+```
+
+All six should answer `200`. If the plugin screens show the "This upload is incomplete" banner, the sync skipped `assets/lib/` and named which files are missing.
+
 ## Read-Only Summary Endpoint
 
 `GET /wp-json/rl-freemius-bi/v1/summary`
@@ -956,6 +971,11 @@ bumping `Version:` means no site will ever see it.
 - **WordPress.org slugs are per plugin.** The single global field became a per-product editor on the **Plugin Scope** tab, prefilled with each Freemius slug and validated against the wp.org API on save — an unknown slug is rejected rather than stored, since it would render a widget full of zeros. With no slug the widget is not rendered at all (no card, no canvas, no note) and no wp.org request is made.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
+
+### 1.4.4 (2026-11-11)
+
+- Corrected the watchdog message, which still pointed at `assets/vendor/` after the move to `assets/lib/`.
+- The deployment config that caused this is documented under *Deploying* below: an SFTP ignore rule matching the bare word `vendor` silently excluded `assets/vendor/` on every upload, which is why the files were in the repository and the release zip but never on the server.
 
 ### 1.4.3 (2026-11-11)
 

@@ -31,7 +31,7 @@ if ( ! defined( 'WPINC' ) ) {
 				+ '<p class="rl-fsbi-loading-message" style="font-weight:400;font-size:12px;">'
 				+ (started
 					? 'The analytics request did not come back in time. Check the browser console and your server error log, then reload.'
-					: 'assets/js/admin/rl-fsbi-admin.js either failed to load or threw before it could run. Confirm the plugin folder was uploaded completely, including assets/vendor/ and assets/js/.')
+					: 'assets/js/admin/rl-fsbi-admin.js either failed to load or threw before it could run. Confirm the plugin folder was uploaded completely, including assets/lib/ and assets/js/.')
 				+ '</p>'
 				+ '<p><a class="button" href="' + window.location.href + '">Reload</a></p>'
 				+ '</div>';
