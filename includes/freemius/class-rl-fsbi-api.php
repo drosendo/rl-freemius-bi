@@ -887,6 +887,31 @@ class RL_FSBI_API
 	}
 
 	/**
+	 * Retrieve discount coupons defined for a plugin.
+	 *
+	 * @param int   $plugin_id Plugin ID.
+	 * @param array $query     Query parameters (count, offset).
+	 * @return array Coupons collection.
+	 */
+	public function retrieve_coupons($plugin_id, $query = array())
+	{
+		$endpoint = "/v1/developers/{$this->developer_id}/plugins/{$plugin_id}/coupons.json";
+
+		$defaults = array(
+			'count'  => 50,
+			'offset' => 0,
+		);
+		$query = wp_parse_args($query, $defaults);
+
+		$response = $this->request($endpoint, 'GET', array(), $query);
+		$coupons  = $this->extract_collection($response, 'coupons');
+
+		$this->log('retrieve_coupons() completed', array('count' => count($coupons)));
+
+		return $coupons;
+	}
+
+	/**
 	 * Retrieve installs (sites) for a user or plugin.
 	 *
 	 * @param int   $plugin_id Plugin ID.

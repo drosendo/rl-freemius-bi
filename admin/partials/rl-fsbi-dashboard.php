@@ -75,8 +75,14 @@ if ( ! defined( 'WPINC' ) ) {
 			<span>—</span>
 			<input type="date" id="rl-fsbi-end-date" />
 
+			<label for="rl-fsbi-plan-filter"><?php echo esc_html__( 'Plan:', 'rl-freemius-bi' ); ?></label>
+			<select id="rl-fsbi-plan-filter" name="plan_id">
+				<option value="all"><?php echo esc_html__( 'All Plans', 'rl-freemius-bi' ); ?></option>
+			</select>
+
 			<button id="rl-fsbi-sync-btn" class="button button-primary"><?php echo esc_html__( 'Sync Now', 'rl-freemius-bi' ); ?></button>
 			<button id="rl-fsbi-sync-cancel-btn" class="button" type="button" hidden><?php echo esc_html__( 'Cancel Sync', 'rl-freemius-bi' ); ?></button>
+			<span class="rl-fsbi-last-synced" id="rl-fsbi-last-synced" title="<?php echo esc_attr__( 'When the local copy of your Freemius data was last refreshed, in the site timezone.', 'rl-freemius-bi' ); ?>"></span>
 		</div>
 	</div>
 
@@ -230,7 +236,17 @@ if ( ! defined( 'WPINC' ) ) {
 						<?php
 						$active_provider = (string) $this->settings->get_option( 'rl_fsbi_newsletter_provider', 'mailchimp' );
 						$provider_label  = 'kit' === $active_provider ? 'Kit.com' : 'Mailchimp';
-						$optin_tooltip   = sprintf( esc_attr__( 'Active subscriber count in %s. Click the refresh icon to pull live subscriber totals directly from %s, or the mail icon to sync newly opted-in users from Freemius.', 'rl-freemius-bi' ), $provider_label, $provider_label );
+						$optin_scope     = 'kit' === $active_provider
+							? esc_html__( 'Counts active subscribers in your Kit account, whatever their source: Freemius opt-ins, manual uploads and other forms all contribute.', 'rl-freemius-bi' )
+							: esc_html__( 'Counts subscribed members of the Mailchimp audience, whatever their source: Freemius opt-ins, manual uploads and other forms all contribute.', 'rl-freemius-bi' );
+						$optin_tooltip   = esc_attr(
+							sprintf(
+								/* translators: 1: provider name, 2: scope sentence, 3: provider name */
+								__( 'Scope: %s It is not a count of Freemius customers. Click refresh to pull the live total from %s, or the envelope to push opted-in users from Freemius.', 'rl-freemius-bi' ),
+								$optin_scope,
+								$provider_label
+							)
+						);
 						$refresh_title   = sprintf( esc_attr__( 'Refresh subscriber count from %s', 'rl-freemius-bi' ), $provider_label );
 						$sync_title      = sprintf( esc_attr__( 'Sync Freemius opt-ins to %s', 'rl-freemius-bi' ), $provider_label );
 						?>
@@ -302,6 +318,7 @@ if ( ! defined( 'WPINC' ) ) {
 						<button type="button" class="rl-fsbi-churn-chip" data-segment="paid"><?php echo esc_html__( 'Paying', 'rl-freemius-bi' ); ?></button>
 						<button type="button" class="rl-fsbi-churn-chip" data-segment="all"><?php echo esc_html__( 'All', 'rl-freemius-bi' ); ?></button>
 					</div>
+					<p class="rl-fsbi-churn-scope" id="rl-fsbi-churn-scope"><?php echo esc_html__( 'Free plan installs that were uninstalled, with the reason the user picked.', 'rl-freemius-bi' ); ?></p>
 					<ul class="rl-fsbi-churn-reasons" id="rl-fsbi-churn-reasons" aria-live="polite">
 						<li class="rl-fsbi-churn-empty"><?php echo esc_html__( 'No uninstall feedback stored yet. Run a sync to collect it.', 'rl-freemius-bi' ); ?></li>
 					</ul>
@@ -355,6 +372,28 @@ if ( ! defined( 'WPINC' ) ) {
 				<div><dt><?php echo esc_html__( 'Total records', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-installs-total">—</dd></div>
 			</dl>
 			<p class="rl-fsbi-card-sub rl-fsbi-wporg-note"><?php echo esc_html__( 'WordPress.org install data is not fetched by this plugin.', 'rl-freemius-bi' ); ?></p>
+		</div>
+	</div>
+
+	<div class="rl-fsbi-card rl-fsbi-coupons-card">
+		<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Coupons', 'rl-freemius-bi' ); ?></div>
+		<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Redemptions and the net revenue they brought in for the selected period, alongside the discount, remaining uses and expiry of each code.', 'rl-freemius-bi' ); ?></div>
+		<div class="rl-fsbi-table-wrap">
+			<table class="rl-fsbi-coupons-table">
+				<thead>
+					<tr>
+						<th scope="col"><?php echo esc_html__( 'Code', 'rl-freemius-bi' ); ?></th>
+						<th scope="col"><?php echo esc_html__( 'Uses', 'rl-freemius-bi' ); ?></th>
+						<th scope="col"><?php echo esc_html__( 'Revenue', 'rl-freemius-bi' ); ?></th>
+						<th scope="col"><?php echo esc_html__( 'Discount', 'rl-freemius-bi' ); ?></th>
+						<th scope="col"><?php echo esc_html__( 'Remaining', 'rl-freemius-bi' ); ?></th>
+						<th scope="col"><?php echo esc_html__( 'Expiry', 'rl-freemius-bi' ); ?></th>
+					</tr>
+				</thead>
+				<tbody id="rl-fsbi-coupons-body">
+					<tr><td colspan="6"><?php echo esc_html__( 'No coupon redemptions in this period.', 'rl-freemius-bi' ); ?></td></tr>
+				</tbody>
+			</table>
 		</div>
 	</div>
 

@@ -439,6 +439,10 @@
 				self.loadData();
 			});
 
+			document.getElementById('rl-fsbi-plan-filter')?.addEventListener('change', function() {
+				self.loadData();
+			});
+
 			document.getElementById('rl-fsbi-start-date')?.addEventListener('change', function() {
 				self.loadData();
 			});
@@ -595,9 +599,47 @@
 			return {
 				plugin_id: pluginId,
 				currency: document.getElementById('rl-fsbi-currency-filter')?.value || 'all',
+				plan_id: document.getElementById('rl-fsbi-plan-filter')?.value || 'all',
 				start_date: document.getElementById('rl-fsbi-start-date')?.value || '',
 				end_date: document.getElementById('rl-fsbi-end-date')?.value || '',
 			};
+		},
+
+		/**
+		 * Fill the plan filter from the payload and keep the choice across reloads.
+		 *
+		 * @function updatePlanFilter
+		 * @memberof FSBI
+		 * @param {Object} data - Analytics payload containing the plans list.
+		 * @returns {void}
+		 */
+		updatePlanFilter: function(data) {
+			const select = document.getElementById('rl-fsbi-plan-filter');
+			if (!select) {
+				return;
+			}
+
+			const plans = Array.isArray(data.plans) ? data.plans : [];
+			const current = select.value;
+
+			select.innerHTML = '';
+
+			const allOption = document.createElement('option');
+			allOption.value = 'all';
+			allOption.textContent = 'All Plans';
+			select.appendChild(allOption);
+
+			plans.forEach((plan) => {
+				const option = document.createElement('option');
+				option.value = String(plan.id);
+				option.textContent = plan.name;
+				select.appendChild(option);
+			});
+
+			const keep = data.plan_filter ? String(data.plan_filter) : current;
+			if (keep && [...select.options].some((o) => o.value === keep)) {
+				select.value = keep;
+			}
 		},
 
 		/**
@@ -1302,6 +1344,7 @@
 			this.currentReportCurrency = data.report_currency || data?.summary?.report_currency || null;
 			this.updatePageHeader(data);
 			this.updateTopCards(data);
+			this.updatePlanFilter(data);
 			this.updateGrowthKpi(data);
 			this.updateBlocks(data);
 			this.updateMiniKpis(data);
@@ -1600,6 +1643,17 @@
 
 			const segment = this.churnSegment || 'free';
 			const segmentLabels = { free: 'free', trial: 'trial', paid: 'paying', all: 'any' };
+			const segmentScope = {
+				free: 'Free plan installs that were uninstalled, with the reason the user picked.',
+				trial: 'Users who uninstalled during or after a trial.',
+				paid: 'Paying customers who cancelled.',
+				all: 'Every uninstall and cancellation on record.',
+			};
+
+			const scope = document.getElementById('rl-fsbi-churn-scope');
+			if (scope) {
+				scope.textContent = segmentScope[segment] || segmentScope.all;
+			}
 			const uninstallTotal = Number(this.uninstallTotal) || 0;
 			const source = Array.isArray(this.churnReasons) ? this.churnReasons : [];
 
@@ -1696,12 +1750,14 @@
 				{ label: 'Forecasted Revenue', data: charts.revenue_forecast?.values || [], borderColor: '#8e5dff', backgroundColor: 'rgba(142,93,255,0.15)' },
 			], true);
 
+			this.renderForecastSummary(charts.revenue_forecast || {});
+
 			this.drawComboChart('churn', 'rl-fsbi-churn-chart', charts.churn_trend?.labels || [], charts.churn_trend?.canceled || [], charts.churn_trend?.churn_rate || []);
 			this.drawDoughnutChart('currency', 'rl-fsbi-currency-chart', charts.currency_distribution?.labels || [], charts.currency_distribution?.values || [], currency);
 			this.drawDoughnutChart('country', 'rl-fsbi-country-chart', charts.country_distribution?.labels || [], charts.country_distribution?.values || [], null, false);
 			this.drawDoughnutChart('plan', 'rl-fsbi-plan-chart', charts.plan_distribution?.labels || [], charts.plan_distribution?.values || [], null, false);
 			this.drawLineChart('wporg', 'rl-fsbi-wporg-chart', charts.wporg_growth?.labels || [], [
-				{ label: 'Daily Downloads / Activity', data: charts.wporg_growth?.values || [], borderColor: '#22c89b', backgroundColor: 'rgba(34,200,155,0.18)' },
+				{ label: 'Payment events', data: charts.wporg_growth?.values || [], borderColor: '#22c89b', backgroundColor: 'rgba(34,200,155,0.18)' },
 			], true);
 		},
 
@@ -1774,6 +1830,20 @@
 			this.setText('rl-fsbi-installs-premium', count(installs.premium));
 			this.setText('rl-fsbi-installs-uninstalled', count(installs.uninstalled));
 			this.setText('rl-fsbi-installs-total', count(installs.total));
+
+			this.renderCoupons(data.coupons || []);
+
+			const lastSynced = document.getElementById('rl-fsbi-last-synced');
+			if (lastSynced) {
+				lastSynced.textContent = data.last_synced ? `Last synced ${data.last_synced}` : 'Never synced';
+			}
+
+			// A funnel with nothing in it is a row of zeros pretending to be data.
+			const trialPanel = document.querySelector('.rl-fsbi-trial-panel');
+			if (trialPanel) {
+				const trials = Number((data.trial_conversion || {}).total_trials || 0);
+				trialPanel.hidden = trials === 0;
+			}
 		},
 
 		/**
@@ -2205,10 +2275,9 @@
 						padding: 8,
 					},
 					plugins: {
-						legend: {
-							labels: { color: '#d7defd' },
-							position: key === 'country' ? 'right' : 'bottom',
-						},
+						// The canvas legend cannot carry numbers, so the values and
+						// shares are written underneath in real markup.
+						legend: { display: false },
 						tooltip: {
 							callbacks: {
 								label: (ctx) => {
@@ -2222,6 +2291,165 @@
 						},
 					},
 				},
+			});
+
+			this.renderPieLegend(canvas, labels, values, palette, asMoney, currency);
+		},
+
+		/**
+		 * Render the coupon table.
+		 *
+		 * @function renderCoupons
+		 * @memberof FSBI
+		 * @param {Array.<Object>} coupons - Coupon report rows.
+		 * @returns {void}
+		 */
+		renderCoupons: function(coupons) {
+			const body = document.getElementById('rl-fsbi-coupons-body');
+			if (!body) {
+				return;
+			}
+
+			body.textContent = '';
+
+			if (!Array.isArray(coupons) || !coupons.length) {
+				const row = document.createElement('tr');
+				const cell = document.createElement('td');
+				cell.colSpan = 6;
+				cell.textContent = 'No coupon redemptions in this period.';
+				row.appendChild(cell);
+				body.appendChild(row);
+				return;
+			}
+
+			const currency = this.getDisplayCurrency();
+
+			coupons.forEach((coupon) => {
+				const row = document.createElement('tr');
+
+				const cells = [
+					coupon.code || '—',
+					Number(coupon.uses || 0).toLocaleString(),
+					this.formatCurrency(Number(coupon.revenue || 0), currency),
+					coupon.discount || '—',
+					coupon.remaining === null || coupon.remaining === undefined ? 'Unlimited' : Number(coupon.remaining).toLocaleString(),
+					coupon.expires ? String(coupon.expires).slice(0, 10) : 'No expiry',
+				];
+
+				cells.forEach((value, index) => {
+					const cell = document.createElement('td');
+					cell.textContent = value;
+					if (index === 0) {
+						const badge = document.createElement('code');
+						badge.textContent = value;
+						cell.textContent = '';
+						cell.appendChild(badge);
+						if (!Number(coupon.is_active)) {
+							const off = document.createElement('span');
+							off.className = 'rl-fsbi-coupon-inactive';
+							off.textContent = 'inactive';
+							cell.appendChild(off);
+						}
+					}
+					row.appendChild(cell);
+				});
+
+				body.appendChild(row);
+			});
+		},
+
+		/**
+		 * Summarise the forecast under its chart, since the line alone gives no total.
+		 *
+		 * @function renderForecastSummary
+		 * @memberof FSBI
+		 * @param {Object} forecast - Forecast payload with labels and values.
+		 * @returns {void}
+		 */
+		renderForecastSummary: function(forecast) {
+			const canvas = document.getElementById('rl-fsbi-forecast-chart');
+			if (!canvas || !canvas.parentElement) {
+				return;
+			}
+
+			const labels = Array.isArray(forecast.labels) ? forecast.labels : [];
+			const values = Array.isArray(forecast.values) ? forecast.values : [];
+			const currency = this.getDisplayCurrency();
+
+			let caption = canvas.parentElement.querySelector('.rl-fsbi-forecast-summary');
+			if (!caption) {
+				caption = document.createElement('p');
+				caption.className = 'rl-fsbi-card-sub rl-fsbi-forecast-summary';
+				canvas.parentElement.appendChild(caption);
+			}
+
+			if (!values.length) {
+				caption.textContent = 'No upcoming renewals to forecast.';
+				return;
+			}
+
+			const total = values.reduce((sum, v) => sum + Number(v || 0), 0);
+			let peakIndex = 0;
+			values.forEach((v, i) => {
+				if (Number(v) > Number(values[peakIndex])) {
+					peakIndex = i;
+				}
+			});
+
+			caption.textContent = `Total ${this.formatCurrency(total, currency)} · peak ${labels[peakIndex] || '—'} at ${this.formatCurrency(Number(values[peakIndex] || 0), currency)}`;
+		},
+
+		/**
+		 * Write a values-and-percentages legend beside a doughnut chart.
+		 *
+		 * @function renderPieLegend
+		 * @memberof FSBI
+		 * @param {HTMLCanvasElement} canvas - Chart canvas.
+		 * @param {Array.<string>} labels - Segment labels.
+		 * @param {Array.<number>} values - Segment values.
+		 * @param {Array.<string>} palette - Segment colours.
+		 * @param {boolean} asMoney - Format values as currency.
+		 * @param {string} [currency] - Currency code.
+		 * @returns {void}
+		 */
+		renderPieLegend: function(canvas, labels, values, palette, asMoney, currency) {
+			const wrap = canvas.parentElement;
+			if (!wrap) {
+				return;
+			}
+
+			let legend = wrap.querySelector('.rl-fsbi-pie-legend');
+			if (!legend) {
+				legend = document.createElement('ul');
+				legend.className = 'rl-fsbi-pie-legend';
+				wrap.appendChild(legend);
+			}
+
+			const total = values.reduce((sum, v) => sum + Number(v || 0), 0);
+			legend.textContent = '';
+
+			labels.forEach((label, i) => {
+				const value = Number(values[i] || 0);
+				const pct = total > 0 ? (value / total) * 100 : 0;
+				const shown = asMoney ? this.formatCurrency(value, currency || this.getDisplayCurrency()) : value.toLocaleString();
+
+				const li = document.createElement('li');
+
+				const dot = document.createElement('span');
+				dot.className = 'rl-fsbi-pie-dot';
+				dot.style.background = palette[i % palette.length];
+				dot.setAttribute('aria-hidden', 'true');
+
+				const name = document.createElement('span');
+				name.className = 'rl-fsbi-pie-label';
+				name.textContent = String(label);
+
+				const amount = document.createElement('span');
+				amount.className = 'rl-fsbi-pie-value';
+				amount.textContent = `${shown} · ${pct.toFixed(1)}%`;
+
+				li.append(dot, name, amount);
+				legend.appendChild(li);
 			});
 		},
 

@@ -862,6 +862,15 @@ bumping `Version:` means no site will ever see it.
 - Sales origin reads campaign and referral fields from the stored payment payload and says **Unknown** when there are none rather than guessing. Freemius records only a numeric `source` enum, so most installs land in Unknown today.
 - **Freemius installs and WordPress.org installs are never combined.** A dedicated *Freemius Installs* widget reports active, premium, uninstalled and total records and states that WordPress.org data is not fetched at all. Fixing this exposed a real bug: `sync_installs()` queried with `filter => 'uninstalled'`, so the local table held *only* sites that had already gone — every install read as uninstalled and the active population was invisible. The crawl is now unfiltered and stores each row as the API reports it.
 
+**Clarity pass.**
+- **Plan names, not ids.** The plan distribution and a new toolbar **Plan** filter use the names from the plans table; the filter narrows payments, subscriptions, the previous period and the CSV export together, so nothing drifts out of sync.
+- **Coupons widget.** Code, redemptions and net revenue for the selected period, with the discount, remaining uses and expiry pulled from the coupon endpoint (new `retrieve_coupons()` plus `sync_coupons()`, cached in an option rather than a new table). Period-scoped, so a lifetime redemption count can never be mistaken for this month's.
+- **Trial Funnel hides itself** when the period contains no trials instead of displaying a row of zeros.
+- **Doughnut charts carry their numbers.** The canvas legend is replaced by a real list giving each segment's value and share, so the figures are readable and selectable rather than painted pixels. The forecast chart gained a caption with its total and peak month.
+- **Churn reasons say what they are.** The free segment is labelled as reasons given by free-plan users at uninstall, and the label follows the selected chip.
+- **"Newsletter Opt-ins" explains its scope**: it counts active subscribers in the provider account, whatever their source, and is explicitly not a count of Freemius customers.
+- **"Last synced"** shows when the local copy was refreshed in the site's timezone, next to the existing Sync Now button.
+
 ### 1.3.30 (2026-11-10)
 - **An autofilled email can no longer become a bogus Developer ID.** A vendor reported that the backfill failed after signing up, and that the browser had filled the Developer ID field with their email address. The field was a plain text input with no autocomplete hints, and the sanitizer kept only the digits — so `john1985@gmail.com` was saved as `1985`, a perfectly valid id belonging to someone else. Every request then authenticated as the wrong account, and the failure described the API rather than the field. The sanitizer now rejects non-numeric input and keeps the previous value, the backfill error names the missing or non-numeric credential, a notice on the plugin screens says the value was not saved, and the credential fields carry `autocomplete="off"` with a numeric keypad on mobile.
 

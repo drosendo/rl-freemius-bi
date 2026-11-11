@@ -158,6 +158,106 @@
 	color: var(--fsbi-muted);
 }
 
+.rl-fsbi-coupons-card {
+	grid-column: 1 / -1;
+	margin-top: 12px;
+}
+
+.rl-fsbi-coupons-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12px;
+}
+
+.rl-fsbi-coupons-table th {
+	text-align: left;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--fsbi-muted);
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--fsbi-border);
+}
+
+.rl-fsbi-coupons-table td {
+	padding: 8px 10px;
+	border-bottom: 1px solid rgba(43, 49, 80, 0.6);
+	color: var(--fsbi-text);
+	font-variant-numeric: tabular-nums;
+}
+
+.rl-fsbi-coupons-table td code {
+	background: rgba(95, 107, 255, 0.16);
+	color: #c7cdff;
+	padding: 2px 7px;
+	border-radius: 4px;
+	font-size: 11px;
+}
+
+.rl-fsbi-coupon-inactive {
+	margin-left: 6px;
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--fsbi-muted);
+}
+
+.rl-fsbi-forecast-summary {
+	margin: 8px 0 0 !important;
+	font-variant-numeric: tabular-nums;
+}
+
+.rl-fsbi-pie-legend {
+	margin: 10px 0 0;
+	padding: 0;
+	list-style: none;
+	display: grid;
+	gap: 4px;
+	font-size: 11px;
+}
+
+.rl-fsbi-pie-legend li {
+	display: grid;
+	grid-template-columns: 8px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 7px;
+	color: var(--fsbi-muted);
+}
+
+.rl-fsbi-pie-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 2px;
+	display: inline-block;
+}
+
+.rl-fsbi-pie-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fsbi-text);
+}
+
+.rl-fsbi-pie-value {
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.rl-fsbi-churn-scope {
+	margin: 0 0 10px;
+	font-size: 11px;
+	line-height: 1.45;
+	color: var(--fsbi-muted);
+}
+
+.rl-fsbi-last-synced {
+	align-self: center;
+	font-size: 11px;
+	color: var(--fsbi-muted);
+	white-space: nowrap;
+}
+
 .rl-fsbi-growth-chart-wrap {
 	position: relative;
 	height: 54px;
