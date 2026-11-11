@@ -177,11 +177,23 @@ class RL_FSBI_Admin
 	}
 
 	/**
+	 * Version stamp for a file bundled under assets/lib/.
+	 *
+	 * @param string $relative Path under assets/lib/.
+	 * @return string
+	 */
+	private function lib_version($relative)
+	{
+		$path = RL_FSBI_PLUGIN_DIR . 'assets/lib/' . ltrim($relative, '/');
+
+		return file_exists($path) ? (string) filemtime($path) : $this->version;
+	}
+
+	/**
 	 * Locate a bundled vendor file, preferring the plugin's own copy.
 	 *
-	 * A deploy that copies only changed files can leave `assets/vendor/` behind,
-	 * which is how the tooltip libraries 404'd on a live site while working
-	 * locally. Falling back to the copy that has shipped inside the settings
+	 * A deploy that skips `assets/lib/` leaves the plugin looking current while
+	 * its libraries 404, which is what happened on a live site. Falling back to the copy that has shipped inside the settings
 	 * framework since the first release means a partial upload degrades to the
 	 * older file instead of breaking tooltips with two 404s.
 	 *
@@ -191,8 +203,11 @@ class RL_FSBI_Admin
 	private function locate_vendor_asset($relative)
 	{
 		$relative = ltrim($relative, '/');
+		// assets/lib, never "vendor": deployment tooling routinely ignores any
+		// directory called vendor, which is how these files failed to reach a
+		// live site while being present in the repository and the release zip.
 		$candidates = array(
-			RL_FSBI_PLUGIN_DIR . 'assets/vendor/' . $relative => RL_FSBI_PLUGIN_URL . 'assets/vendor/' . $relative,
+			RL_FSBI_PLUGIN_DIR . 'assets/lib/' . $relative => RL_FSBI_PLUGIN_URL . 'assets/lib/' . $relative,
 			RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/assets/vendor/' . $relative => RL_FSBI_PLUGIN_URL . 'includes/library/rloptionsFramework/assets/vendor/' . $relative,
 		);
 
@@ -243,9 +258,12 @@ class RL_FSBI_Admin
 			return;
 		}
 
-		wp_enqueue_script('chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@3/dist/chart.min.js', array(), '3.9.1', false);
-		wp_enqueue_script('datatables-js', 'https://cdn.jsdelivr.net/npm/datatables.net@1/js/jquery.dataTables.min.js', array('jquery'), '1.13.4', false);
-		wp_enqueue_style('datatables-css', 'https://cdn.jsdelivr.net/npm/datatables.net-dt@1/css/jquery.dataTables.min.css', array(), '1.13.4', 'all');
+		// Bundled, not pulled from a CDN. These were enqueued from jsDelivr in the
+		// <head>, render-blocking, so a CDN that stalled or was unreachable left
+		// the dashboard at "Loading analytics… 0%" with no script ever executing.
+		wp_enqueue_script('chart-js', RL_FSBI_PLUGIN_URL . 'assets/lib/chartjs/chart.min.js', array(), $this->lib_version('chartjs/chart.min.js'), false);
+		wp_enqueue_script('datatables-js', RL_FSBI_PLUGIN_URL . 'assets/lib/datatables/jquery.dataTables.min.js', array('jquery'), $this->lib_version('datatables/jquery.dataTables.min.js'), false);
+		wp_enqueue_style('datatables-css', RL_FSBI_PLUGIN_URL . 'assets/lib/datatables/jquery.dataTables.min.css', array(), $this->lib_version('datatables/jquery.dataTables.min.css'), 'all');
 
 		$admin_js_path = RL_FSBI_PLUGIN_DIR . 'assets/js/admin/rl-fsbi-admin.js';
 		$admin_js_ver  = file_exists($admin_js_path) ? filemtime($admin_js_path) : $this->version;
@@ -255,7 +273,7 @@ class RL_FSBI_Admin
 			RL_FSBI_PLUGIN_URL . 'assets/js/admin/rl-fsbi-admin.js',
 			array('jquery', 'chart-js', 'datatables-js', 'tippy-js'),
 			$admin_js_ver,
-			false
+			true
 		);
 
 		wp_localize_script($this->plugin_name . '-admin', 'rlFsbiAdmin', array(
@@ -2507,7 +2525,7 @@ class RL_FSBI_Admin
 	/**
 	 * Warn when the deployed copy is missing its bundled vendor files.
 	 *
-	 * A file-by-file upload that skips `assets/vendor/` leaves a plugin that
+	 * A file-by-file upload that skips `assets/lib/` leaves a plugin that
 	 * looks current — same version header, dashboard working — while the
 	 * tooltip assets 404. The runtime already falls back to the framework copy,
 	 * but the operator should know the upload was incomplete rather than find
@@ -2523,7 +2541,7 @@ class RL_FSBI_Admin
 
 		$missing = array();
 		foreach (array('tippy/tippy.umd.min.js', 'tippy/tippy.css', 'popper/popper.min.js') as $relative) {
-			if (! file_exists(RL_FSBI_PLUGIN_DIR . 'assets/vendor/' . $relative)) {
+			if (! file_exists(RL_FSBI_PLUGIN_DIR . 'assets/lib/' . $relative)) {
 				$missing[] = $relative;
 			}
 		}
@@ -2535,9 +2553,9 @@ class RL_FSBI_Admin
 		printf(
 			'<div class="notice notice-warning"><p><strong>%s</strong> %s <code>%s</code>. %s</p></div>',
 			esc_html__('This upload is incomplete.', 'rl-freemius-bi'),
-			esc_html__('Missing from assets/vendor/:', 'rl-freemius-bi'),
+			esc_html__('Missing from assets/lib/:', 'rl-freemius-bi'),
 			esc_html(implode(', ', $missing)),
-			esc_html__('The settings framework copy is being used instead so tooltips keep working. Re-upload the plugin folder, including assets/vendor/.', 'rl-freemius-bi')
+			esc_html__('The settings framework copy is being used instead so tooltips keep working. Re-upload the plugin folder, including assets/lib/.', 'rl-freemius-bi')
 		);
 	}
 

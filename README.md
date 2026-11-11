@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.4.2  
+**Version:** 1.4.3  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -956,6 +956,13 @@ bumping `Version:` means no site will ever see it.
 - **WordPress.org slugs are per plugin.** The single global field became a per-product editor on the **Plugin Scope** tab, prefilled with each Freemius slug and validated against the wp.org API on save — an unknown slug is rejected rather than stored, since it would render a widget full of zeros. With no slug the widget is not rendered at all (no card, no canvas, no note) and no wp.org request is made.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
+
+### 1.4.3 (2026-11-11)
+
+**The dashboard could not load at all on production, and two causes were stacked.**
+
+- **Chart.js and DataTables were loaded from `cdn.jsdelivr.net` in the `<head>`.** That is render-blocking, and it was three levels deep in the dependency chain: the dashboard bundle depends on them, so a CDN that stalls or is unreachable meant the bundle never executed and the page sat at *"Loading analytics… 0%"* with nothing in the console to explain it. Both are now bundled under `assets/lib/` (Chart.js 3.9.1, DataTables 1.13.4 with its stylesheet) and the dashboard bundle moved to the footer, so no third-party host can block first paint. The dashboard now makes **zero external requests** — verified: the only off-site request left is WordPress's own Gravatar avatar.
+- **The bundle directory was named `vendor`, which deployment tooling ignores.** A sync config that excludes `vendor` (a common default, since it usually holds Composer packages) silently skipped `assets/vendor/` on every upload — which is exactly why those three files 404'd while being present in both the repository and the release zip. Everything now lives in `assets/lib/`, a name no deploy tool filters.
 
 ### 1.4.2 (2026-11-11)
 
