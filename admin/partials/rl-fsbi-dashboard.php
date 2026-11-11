@@ -91,16 +91,6 @@ if ( ! defined( 'WPINC' ) ) {
 				// and only pushes the real filters onto a second row. Keep the value the
 				// JS reads, drop the visible field. ?>
 				<input type="hidden" id="rl-fsbi-plugin-filter-forced" value="<?php echo esc_attr( $forced_plugin_id ); ?>" />
-			<?php else : ?>
-			<span class="rl-fsbi-field">
-				<label for="rl-fsbi-plugin-filter"><?php echo esc_html__( 'Plugin:', 'rl-freemius-bi' ); ?></label>
-				<select id="rl-fsbi-plugin-filter" name="plugin_id">
-					<option value="all"><?php echo esc_html__( 'All Plugins', 'rl-freemius-bi' ); ?></option>
-					<?php foreach ( $plugins_catalog as $plugin_id => $plugin_title ) : ?>
-						<option value="<?php echo esc_attr( $plugin_id ); ?>"><?php echo esc_html( $plugin_title ); ?></option>
-					<?php endforeach; ?>
-				</select>
-			</span>
 			<?php endif; ?>
 
 			<span class="rl-fsbi-field">
@@ -150,6 +140,7 @@ if ( ! defined( 'WPINC' ) ) {
 			$dashboard_tabs['wporg'] = __( 'WordPress.org', 'rl-freemius-bi' );
 		}
 		?>
+		<div class="rl-fsbi-tabbar">
 		<div class="rl-fsbi-tabs" role="tablist" aria-label="<?php echo esc_attr__( 'Dashboard sections', 'rl-freemius-bi' ); ?>">
 			<?php foreach ( $dashboard_tabs as $tab_slug => $tab_label ) : ?>
 				<button type="button" class="rl-fsbi-tab" role="tab" id="rl-fsbi-tab-<?php echo esc_attr( $tab_slug ); ?>"
@@ -158,6 +149,21 @@ if ( ! defined( 'WPINC' ) ) {
 					aria-selected="<?php echo 'overview' === $tab_slug ? 'true' : 'false'; ?>"
 					tabindex="<?php echo 'overview' === $tab_slug ? '0' : '-1'; ?>"><?php echo esc_html( $tab_label ); ?></button>
 			<?php endforeach; ?>
+		</div>
+		<?php if ( $forced_plugin_id <= 0 ) : ?>
+			<?php // Across every product the plugin is the scope of every tab, so it sits
+			// on the tab row at the far right rather than in the filters, where it took a
+			// whole line from the controls at 1200px. ?>
+			<span class="rl-fsbi-field rl-fsbi-tabbar-scope">
+				<label for="rl-fsbi-plugin-filter"><?php echo esc_html__( 'Plugin:', 'rl-freemius-bi' ); ?></label>
+				<select id="rl-fsbi-plugin-filter" name="plugin_id">
+					<option value="all"><?php echo esc_html__( 'All Plugins', 'rl-freemius-bi' ); ?></option>
+					<?php foreach ( $plugins_catalog as $plugin_id => $plugin_title ) : ?>
+						<option value="<?php echo esc_attr( $plugin_id ); ?>"><?php echo esc_html( $plugin_title ); ?></option>
+					<?php endforeach; ?>
+				</select>
+			</span>
+		<?php endif; ?>
 		</div>
 	</div>
 

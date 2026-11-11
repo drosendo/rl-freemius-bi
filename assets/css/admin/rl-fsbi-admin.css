@@ -2968,3 +2968,51 @@ body[class*="rl-freemius-bi"] #wpfooter {
 		padding: 0 8px;
 	}
 }
+
+/* The plugin scope sits on the tab row, pushed to the far right. On a product
+   dashboard it does not exist: the page title already names the product. */
+.rl-fsbi-dashboard .rl-fsbi-tabbar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-tabbar .rl-fsbi-tabs {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-tabbar-scope {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+	flex: 0 0 auto;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-tabbar-scope label {
+	font-size: 11px;
+	letter-spacing: 0;
+	color: var(--fsbi-muted, #9aa4cc);
+}
+
+.rl-fsbi-dashboard .rl-fsbi-tabbar-scope select {
+	min-height: 28px;
+	height: 28px;
+	line-height: 26px;
+	font-size: 12px;
+	min-width: 168px;
+	max-width: 220px;
+	padding: 0 26px 0 8px;
+}
+
+@media (max-width: 900px) {
+	.rl-fsbi-dashboard .rl-fsbi-tabbar {
+		flex-wrap: wrap;
+	}
+
+	.rl-fsbi-dashboard .rl-fsbi-tabbar-scope {
+		margin-left: 0;
+		padding-bottom: 8px;
+	}
+}

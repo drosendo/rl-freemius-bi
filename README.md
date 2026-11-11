@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.6.0  
+**Version:** 1.6.1  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -1035,6 +1035,10 @@ Four figures were still being computed twice. All four now come from `summarise_
 
 **Upgrade routine.** A version bump now persists the commission model and rate that detection found: an account called legacy gets its marginal rate (7%) and a fixed fee of 0 without anyone clicking Accept, so the site stops reading "revenue share not set". The bump also changes the payload cache key, so month rows are rebuilt on the first load after the update rather than waiting for the next sync.
 
+### 1.6.1
+
+The plugin scope moved out of the filter row and onto the tab row, far right: across every product it is the scope of every tab, and in the filters it cost a line at 1200px.
+
 ### 1.6.0
 
 The settings screens and the dashboard stop fighting the plugins around them, and the reports read straight down the page.
@@ -1048,6 +1052,7 @@ The settings screens and the dashboard stop fighting the plugins around them, an
 **Dashboard.**
 - **The three doughnuts are circles.** `aspect-ratio` on the canvas was applied after Chart.js had measured, so a 260x461 bitmap was stretched into a 260x260 box. The canvas now lives in a fixed square box that Chart.js measures from the start, and the legend is appended to the card rather than the box.
 - **Chart cards fill the row.** Three cards in a four-column grid left an empty slot that read as a missing card; it is three columns, with the legend beside the chart instead of below it.
+- **The plugin scope moved to the tab row.** Across every product it is the scope of every tab, so it sits on the tab row at the far right (right edge 1px inside the panel). On a product dashboard it is absent: the page title already names the product.
 - **One filter row at 1200px.** The plugin field is gone on a product dashboard (the page title already names the product), and the last-synced stamp moved into an **i** mark inside the Sync button: hover or focus shows the time, screen readers read it, and the row keeps its line.
 
 ### 1.5.1
