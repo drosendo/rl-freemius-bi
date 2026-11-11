@@ -6933,17 +6933,38 @@ class RL_FSBI_Admin
 			return;
 		}
 
+		// Scheduled, never inline. This used to call the Freemius API while the
+		// dashboard request was waiting, so a cold cache turned every first page
+		// load in an hour into an outbound round-trip per plugin. The table
+		// renders with "definition unavailable" until the fetch lands.
+		set_transient('rl_fsbi_coupon_fetch_lock', 1, HOUR_IN_SECONDS);
+		wp_schedule_single_event(time() + 5, 'rl_fsbi_fetch_coupons');
+	}
+
+	/**
+	 * Background handler for the scheduled coupon fetch.
+	 *
+	 * @return void
+	 */
+	public function run_scheduled_coupon_fetch()
+	{
 		$api = $this->get_api_client();
 		if (! $api) {
 			return;
 		}
 
-		set_transient('rl_fsbi_coupon_fetch_lock', 1, HOUR_IN_SECONDS);
+		global $wpdb;
+		$has_any = (bool) $wpdb->get_var("SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE 'rl_fsbi_coupons\\_%' LIMIT 1");
+		$targets = $has_any ? array() : $this->get_selected_plugin_ids();
 
-		$targets = $plugin_id > 0 ? array($plugin_id) : $this->get_selected_plugin_ids();
-		foreach ($targets as $target) {
+		// Always refresh the scope the dashboard needs most: every selected
+		// plugin, so the all-plugin view resolves names too.
+		foreach ($this->get_selected_plugin_ids() as $target) {
 			$this->sync_coupons((int) $target, $api);
 		}
+
+		// Cached payloads were built with "definition unavailable" rows.
+		update_option('rl_fsbi_cache_generation', time(), false);
 	}
 
 	/**

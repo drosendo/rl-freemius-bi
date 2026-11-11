@@ -89,6 +89,7 @@ class RL_FSBI {
 		$this->loader->add_action( 'admin_init', $this, 'schedule_background_jobs' );
 		$this->loader->add_action( 'rl_fsbi_user_sync', $this, 'run_user_sync_cron' );
 		$this->loader->add_action( 'rl_fsbi_api_log_cleanup', $this, 'run_api_log_cleanup' );
+		$this->loader->add_action( 'rl_fsbi_fetch_coupons', $plugin_admin, 'run_scheduled_coupon_fetch' );
 		$this->loader->add_action( 'rl_fsbi_rest_warm', $this, 'run_rest_warm' );
 
 		// GitHub release updates. Manual only: this surfaces the normal update

@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.4.1  
+**Version:** 1.4.2  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -956,6 +956,14 @@ bumping `Version:` means no site will ever see it.
 - **WordPress.org slugs are per plugin.** The single global field became a per-product editor on the **Plugin Scope** tab, prefilled with each Freemius slug and validated against the wp.org API on save — an unknown slug is rejected rather than stored, since it would render a widget full of zeros. With no slug the widget is not rendered at all (no card, no canvas, no note) and no wp.org request is made.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
+
+### 1.4.2 (2026-11-11)
+
+**A frozen "Loading analytics… 0%" now explains itself.** A dashboard that hangs told nobody whether the script had failed to load or the request had stalled, which made a partial upload look identical to a slow server. Two changes:
+- An inline watchdog in the dashboard markup runs independently of the bundled script. If the page is still loading after 25 seconds it replaces the spinner with the actual reason — *"The dashboard script did not start"* one way, *"The dashboard did not finish loading"* the other — plus a Reload button.
+- The analytics request now aborts after 45 seconds with a readable message instead of spinning indefinitely.
+
+**Coupon definitions are fetched in the background.** The previous release fetched them inline when the cache was empty, so the first dashboard load of every hour waited on a Freemius round-trip per plugin. That is now a scheduled event: the request path drops from 1.7 s to 0.002 s on a cold cache, the table shows "definition unavailable" for the intervening seconds, and the fetch bumps the payload cache generation when it lands.
 
 ### 1.4.1 (2026-11-11)
 

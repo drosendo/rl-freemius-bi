@@ -9,6 +9,36 @@ if ( ! defined( 'WPINC' ) ) {
 ?>
 
 <div class="wrap rl-fsbi-dashboard is-loading" aria-busy="true">
+	<?php /* Watchdog: a frozen spinner tells nobody anything. If the bundle never
+	   started, or the request never came back, say which of the two it was. */ ?>
+	<script>
+	window.setTimeout(function () {
+		var wrap = document.querySelector('.rl-fsbi-dashboard');
+		if (!wrap || !wrap.classList.contains('is-loading')) {
+			return;
+		}
+
+		var overlay = document.getElementById('rl-fsbi-loading');
+		var started = typeof window.FSBI !== 'undefined';
+
+		wrap.classList.remove('is-loading');
+		wrap.removeAttribute('aria-busy');
+		if (overlay) {
+			overlay.innerHTML = '<div class="rl-fsbi-loading-card">'
+				+ '<p class="rl-fsbi-loading-message"><strong>'
+				+ (started ? 'The dashboard did not finish loading.' : 'The dashboard script did not start.')
+				+ '</strong></p>'
+				+ '<p class="rl-fsbi-loading-message" style="font-weight:400;font-size:12px;">'
+				+ (started
+					? 'The analytics request did not come back in time. Check the browser console and your server error log, then reload.'
+					: 'assets/js/admin/rl-fsbi-admin.js either failed to load or threw before it could run. Confirm the plugin folder was uploaded completely, including assets/vendor/ and assets/js/.')
+				+ '</p>'
+				+ '<p><a class="button" href="' + window.location.href + '">Reload</a></p>'
+				+ '</div>';
+		}
+	}, 25000);
+	</script>
+
 	<div class="rl-fsbi-loading-overlay" id="rl-fsbi-loading" role="status" aria-live="polite">
 		<div class="rl-fsbi-loading-card">
 			<div class="rl-fsbi-loading-spinner" aria-hidden="true"></div>

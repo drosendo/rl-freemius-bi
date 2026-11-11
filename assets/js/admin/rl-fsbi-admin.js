@@ -1284,11 +1284,19 @@
 			}
 			this.updateSalesActivityTitle(filters);
 
+			// A request that never answers would leave the overlay spinning for
+			// ever, so it is abandoned and reported instead.
+			const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+			const timeoutId = controller
+				? window.setTimeout(() => controller.abort(), 45000)
+				: null;
+
 			fetch(rlFsbiAdmin.ajaxUrl, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/x-www-form-urlencoded',
 				},
+				signal: controller ? controller.signal : undefined,
 				body: new URLSearchParams({
 					action: 'rl_fsbi_get_dashboard_data',
 					nonce: rlFsbiAdmin.nonce,
@@ -1300,7 +1308,18 @@
 			.catch((error) => {
 				console.error('Error loading dashboard data:', error);
 				self.hideLoading();
+
+				if (error && 'AbortError' === error.name) {
+					alert('The analytics request timed out after 45 seconds. Nothing was lost — reload the page, and check the server error log if it happens again.');
+					return;
+				}
+
 				alert('Failed to load dashboard data.');
+			})
+			.finally(() => {
+				if (null !== timeoutId) {
+					window.clearTimeout(timeoutId);
+				}
 			});
 		},
 
