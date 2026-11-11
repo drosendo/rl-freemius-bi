@@ -158,6 +158,26 @@
 	color: var(--fsbi-muted);
 }
 
+/* Quiet refresh indicator: the first load gets the overlay, later ones do not. */
+.rl-fsbi-toolbar.is-refreshing::after {
+	content: "";
+	display: inline-block;
+	width: 11px;
+	height: 11px;
+	margin-left: 10px;
+	border: 2px solid var(--fsbi-muted);
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: rl-fsbi-spin 0.7s linear infinite;
+	vertical-align: middle;
+}
+
+@keyframes rl-fsbi-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
 .rl-fsbi-coupons-card {
 	grid-column: 1 / -1;
 	margin-top: 12px;

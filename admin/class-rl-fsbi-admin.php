@@ -1083,6 +1083,9 @@ class RL_FSBI_Admin
 		);
 		$this->settings->update_option('rl_fsbi_last_sync_at_utc', gmdate('Y-m-d H:i:s'));
 
+		// Retire every cached dashboard payload: the numbers behind them changed.
+		update_option('rl_fsbi_cache_generation', time(), false);
+
 		return true;
 	}
 
@@ -3316,6 +3319,26 @@ class RL_FSBI_Admin
 			$end_date = $start_date;
 		}
 
+		// The assembled payload is the expensive part: several passes over every
+		// payment in the period, each needing an FX rate lookup. It only changes
+		// when the sync writes new rows, and the generation counter is bumped
+		// there, so the cache cannot serve stale figures after an import.
+		$payload_cache_key = 'rl_fsbi_dash_' . md5(implode('|', array(
+			$plugin_id,
+			(string) $currency,
+			$plan_filter,
+			$start_date,
+			$end_date,
+			(int) get_option('rl_fsbi_cache_generation', 1),
+		)));
+
+		$cached_payload = get_transient($payload_cache_key);
+		if (is_array($cached_payload) && ! empty($cached_payload)) {
+			$cached_payload['from_cache'] = true;
+			$cached_payload['payments']   = array();
+			wp_send_json_success($cached_payload);
+		}
+
 		$payments = $repo->get_payments($plugin_id, $start_date, $end_date, $currency);
 		$gross_revenue = $repo->calculate_gross_revenue($plugin_id, $currency, $start_date, $end_date);
 		$net_revenue = $repo->calculate_net_revenue($plugin_id, $currency, $start_date, $end_date);
@@ -3449,6 +3472,13 @@ class RL_FSBI_Admin
 		$data['marketing_optins']         = $optins_count;
 		$data['marketing_optins_updated'] = (string) get_option($cache_key . '_updated', '');
 		$data['newsletter_provider']      = $provider;
+		$data['from_cache']               = false;
+
+		// Payment rows are not rendered by the dashboard and are large enough to
+		// bloat an option row, so they are left out of the cached copy.
+		$for_cache = $data;
+		$for_cache['payments'] = array();
+		set_transient($payload_cache_key, $for_cache, 15 * MINUTE_IN_SECONDS);
 
 		wp_send_json_success($data);
 	}

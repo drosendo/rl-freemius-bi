@@ -871,6 +871,10 @@ bumping `Version:` means no site will ever see it.
 - **"Newsletter Opt-ins" explains its scope**: it counts active subscribers in the provider account, whatever their source, and is explicitly not a count of Freemius customers.
 - **"Last synced"** shows when the local copy was refreshed in the site's timezone, next to the existing Sync Now button.
 
+**The dashboard is served from a cached payload.**
+- The assembled payload is cached for 15 minutes, keyed by plugin, currency, plan, date range and a generation counter that the sync bumps. On plugin 2228 the response drops from ~200 ms and 29 KB to ~30 ms and 21 KB. Payment rows are excluded from the cached copy because nothing renders them and they are most of the weight.
+- The full-screen loading overlay now appears only while the dashboard is still empty. Later refreshes keep the figures on screen and show a small spinner in the toolbar instead.
+
 ### 1.3.30 (2026-11-10)
 - **An autofilled email can no longer become a bogus Developer ID.** A vendor reported that the backfill failed after signing up, and that the browser had filled the Developer ID field with their email address. The field was a plain text input with no autocomplete hints, and the sanitizer kept only the digits — so `john1985@gmail.com` was saved as `1985`, a perfectly valid id belonging to someone else. Every request then authenticated as the wrong account, and the failure described the API rather than the field. The sanitizer now rejects non-numeric input and keeps the previous value, the backfill error names the missing or non-numeric credential, a notice on the plugin screens says the value was not saved, and the credential fields carry `autocomplete="off"` with a numeric keypad on mobile.
 

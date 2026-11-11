@@ -1248,6 +1248,22 @@
 		},
 
 		/**
+		 * Toggle the lightweight refresh affordance used after the first render.
+		 *
+		 * @function markRefreshing
+		 * @memberof FSBI
+		 * @param {boolean} active - Whether a refresh is in flight.
+		 * @returns {void}
+		 */
+		markRefreshing: function(active) {
+			const toolbar = document.querySelector('.rl-fsbi-toolbar');
+			if (toolbar) {
+				toolbar.classList.toggle('is-refreshing', !!active);
+				toolbar.setAttribute('aria-busy', active ? 'true' : 'false');
+			}
+		},
+
+		/**
 		 * Fetch complete aggregated analytics dataset from backend via AJAX.
 		 *
 		 * @function loadData
@@ -1258,7 +1274,14 @@
 			const self = this;
 			const filters = this.getFilters();
 
-			this.showLoading(this.loadingText('building'));
+			// The overlay earns its keep once, while the dashboard is still empty.
+			// Afterwards the existing figures stay on screen and simply update,
+			// which is faster to read than a full-page spinner.
+			if (!this.hasRenderedData) {
+				this.showLoading(this.loadingText('building'));
+			} else {
+				this.markRefreshing(true);
+			}
 			this.updateSalesActivityTitle(filters);
 
 			fetch(rlFsbiAdmin.ajaxUrl, {
@@ -1327,8 +1350,14 @@
 				return;
 			}
 
-			this.setLoadingProgress(88, this.loadingText('rendering'));
+			if (this.hasRenderedData) {
+				this.markRefreshing(false);
+			} else {
+				this.setLoadingProgress(88, this.loadingText('rendering'));
+			}
+
 			this.renderDashboard(payload.data || {});
+			this.hasRenderedData = true;
 			this.hideLoading();
 		},
 
