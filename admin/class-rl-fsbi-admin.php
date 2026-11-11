@@ -2504,6 +2504,43 @@ class RL_FSBI_Admin
 	 *
 	 * @return void
 	 */
+	/**
+	 * Warn when the deployed copy is missing its bundled vendor files.
+	 *
+	 * A file-by-file upload that skips `assets/vendor/` leaves a plugin that
+	 * looks current — same version header, dashboard working — while the
+	 * tooltip assets 404. The runtime already falls back to the framework copy,
+	 * but the operator should know the upload was incomplete rather than find
+	 * out from the browser console.
+	 *
+	 * @return void
+	 */
+	public function render_incomplete_upload_notice()
+	{
+		if (! current_user_can('manage_options') || ! $this->is_plugin_page()) {
+			return;
+		}
+
+		$missing = array();
+		foreach (array('tippy/tippy.umd.min.js', 'tippy/tippy.css', 'popper/popper.min.js') as $relative) {
+			if (! file_exists(RL_FSBI_PLUGIN_DIR . 'assets/vendor/' . $relative)) {
+				$missing[] = $relative;
+			}
+		}
+
+		if (empty($missing)) {
+			return;
+		}
+
+		printf(
+			'<div class="notice notice-warning"><p><strong>%s</strong> %s <code>%s</code>. %s</p></div>',
+			esc_html__('This upload is incomplete.', 'rl-freemius-bi'),
+			esc_html__('Missing from assets/vendor/:', 'rl-freemius-bi'),
+			esc_html(implode(', ', $missing)),
+			esc_html__('The settings framework copy is being used instead so tooltips keep working. Re-upload the plugin folder, including assets/vendor/.', 'rl-freemius-bi')
+		);
+	}
+
 	public function render_debug_notice()
 	{
 		if (! current_user_can('manage_options') || ! $this->is_plugin_page()) {

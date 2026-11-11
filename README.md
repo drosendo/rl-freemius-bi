@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.4.0  
+**Version:** 1.4.1  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -956,6 +956,15 @@ bumping `Version:` means no site will ever see it.
 - **WordPress.org slugs are per plugin.** The single global field became a per-product editor on the **Plugin Scope** tab, prefilled with each Freemius slug and validated against the wp.org API on save — an unknown slug is rejected rather than stored, since it would render a widget full of zeros. With no slug the widget is not rendered at all (no card, no canvas, no note) and no wp.org request is made.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
+
+### 1.4.1 (2026-11-11)
+
+**Why this release exists.** `1.4.0` was set as the version on the first commit of the batch, seventeen commits before the build that was actually published. Whatever 1.4.0 was uploaded to a site therefore carries the same number as the published release but none of its contents — no `assets/vendor/`, no coupon fix, no reconciled counts — and the updater compares with a strict `>`, so it never offers the replacement. Reusing a version number has now caused this twice; the number only moves forward from here.
+
+- **The WordPress.org slug is now per product.** The single global field became an editor on the **Plugin Scope** tab with one row per tracked plugin, prefilled from the Freemius slug and validated against the wp.org API on save. An unknown slug is rejected instead of stored, because it would render a widget of zeros. With no slug the widget is not rendered and no wp.org request is made.
+- **Counts reconcile with Active Subscriptions.** "Failed payments" filtered on status alone and reported 337 against a KPI of 190, because the KPI also requires a known billing cycle and excludes expired rows. Both it and the plan distribution now use the KPI's own row set: 1 of 190, and 104 + 86 = 190 on the real product; 0 of 45 and 29 + 16 = 45 on the demo one. The label reads "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
+- **Missing vendor files no longer break tooltips.** Loading prefers `assets/vendor/` and falls back to the copy inside the settings framework, so a partial upload degrades to an older file rather than two 404s. An admin banner now names the files that are missing from the deployed copy, so an incomplete upload is visible instead of only showing up in the browser console.
+- **`rl-fsbi-wporg-chart` renamed** to `rl-fsbi-sales-volume-chart`, reading the `daily_sales_volume` payload key. `wporg_growth` remains as an alias.
 
 ### 1.3.30 (2026-11-10)
 - **An autofilled email can no longer become a bogus Developer ID.** A vendor reported that the backfill failed after signing up, and that the browser had filled the Developer ID field with their email address. The field was a plain text input with no autocomplete hints, and the sanitizer kept only the digits — so `john1985@gmail.com` was saved as `1985`, a perfectly valid id belonging to someone else. Every request then authenticated as the wrong account, and the failure described the API rather than the field. The sanitizer now rejects non-numeric input and keeps the previous value, the backfill error names the missing or non-numeric credential, a notice on the plugin screens says the value was not saved, and the credential fields carry `autocomplete="off"` with a numeric keypad on mobile.
