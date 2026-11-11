@@ -337,6 +337,7 @@ if ( ! defined( 'WPINC' ) ) {
 		<div class="rl-fsbi-four-chart-row">
 		<div class="rl-fsbi-card">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Churn Trend', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Cancellations in each month over the base that existed at its start — the same rule as the Churn Rate KPI. A gap means no subscription history was recorded for that month yet.', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-churn-chart"></canvas>
 		</div>
 

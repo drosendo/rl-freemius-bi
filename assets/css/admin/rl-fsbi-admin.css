@@ -158,6 +158,43 @@
 	color: var(--fsbi-muted);
 }
 
+/* Accessible alternative to the canvas: same numbers, real table. */
+.rl-fsbi-chart-table-holder {
+	margin-top: 8px;
+}
+
+.rl-fsbi-chart-table-toggle {
+	font-size: 11px !important;
+	color: var(--fsbi-muted) !important;
+	text-decoration: underline;
+	cursor: pointer;
+	padding: 0;
+}
+
+.rl-fsbi-chart-table {
+	width: 100%;
+	margin-top: 8px;
+	border-collapse: collapse;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+
+.rl-fsbi-chart-table th,
+.rl-fsbi-chart-table td {
+	text-align: left;
+	padding: 4px 8px;
+	border-bottom: 1px solid rgba(43, 49, 80, 0.7);
+	color: var(--fsbi-text);
+}
+
+.rl-fsbi-chart-table thead th {
+	color: var(--fsbi-muted);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	font-size: 10px;
+}
+
 /* Quiet refresh indicator: the first load gets the overlay, later ones do not. */
 .rl-fsbi-toolbar.is-refreshing::after {
 	content: "";

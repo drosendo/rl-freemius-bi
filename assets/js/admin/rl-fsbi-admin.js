@@ -1791,6 +1791,106 @@
 		},
 
 		/**
+		 * Attach an accessible label and a data table to a chart.
+		 *
+		 * A canvas is opaque to a screen reader, so every chart gets a label and
+		 * a table of the same numbers, hidden until asked for.
+		 *
+		 * @function attachChartTable
+		 * @memberof FSBI
+		 * @param {string} canvasId - Target canvas element ID.
+		 * @param {string} title - Human description of the chart.
+		 * @param {Array.<string>} labels - Point labels.
+		 * @param {Array.<Object>} series - [{ name, values, format }] where format is 'money' | 'count' | 'percent'.
+		 * @returns {void}
+		 */
+		attachChartTable: function(canvasId, title, labels, series) {
+			const canvas = document.getElementById(canvasId);
+			if (!canvas || !canvas.parentElement) {
+				return;
+			}
+
+			const card = canvas.parentElement;
+			const currency = this.getDisplayCurrency();
+			const formatValue = (value, format) => {
+				const n = Number(value || 0);
+				if (format === 'money') return this.formatCurrency(n, currency);
+				if (format === 'percent') return this.formatPercent(n, 2);
+				return n.toLocaleString();
+			};
+
+			const summary = labels.map((label, i) => {
+				const parts = (series || []).map((s) => `${s.name} ${formatValue((s.values || [])[i], s.format)}`);
+				return `${label}: ${parts.join(', ')}`;
+			}).join('. ');
+
+			canvas.setAttribute('role', 'img');
+			canvas.setAttribute('aria-label', `${title}. ${summary}`);
+
+			// Reuse the wrapper so repeated renders do not stack tables up.
+			let holder = card.querySelector(`[data-chart-table="${canvasId}"]`);
+			if (!holder) {
+				holder = document.createElement('div');
+				holder.className = 'rl-fsbi-chart-table-holder';
+				holder.setAttribute('data-chart-table', canvasId);
+
+				const toggle = document.createElement('button');
+				toggle.type = 'button';
+				toggle.className = 'button-link rl-fsbi-chart-table-toggle';
+				toggle.textContent = 'View as table';
+				toggle.setAttribute('aria-expanded', 'false');
+				toggle.setAttribute('aria-controls', `${canvasId}-table`);
+
+				const table = document.createElement('table');
+				table.id = `${canvasId}-table`;
+				table.className = 'rl-fsbi-chart-table';
+				table.hidden = true;
+
+				toggle.addEventListener('click', () => {
+					const showing = !table.hidden;
+					table.hidden = showing;
+					toggle.setAttribute('aria-expanded', showing ? 'false' : 'true');
+					toggle.textContent = showing ? 'View as table' : 'Hide table';
+				});
+
+				holder.append(toggle, table);
+				card.appendChild(holder);
+			}
+
+			const table = holder.querySelector('table');
+			table.textContent = '';
+
+			const thead = document.createElement('thead');
+			const headRow = document.createElement('tr');
+			['Point'].concat((series || []).map((s) => s.name)).forEach((heading) => {
+				const th = document.createElement('th');
+				th.scope = 'col';
+				th.textContent = heading;
+				headRow.appendChild(th);
+			});
+			thead.appendChild(headRow);
+			table.appendChild(thead);
+
+			const tbody = document.createElement('tbody');
+			labels.forEach((label, i) => {
+				const row = document.createElement('tr');
+				const th = document.createElement('th');
+				th.scope = 'row';
+				th.textContent = String(label);
+				row.appendChild(th);
+
+				(series || []).forEach((s) => {
+					const td = document.createElement('td');
+					td.textContent = formatValue((s.values || [])[i], s.format);
+					row.appendChild(td);
+				});
+
+				tbody.appendChild(row);
+			});
+			table.appendChild(tbody);
+		},
+
+		/**
 		 * Render a responsive line chart using Chart.js.
 		 *
 		 * @function drawLineChart
@@ -1970,6 +2070,13 @@
 
 			const isMoney = key === 'forecast' || key === 'portfolio';
 
+			this.attachChartTable(
+				canvasId,
+				`${key} chart`,
+				labels,
+				datasets.map((set) => ({ name: set.label, values: set.data, format: isMoney ? 'money' : 'count' }))
+			);
+
 			this.charts[key] = new Chart(canvas, {
 				type: 'line',
 				data: {
@@ -2031,6 +2138,13 @@
 				this.charts[key].destroy();
 			}
 
+			this.attachChartTable(
+				canvasId,
+				`${key} chart`,
+				labels,
+				datasets.map((set) => ({ name: set.label, values: set.data, format: currency ? 'money' : 'count' }))
+			);
+
 			this.charts[key] = new Chart(canvas, {
 				type: 'bar',
 				data: { labels: labels, datasets: datasets },
@@ -2075,6 +2189,11 @@
 				this.charts[key].destroy();
 			}
 
+			this.attachChartTable(canvasId, `${key} chart`, labels, [
+				{ name: 'Canceled', values: bars, format: 'count' },
+				{ name: 'Churn Rate', values: line, format: 'percent' },
+			]);
+
 			this.charts[key] = new Chart(canvas, {
 				data: {
 					labels: labels,
@@ -2090,6 +2209,7 @@
 							type: 'line',
 							label: 'Churn Rate (%)',
 							data: line,
+							spanGaps: false,
 							borderColor: '#ff5a72',
 							backgroundColor: 'rgba(255,90,114,0.2)',
 							borderWidth: 2,
@@ -2322,6 +2442,9 @@
 				},
 			});
 
+			this.attachChartTable(canvasId, `${key} distribution`, labels, [
+				{ name: 'Value', values: values, format: asMoney ? 'money' : 'count' },
+			]);
 			this.renderPieLegend(canvas, labels, values, palette, asMoney, currency);
 		},
 

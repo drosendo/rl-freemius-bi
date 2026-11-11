@@ -6502,7 +6502,11 @@ class RL_FSBI_Admin
 			// are read side by side, so they must not be computed differently.
 			$window = $this->count_churn_window($subscriptions, $month_start, min($month_end, $now));
 			$canceled[] = $window['cancellations'];
-			$rates[]    = $window['rate'];
+
+			// No base means the local copy had not been populated yet for that
+			// month, so the rate is unknown rather than zero. Left as null so the
+			// chart draws a gap instead of a reassuring flat line at 0%.
+			$rates[] = $window['base'] > 0 ? $window['rate'] : null;
 		}
 
 		return array(
