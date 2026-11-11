@@ -1,6 +1,6 @@
 # RL Freemius Business Intelligence
 
-**Version:** 1.4.10  
+**Version:** 1.4.11  
 **Author:** Rosendo Labs  
 **License:** GPL-2.0+  
 **Text Domain:** rl-freemius-bi
@@ -989,6 +989,18 @@ bumping `Version:` means no site will ever see it.
 - **WordPress.org slugs are per plugin.** The single global field became a per-product editor on the **Plugin Scope** tab, prefilled with each Freemius slug and validated against the wp.org API on save — an unknown slug is rejected rather than stored, since it would render a widget full of zeros. With no slug the widget is not rendered at all (no card, no canvas, no note) and no wp.org request is made.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
+
+### 1.4.11 (2026-11-11)
+
+**Column mapping, gross/refund split and the install count — corrected against the Freemius API.**
+
+- **Commission and Gateway were swapped.** The header row read `Gateway, Commission, VAT` while the cells emitted `Commission, VAT, Gateway`, so the Commission column displayed `gateway_fee` and Gateway displayed 0.00. Cells are now emitted in header order.
+- **Gross is sales only.** A row is a sale only when `type` is `payment`; anything else (`refund`, `chargeback`, `lost_dispute`) is excluded from Gross. A `lost_dispute` row carries a **positive** gross and no refund id, so the old sign-based test (`gross < 0 || net < 0 || refund_id || status refunded`) treated it as a sale and added 49.00 to Gross *and* to Refunds.
+- **A dispute is not a second refund.** A non-sale row with a positive gross is the original payment recorded as disputed; its matching chargeback carries the negative. Such rows are now skipped, which removes the duplicate: September refunds fall from 199.64 to **150.64** at a 1:1 conversion (59.99 EUR + 41.65 USD + 49.00 USD), against the API's 138.81 EUR — the difference is exchange rate, see below.
+- **The dispute fee counts in Gateway.** A chargeback's own 15.00 USD fee is a cost of the month, so it is added to Gateway rather than to the refunded amount.
+- **`active_installs_count` from the product.** The Installs card counted rows in the installs table: 9,417 records of which 9,411 are historical uninstalls gave "Active 0 / Uninstalled 9,378". Freemius reports the live figure on the product object (2,309 for product 2228); the plugin catalog now stores it during the plugin sync and the card prefers it, falling back to the table count when it is absent. It stays entirely separate from WordPress.org numbers.
+
+**Why local totals cannot match the API.** This environment has **no `wp_rl_fsbi_exchange_rates` table at all**, so `convert_currency_amount()` returns every amount unchanged. October is the clearest case: EUR 333.21 + USD 466.24 gives 799.45 here and 749.07 in production, i.e. the API's USD→EUR rate of about 0.892 is simply not applied locally. Every column is inflated by the same factor, which is why the *structure* is verifiable here but the absolute EUR totals are only meaningful in production.
 
 ### 1.4.10 (2026-11-11)
 

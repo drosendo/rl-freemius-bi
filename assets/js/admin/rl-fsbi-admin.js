@@ -2028,7 +2028,12 @@
 			this.setText('rl-fsbi-rev-net', money(rev.net));
 
 			const installs = data.installs || {};
-			this.setText('rl-fsbi-installs-active', count(installs.active));
+			// Freemius reports the live install count on the product; the table only
+			// holds records, most of which are historical uninstalls.
+			const activeInstalls = Number.isFinite(Number(installs.reported_active)) && Number(installs.reported_active) > 0
+				? Number(installs.reported_active)
+				: count(installs.active);
+			this.setText('rl-fsbi-installs-active', count(activeInstalls));
 			this.setText('rl-fsbi-installs-premium', count(installs.premium));
 			this.setText('rl-fsbi-installs-uninstalled', count(installs.uninstalled));
 			this.setText('rl-fsbi-installs-total', count(installs.total));

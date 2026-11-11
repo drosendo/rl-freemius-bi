@@ -627,6 +627,34 @@ class RL_FSBI_Settings_Manager {
 			'sync_settings',
 			'sync_config',
 			array(
+				'id'      => 'rl_fsbi_fs_revenue_share',
+				'type'    => 'number',
+				'label'   => esc_html__( 'Freemius Revenue Share (%)', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'The percentage Freemius charges on each sale. The Payments API returns no commission, so it has to be set here. It is prefilled from the synced account balance when that reports a rate; leave it empty and commission is not deducted, which overstates net revenue - the dashboard says so instead of applying 0%.', 'rl-freemius-bi' ),
+				'default' => '',
+				'min'     => 0,
+				'max'     => 100,
+			)
+		);
+
+		$this->framework->add_field(
+			'sync_settings',
+			'sync_config',
+			array(
+				'id'      => 'rl_fsbi_fs_fixed_fee',
+				'type'    => 'number',
+				'label'   => esc_html__( 'Freemius Fixed Fee per Transaction', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'The fixed fee Freemius adds to the percentage on each sale, where the plan carries one. Leave empty to use the documented defaults per currency (EUR 0.45, GBP 0.40, USD 0.50). Set 0 to disable it. Refunds do not return it.', 'rl-freemius-bi' ),
+				'default' => '',
+				'min'     => 0,
+				'max'     => 1000,
+			)
+		);
+
+		$this->framework->add_field(
+			'sync_settings',
+			'sync_config',
+			array(
 				'id'      => 'rl_fsbi_payout_day',
 				'type'    => 'number',
 				'label'   => esc_html__( 'Payout Day of Month', 'rl-freemius-bi' ),
