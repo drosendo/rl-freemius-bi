@@ -175,11 +175,14 @@ class RL_FSBI_Admin
 		wp_enqueue_script('datatables-js', 'https://cdn.jsdelivr.net/npm/datatables.net@1/js/jquery.dataTables.min.js', array('jquery'), '1.13.4', false);
 		wp_enqueue_style('datatables-css', 'https://cdn.jsdelivr.net/npm/datatables.net-dt@1/css/jquery.dataTables.min.css', array(), '1.13.4', 'all');
 
+		$admin_js_path = RL_FSBI_PLUGIN_DIR . 'assets/js/admin/rl-fsbi-admin.js';
+		$admin_js_ver  = file_exists($admin_js_path) ? filemtime($admin_js_path) : $this->version;
+
 		wp_enqueue_script(
 			$this->plugin_name . '-admin',
 			RL_FSBI_PLUGIN_URL . 'assets/js/admin/rl-fsbi-admin.js',
 			array('jquery', 'chart-js', 'datatables-js', 'tippy-js'),
-			$this->version,
+			$admin_js_ver,
 			false
 		);
 

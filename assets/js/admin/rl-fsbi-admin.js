@@ -1384,7 +1384,8 @@
 		 * @returns {void}
 		 */
 		updateHealthTooltip: function(kpis) {
-			const criteria = Array.isArray(kpis.health_criteria) ? kpis.health_criteria : [];
+			const raw = kpis.health_criteria;
+			const criteria = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : []);
 			if (!criteria.length) {
 				return;
 			}
