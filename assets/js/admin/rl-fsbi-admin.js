@@ -2071,7 +2071,18 @@
 		 */
 		renderSparkline: function(id, series) {
 			const canvas = document.getElementById('rl-fsbi-kpi-' + id + '-spark');
-			if (!canvas || !series.length || !window.Chart) {
+			if (!canvas) {
+				return;
+			}
+
+			// No series means no band: an empty canvas reserved a strip of the card
+			// that looked like a broken image.
+			const wrap = canvas.parentElement;
+			const hasSeries = Array.isArray(series) && series.length > 0 && !!window.Chart;
+			if (wrap) {
+				wrap.hidden = !hasSeries;
+			}
+			if (!hasSeries) {
 				return;
 			}
 
@@ -2079,6 +2090,9 @@
 				this.charts['kpi_' + id].destroy();
 			}
 
+			// The canvas is sized by its wrapper in CSS. Left to measure itself, a
+			// chart built while the panel is still hidden takes height:100% of a
+			// card that is then growing to fit it, and the two feed each other.
 			this.charts['kpi_' + id] = new Chart(canvas, {
 				type: 'line',
 				data: {

@@ -166,7 +166,7 @@ if ( ! defined( 'WPINC' ) ) {
 				</div>
 				<strong class="rl-fsbi-kpi-value" id="rl-fsbi-kpi-<?php echo esc_attr( $card_id ); ?>">—</strong>
 				<span class="rl-fsbi-kpi-delta" id="rl-fsbi-kpi-<?php echo esc_attr( $card_id ); ?>-delta"></span>
-				<canvas class="rl-fsbi-kpi-spark" id="rl-fsbi-kpi-<?php echo esc_attr( $card_id ); ?>-spark" height="34" aria-hidden="true"></canvas>
+				<div class="rl-fsbi-kpi-spark" hidden><canvas id="rl-fsbi-kpi-<?php echo esc_attr( $card_id ); ?>-spark" aria-hidden="true"></canvas></div>
 			</div>
 		<?php endforeach; ?>
 	</div>

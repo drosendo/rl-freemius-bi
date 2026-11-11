@@ -1982,11 +1982,21 @@ p.rl-fsbi-field-desc,
 .rl-fsbi-kpi-delta.is-warn { color: #fbbf24; }
 .rl-fsbi-kpi-delta.is-bad  { color: #ff5a72; }
 
+/* Chart.js writes height:100% onto the canvas and sizes it from its parent.
+   On the canvas itself that resolves against the card the canvas is growing,
+   so the height lives on a positioned wrapper and the canvas is stretched to
+   fill it. */
 .rl-fsbi-kpi-spark {
-	display: block;
-	width: 100%;
+	position: relative;
 	height: 34px;
 	margin-top: 6px;
+	overflow: hidden;
+}
+
+.rl-fsbi-kpi-spark canvas {
+	display: block;
+	width: 100% !important;
+	height: 100% !important;
 }
 
 @media (max-width: 1400px) {

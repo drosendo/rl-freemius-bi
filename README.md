@@ -1018,6 +1018,14 @@ Deltas carry an arrow plus words ("▲ 4.2% vs previous", "behind · 1/5") so co
 
 Verified at 1280px: New subscriptions `1 | behind · 1/5`, Net revenue `249,99 € | ▼ 58.4% vs previous`, Churn `1.6%`, attention `1 subscriptions with a failed payment`, waterfall `49,99 / 41,99 / 10,27 / 81,71`, KPI cards at 3 per row. Eight tab switches including revisits produced **no dialogs and no console errors**.
 
+### Unreleased - the KPI cards grew without bound
+
+Chart.js writes `height: 100%` onto the canvas and measures itself from its parent. The sparkline canvas carried `height: 34px` itself, which Chart.js simply overwrote, so `100%` resolved against the card the canvas was inside - the canvas asked the card to be as tall as the canvas, and the card obliged. On a fresh load the five cards grew past the fold and kept going.
+
+The height now lives on a positioned wrapper that Chart.js can measure, and the canvas is stretched to fill it, so the loop has nothing to resolve against. Two further faults came out of the same code: the four cards with no series kept a 150px-tall empty canvas, which rendered as a blank strip with a broken-image glyph, and those strips now stay hidden until a series exists. Verified at 1920, 1280 and 1024: the row is 136px tall, the sparkline is exactly 34px and paints 539 pixels, cards do not move over a five-second wait or a tab round-trip, and there are no console errors.
+
+Only the net revenue card has a sparkline today - the payload carries one six-month series. The other four cards have none until their series are added.
+
 ### Unreleased - four corrections to the Overview figures
 
 The rebuild shipped with two defects and two figures that did not match what Freemius reports. All four are fixed:
