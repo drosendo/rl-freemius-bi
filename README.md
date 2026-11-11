@@ -931,6 +931,9 @@ bumping `Version:` means no site will ever see it.
 **Read-only summary endpoint.**
 - `GET /wp-json/rl-freemius-bi/v1/summary` returns new subscriptions per month split into new customers and reactivations, renewals, cancellations, refunds, MRR, coupon usage and net revenue per month in EUR — with no email addresses, user ids or keys. It accepts an application password as well as an admin session, clamps `months` to 1–36, falls back to EUR for an unrecognised currency, and refuses anonymous callers with `401`.
 
+**The doughnut charts were ellipses.**
+- The three doughnut canvases were pinned to `300x260` (currency, plan) and `500x230` (country), so Chart.js filled a rectangle and drew ovals. They now carry `aspect-ratio: 1 / 1` and keep a circle at any card width — measured `260x260` at 1600px and `115x115` at 820px, ratio 1.00 in both.
+
 ### 1.3.30 (2026-11-10)
 - **An autofilled email can no longer become a bogus Developer ID.** A vendor reported that the backfill failed after signing up, and that the browser had filled the Developer ID field with their email address. The field was a plain text input with no autocomplete hints, and the sanitizer kept only the digits — so `john1985@gmail.com` was saved as `1985`, a perfectly valid id belonging to someone else. Every request then authenticated as the wrong account, and the failure described the API rather than the field. The sanitizer now rejects non-numeric input and keeps the previous value, the backfill error names the missing or non-numeric credential, a notice on the plugin screens says the value was not saved, and the credential fields carry `autocomplete="off"` with a numeric keypad on mobile.
 

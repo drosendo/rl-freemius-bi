@@ -947,17 +947,15 @@
 	display: block;
 }
 
+/* A doughnut is a circle. The rules these replace pinned 300x260 (currency,
+   plan) and 500x230 (country), which drew ellipses. `aspect-ratio` keeps the
+   shape square whatever width the card ends up with. */
 #rl-fsbi-currency-chart,
+#rl-fsbi-country-chart,
 #rl-fsbi-plan-chart {
-	width: min(100%, 300px) !important;
-	height: 260px !important;
-	display: block;
-	margin: 0 auto;
-}
-
-#rl-fsbi-country-chart {
-	width: min(100%, 500px) !important;
-	height: 230px !important;
+	width: min(100%, 260px) !important;
+	height: auto !important;
+	aspect-ratio: 1 / 1;
 	display: block;
 	margin: 0 auto;
 }
