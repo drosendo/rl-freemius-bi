@@ -2726,3 +2726,12 @@ body[class*="rl-freemius-bi"] #wpfooter {
 	margin-top: 0;
 	margin-bottom: 0;
 }
+
+/* The framework reports a save with a bottom-corner toast, but it renders that
+   toast through SweetAlert2, whose stylesheet paints the dark dialog backdrop on
+   every container that carries `swal2-backdrop-show`. The whole admin screen
+   dimmed to grey for the life of the toast. Real dialogs keep their backdrop. */
+.rl-toast-container.swal2-container {
+	background-color: transparent !important;
+	box-shadow: none !important;
+}
