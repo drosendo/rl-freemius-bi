@@ -2731,7 +2731,13 @@
 
 			const lastSynced = document.getElementById('rl-fsbi-last-synced');
 			if (lastSynced) {
-				lastSynced.textContent = data.last_synced ? `Last synced ${data.last_synced}` : 'Never synced';
+				// Short enough to sit on the filter row without pushing the group
+				// past the bar's padding.
+				const syncedAt = String(data.last_synced || '');
+				const syncedDate = syncedAt ? new Date(syncedAt.replace(' ', 'T')) : null;
+				lastSynced.textContent = syncedDate && !Number.isNaN(syncedDate.getTime())
+					? `Synced ${syncedDate.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${syncedAt.slice(11, 16)}`
+					: (syncedAt ? `Synced ${syncedAt}` : 'Never synced');
 			}
 
 			// A funnel with nothing in it is a row of zeros pretending to be data.

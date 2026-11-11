@@ -2570,3 +2570,87 @@ p.rl-fsbi-field-desc,
 .rl-fsbi-activity-amount {
 	color: var(--fsbi-text, #e7ebff);
 }
+
+/* One line: the filter bar holds every control on a single row as soon as the
+   width allows it, shrinking the fields rather than stacking them. Below
+   1280px it wraps again, which is where four labelled fields stop fitting. */
+.rl-fsbi-dashboard .rl-fsbi-controls {
+	gap: 10px 14px;
+}
+
+.rl-fsbi-locked-plugin {
+	max-width: 190px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls input[type="date"] {
+	width: 132px;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-controls-right {
+	flex-wrap: nowrap;
+	gap: 10px 12px;
+	margin-left: auto;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-last-synced {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 150px;
+	font-size: 11px;
+}
+
+/* One line above 1520px, which is the width the six controls actually need.
+   Below it the row wraps rather than spilling past the bar's padding. */
+@media (min-width: 1520px) {
+	.rl-fsbi-dashboard .rl-fsbi-controls {
+		flex-wrap: nowrap;
+	}
+
+	.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-field {
+		flex: 0 0 auto;
+	}
+
+	.rl-fsbi-dashboard .rl-fsbi-controls select {
+		flex: 0 0 auto;
+	}
+
+	.rl-fsbi-dashboard #rl-fsbi-currency-filter {
+		min-width: 150px;
+	}
+
+	.rl-fsbi-dashboard .rl-fsbi-locked-plugin {
+		max-width: 170px;
+	}
+
+	.rl-fsbi-dashboard .rl-fsbi-controls input[type="date"] {
+		width: 126px;
+	}
+
+	.rl-fsbi-dashboard .rl-fsbi-controls {
+		gap: 10px 12px;
+	}
+}
+
+/*
+ * Wrap below 1360, one line above it. Nothing shrinks: a field narrower than
+ * its own text overlaps the label beside it, which is what the earlier
+ * "everything on one line" attempt looked like.
+ */
+.rl-fsbi-dashboard .rl-fsbi-controls {
+	flex-wrap: wrap !important;
+}
+
+.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-field,
+.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-field > label,
+.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-field-label,
+.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-field select,
+.rl-fsbi-dashboard .rl-fsbi-controls .rl-fsbi-field input {
+	flex: 0 0 auto;
+}
+
+@media (min-width: 1520px) {
+	.rl-fsbi-dashboard .rl-fsbi-controls {
+		flex-wrap: nowrap !important;
+	}
+}

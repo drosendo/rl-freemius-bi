@@ -119,7 +119,7 @@ if ( ! defined( 'WPINC' ) ) {
 			</span>
 
 			<span class="rl-fsbi-field">
-			<label for="rl-fsbi-start-date"><?php echo esc_html__( 'Date Range:', 'rl-freemius-bi' ); ?></label>
+			<label for="rl-fsbi-start-date"><?php echo esc_html__( 'Dates:', 'rl-freemius-bi' ); ?></label>
 			<input type="date" id="rl-fsbi-start-date" value="<?php echo esc_attr( $initial_period_start ); ?>" aria-label="<?php echo esc_attr__( 'Start date', 'rl-freemius-bi' ); ?>" />
 			<span aria-hidden="true">—</span>
 			<input type="date" id="rl-fsbi-end-date" value="<?php echo esc_attr( $initial_period_end ); ?>" aria-label="<?php echo esc_attr__( 'End date', 'rl-freemius-bi' ); ?>" />
