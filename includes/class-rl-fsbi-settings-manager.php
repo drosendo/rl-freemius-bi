@@ -1481,9 +1481,15 @@ class RL_FSBI_Settings_Manager {
 	/**
 	 * Save the per-plugin WordPress.org slugs, validating each against the API.
 	 *
-	 * An unknown slug is dropped rather than stored: a typo would otherwise
-	 * render a WordPress.org widget full of zeros, which is worse than the
-	 * widget being absent.
+	 * A slug WordPress.org actively denies is dropped rather than stored: a typo
+	 * would otherwise render a widget full of zeros, which is worse than the
+	 * widget being absent. A slug we merely failed to confirm is kept — an
+	 * unreachable API is not evidence that the slug is wrong, and discarding it
+	 * left the admin staring at an empty field that looked saved.
+	 *
+	 * The submitted map is merged into the stored one, so a rejected entry can
+	 * never delete the other products' slugs. Emptying a field clears just that
+	 * product.
 	 *
 	 * @return void
 	 */
@@ -1494,22 +1500,40 @@ class RL_FSBI_Settings_Manager {
 
 		check_admin_referer( 'rl_fsbi_save_wporg_slugs' );
 
-		$input = isset( $_POST['wporg'] ) && is_array( $_POST['wporg'] ) ? wp_unslash( $_POST['wporg'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		$saved = array();
-		$rejected = array();
+		$input   = isset( $_POST['wporg'] ) && is_array( $_POST['wporg'] ) ? wp_unslash( $_POST['wporg'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$stored  = $this->get_option( 'rl_fsbi_wporg_slugs', array() );
+		$saved   = is_array( $stored ) ? $stored : array();
+
+		$rejected   = array();
+		$unverified = array();
+		$verified   = array();
 
 		foreach ( $input as $plugin_id => $slug ) {
 			$plugin_id = (int) $plugin_id;
 			$slug      = sanitize_title( (string) $slug );
 
-			if ( $plugin_id <= 0 || '' === $slug ) {
+			if ( $plugin_id <= 0 ) {
 				continue;
 			}
 
-			if ( $this->wporg_slug_exists( $slug ) ) {
-				$saved[ $plugin_id ] = $slug;
-			} else {
+			if ( '' === $slug ) {
+				unset( $saved[ $plugin_id ] );
+				continue;
+			}
+
+			$probe = $this->probe_wporg_slug( $slug );
+
+			if ( 'not_found' === $probe['state'] ) {
 				$rejected[] = $slug;
+				continue;
+			}
+
+			$saved[ $plugin_id ] = $slug;
+
+			if ( 'unverifiable' === $probe['state'] ) {
+				$unverified[] = $slug . ' (' . $probe['detail'] . ')';
+			} else {
+				$verified[] = $slug . ' ' . number_format_i18n( $probe['active_installs'] );
 			}
 		}
 
@@ -1526,22 +1550,47 @@ class RL_FSBI_Settings_Manager {
 		// was none.
 		update_option( 'rl_fsbi_cache_generation', time(), false );
 
-		$message = '1';
-		if ( ! empty( $rejected ) ) {
-			$message = sprintf(
-				/* translators: %s: comma separated slugs */
-				__( 'Not saved, no such plugin on WordPress.org: %s', 'rl-freemius-bi' ),
-				implode( ', ', array_map( 'sanitize_text_field', $rejected ) )
+		$parts = array();
+
+		if ( ! empty( $verified ) ) {
+			$parts[] = sprintf(
+				/* translators: %s: comma separated slugs with active install counts */
+				__( 'Saved and confirmed on WordPress.org: %s.', 'rl-freemius-bi' ),
+				implode( ', ', $verified )
 			);
+		}
+
+		if ( ! empty( $unverified ) ) {
+			$parts[] = sprintf(
+				/* translators: %s: comma separated slugs with the reason the check failed */
+				__( 'Saved, but WordPress.org could not be reached to confirm it: %s. The widget will fill in on the next successful sync.', 'rl-freemius-bi' ),
+				implode( ', ', $unverified )
+			);
+		}
+
+		if ( ! empty( $rejected ) ) {
+			$parts[] = sprintf(
+				/* translators: %s: comma separated slugs */
+				__( 'Not saved, no such plugin on WordPress.org: %s.', 'rl-freemius-bi' ),
+				implode( ', ', $rejected )
+			);
+		}
+
+		$message = empty( $parts ) ? '1' : implode( ' ', $parts );
+
+		$redirect_args = array(
+			'page'                => $this->framework ? $this->framework->get_config( 'page_slug' ) : 'rl-freemius-bi-settings',
+			'tab'                 => 'plugin_scope',
+			'rl_fsbi_wporg_saved' => rawurlencode( $message ),
+		);
+
+		if ( empty( $rejected ) && empty( $unverified ) ) {
+			$redirect_args['rl_fsbi_wporg_ok'] = '1';
 		}
 
 		wp_safe_redirect(
 			add_query_arg(
-				array(
-					'page'               => $this->framework ? $this->framework->get_config( 'page_slug' ) : 'rl-freemius-bi-settings',
-					'tab'                => 'plugin_scope',
-					'rl_fsbi_wporg_saved' => rawurlencode( $message ),
-				),
+				$redirect_args,
 				admin_url( 'admin.php' )
 			)
 		);
@@ -1549,12 +1598,16 @@ class RL_FSBI_Settings_Manager {
 	}
 
 	/**
-	 * Whether a slug resolves to a published WordPress.org plugin.
+	 * Ask WordPress.org about a slug.
+	 *
+	 * Three outcomes, because "I could not check" and "WordPress.org says no"
+	 * need different treatment: only the second justifies throwing away what the
+	 * admin typed.
 	 *
 	 * @param string $slug Plugin slug.
-	 * @return bool
+	 * @return array{state:string,detail:string,active_installs:int}
 	 */
-	private function wporg_slug_exists( string $slug ): bool {
+	private function probe_wporg_slug( string $slug ): array {
 		$url = add_query_arg(
 			array(
 				'action'        => 'plugin_information',
@@ -1564,13 +1617,51 @@ class RL_FSBI_Settings_Manager {
 		);
 
 		$response = wp_remote_get( $url, array( 'timeout' => 15, 'headers' => array( 'Accept' => 'application/json' ) ) );
-		if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
-			return false;
+
+		if ( is_wp_error( $response ) ) {
+			$this->log_wporg_probe( $slug, 'request_failed', $response->get_error_message() );
+
+			return array( 'state' => 'unverifiable', 'detail' => $response->get_error_message(), 'active_installs' => 0 );
 		}
 
+		$code = (int) wp_remote_retrieve_response_code( $response );
 		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
 
-		return is_array( $body ) && empty( $body['error'] );
+		if ( 404 === $code || ( is_array( $body ) && ! empty( $body['error'] ) ) ) {
+			$this->log_wporg_probe( $slug, 'not_found', 'HTTP ' . $code );
+
+			return array( 'state' => 'not_found', 'detail' => 'HTTP ' . $code, 'active_installs' => 0 );
+		}
+
+		if ( 200 !== $code || ! is_array( $body ) ) {
+			$this->log_wporg_probe( $slug, 'unverifiable', 'HTTP ' . $code );
+
+			return array( 'state' => 'unverifiable', 'detail' => 'HTTP ' . $code, 'active_installs' => 0 );
+		}
+
+		$this->log_wporg_probe( $slug, 'found', 'HTTP 200' );
+
+		return array(
+			'state'           => 'found',
+			'detail'          => 'HTTP 200',
+			'active_installs' => isset( $body['active_installs'] ) ? (int) $body['active_installs'] : 0,
+		);
+	}
+
+	/**
+	 * Record a WordPress.org lookup when Debug Mode is on.
+	 *
+	 * @param string $slug   Plugin slug.
+	 * @param string $state  Outcome label.
+	 * @param string $detail HTTP status or error message.
+	 * @return void
+	 */
+	private function log_wporg_probe( string $slug, string $state, string $detail ): void {
+		if ( ! $this->is_debug_mode() ) {
+			return;
+		}
+
+		error_log( sprintf( '[rl-fsbi] wp.org probe slug=%s state=%s detail=%s', $slug, $state, $detail ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 	}
 
 	/**
@@ -1600,6 +1691,7 @@ class RL_FSBI_Settings_Manager {
 		$catalog = is_array( $catalog ) ? $catalog : array();
 
 		$message = isset( $_GET['rl_fsbi_wporg_saved'] ) ? sanitize_text_field( wp_unslash( $_GET['rl_fsbi_wporg_saved'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$fully_saved = isset( $_GET['rl_fsbi_wporg_ok'] ) && '1' === $_GET['rl_fsbi_wporg_ok']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 		ob_start();
 		?>
@@ -1616,7 +1708,7 @@ class RL_FSBI_Settings_Manager {
 			<?php if ( '1' === $message ) : ?>
 				<div class="notice notice-success inline" style="margin:0 0 10px;"><p><?php esc_html_e( 'WordPress.org slugs saved.', 'rl-freemius-bi' ); ?></p></div>
 			<?php elseif ( '' !== $message ) : ?>
-				<div class="notice notice-warning inline" style="margin:0 0 10px;"><p><?php echo esc_html( $message ); ?></p></div>
+				<div class="notice <?php echo $fully_saved ? 'notice-success' : 'notice-warning'; ?> inline" style="margin:0 0 10px;"><p><?php echo esc_html( $message ); ?></p></div>
 			<?php endif; ?>
 
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
@@ -1641,9 +1733,13 @@ class RL_FSBI_Settings_Manager {
 							<td>
 								<input type="text" name="wporg[<?php echo esc_attr( (string) $plugin_id ); ?>]"
 									value="<?php echo esc_attr( $stored ); ?>"
-									placeholder="<?php echo esc_attr( $freemius ); ?>"
+									placeholder="<?php echo esc_attr__( 'e.g. my-plugin-slug', 'rl-freemius-bi' ); ?>"
 									aria-label="<?php echo esc_attr( sprintf( /* translators: %s: plugin title */ __( 'WordPress.org slug for %s', 'rl-freemius-bi' ), $title ) ); ?>" />
-								<span class="rl-fsbi-wporg-note"><?php esc_html_e( 'Leave empty if this product is not on WordPress.org.', 'rl-freemius-bi' ); ?></span>
+								<?php if ( '' !== $stored ) : ?>
+									<span class="rl-fsbi-wporg-note"><?php echo esc_html( sprintf( /* translators: %s: stored slug */ __( 'Saved: %s', 'rl-freemius-bi' ), $stored ) ); ?></span>
+								<?php else : ?>
+									<span class="rl-fsbi-wporg-note"><?php esc_html_e( 'Nothing saved - the WordPress.org widget is not shown for this product. Leave empty if it is not on WordPress.org.', 'rl-freemius-bi' ); ?></span>
+								<?php endif; ?>
 							</td>
 						</tr>
 					<?php endforeach; ?>
