@@ -4018,15 +4018,27 @@ class RL_FSBI_Admin
 		}
 
 		$summary = $this->settings->get_option(RL_FSBI_Detection::OPTION_SUMMARY, array());
-		if (! is_array($summary) || empty($summary)) {
-			return;
-		}
-
 		$accepted = (string) $this->settings->get_option(RL_FSBI_Detection::OPTION_ACCEPTED, '');
 
 		$accept_url = wp_nonce_url(add_query_arg('action', 'rl_fsbi_detection_accept', admin_url('admin-post.php')), 'rl_fsbi_detection_accept');
 		$redetect_url = wp_nonce_url(add_query_arg('action', 'rl_fsbi_detection_redetect', admin_url('admin-post.php')), 'rl_fsbi_detection_redetect');
 		$edit_url = admin_url('admin.php?page=rl-freemius-bi-settings&tab=plugin_scope');
+
+		if (! is_array($summary) || empty($summary)) {
+			// Detection only ever ran on a first full sync, so an account that had
+			// already synced before this version never produced a summary and never
+			// saw this screen at all. Offer it instead of hiding it.
+			if ('' === trim((string) $this->settings->get_option('rl_fsbi_developer_id', ''))) {
+				return;
+			}
+
+			echo '<div class="notice notice-info rl-fsbi-detection-notice"><p><strong>' . esc_html__('Setup not detected yet', 'rl-freemius-bi') . '</strong> ';
+			echo '<span class="description">' . esc_html__('The commission model, currencies, plans and WordPress.org slug can be read from your own Freemius data. Nothing is applied until you accept the result.', 'rl-freemius-bi') . '</span></p>';
+			echo '<p><a href="' . esc_url($redetect_url) . '" class="button button-primary">' . esc_html__('Run detection', 'rl-freemius-bi') . '</a> ';
+			echo '<a href="' . esc_url($edit_url) . '" class="button">' . esc_html__('Set it manually', 'rl-freemius-bi') . '</a></p></div>';
+
+			return;
+		}
 
 		$rows = array(
 			__('Commission model', 'rl-freemius-bi') => (string) ($summary['model_label'] ?? '—'),
