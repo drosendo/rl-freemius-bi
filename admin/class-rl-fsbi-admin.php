@@ -165,7 +165,7 @@ class RL_FSBI_Admin
 		}
 
 		$css_path = RL_FSBI_PLUGIN_DIR . 'assets/css/admin/rl-fsbi-admin.css';
-		$ver      = file_exists($css_path) ? filemtime($css_path) : $this->version;
+		$ver      = $this->asset_version('assets/css/admin/rl-fsbi-admin.css');
 
 		wp_enqueue_style(
 			$this->plugin_name . '-admin',
@@ -174,6 +174,28 @@ class RL_FSBI_Admin
 			$ver,
 			'all'
 		);
+	}
+
+	/**
+	 * Cache-busting stamp for a plugin asset.
+	 *
+	 * The host serves these files with a 30-day max-age, and an FTP upload does
+	 * not always change the file's modification time, so filemtime() alone can
+	 * hand the browser a URL it has already cached. The size is part of the stamp
+	 * because content that changed always changes one of the two.
+	 *
+	 * @param string $relative Path under the plugin directory.
+	 * @return string
+	 */
+	private function asset_version($relative)
+	{
+		$path = RL_FSBI_PLUGIN_DIR . ltrim($relative, '/');
+
+		if (! file_exists($path)) {
+			return (string) $this->version;
+		}
+
+		return filemtime($path) . '.' . filesize($path);
 	}
 
 	/**
@@ -186,7 +208,7 @@ class RL_FSBI_Admin
 	{
 		$path = RL_FSBI_PLUGIN_DIR . 'assets/lib/' . ltrim($relative, '/');
 
-		return file_exists($path) ? (string) filemtime($path) : $this->version;
+		return $this->asset_version('assets/lib/' . $relative);
 	}
 
 	/**
@@ -231,7 +253,7 @@ class RL_FSBI_Admin
 			wp_register_script('rl-freemius-bi-settings-rl-logger', false);
 
 			$settings_js_path = RL_FSBI_PLUGIN_DIR . 'assets/js/admin/rl-fsbi-settings.js';
-			$settings_js_ver  = file_exists($settings_js_path) ? filemtime($settings_js_path) : $this->version;
+			$settings_js_ver  = $this->asset_version('assets/js/admin/rl-fsbi-settings.js');
 
 			wp_enqueue_script(
 				$this->plugin_name . '-settings',
@@ -266,7 +288,7 @@ class RL_FSBI_Admin
 		wp_enqueue_style('datatables-css', RL_FSBI_PLUGIN_URL . 'assets/lib/datatables/jquery.dataTables.min.css', array(), $this->lib_version('datatables/jquery.dataTables.min.css'), 'all');
 
 		$admin_js_path = RL_FSBI_PLUGIN_DIR . 'assets/js/admin/rl-fsbi-admin.js';
-		$admin_js_ver  = file_exists($admin_js_path) ? filemtime($admin_js_path) : $this->version;
+		$admin_js_ver  = $this->asset_version('assets/js/admin/rl-fsbi-admin.js');
 
 		wp_enqueue_script(
 			$this->plugin_name . '-admin',

@@ -990,6 +990,12 @@ bumping `Version:` means no site will ever see it.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
 
+### Unreleased - cache busting that survives an FTP upload
+
+The host serves plugin assets with `Cache-Control: max-age=2592000`, so the only thing that can force a refresh is the `?ver=` query string. CSS and JS were already stamped with `filemtime()`, but an FTP upload does not always change a file's modification time, and a review ran against a browser copy from four minutes earlier.
+
+Every plugin asset is now stamped `mtime.size`, so content that changed always changes the URL even when the timestamp does not.
+
 ### Unreleased - one payout, one gross, one net
 
 Four figures were still being computed twice. All four now come from `summarise_month_payments()` or from `estimate_payout_date()`:
