@@ -74,7 +74,7 @@ class RL_FSBI_Field_Date implements RL_FSBI_Field_Interface, RL_FSBI_Field_Proce
 		if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $raw, $matches) || !checkdate((int) $matches[2], (int) $matches[3], (int) $matches[1])) {
 			$error = sprintf(
 				/* translators: %s: field label */
-				__('%s must be a valid date (YYYY-MM-DD).', 'smart-variations-images-premium'),
+				__('%s must be a valid date (YYYY-MM-DD).', RL_FSBI_Options_Framework::text_domain()),
 				$field_label
 			);
 			return false;
@@ -83,7 +83,7 @@ class RL_FSBI_Field_Date implements RL_FSBI_Field_Interface, RL_FSBI_Field_Proce
 		if (isset($field['min']) && preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', (string) $field['min'], $min_match) && checkdate((int) $min_match[2], (int) $min_match[3], (int) $min_match[1]) && strcmp($raw, (string) $field['min']) < 0) {
 			$error = sprintf(
 				/* translators: 1: field label, 2: min date */
-				__('%1$s must be on or after %2$s.', 'smart-variations-images-premium'),
+				__('%1$s must be on or after %2$s.', RL_FSBI_Options_Framework::text_domain()),
 				$field_label,
 				$field['min']
 			);
@@ -93,7 +93,7 @@ class RL_FSBI_Field_Date implements RL_FSBI_Field_Interface, RL_FSBI_Field_Proce
 		if (isset($field['max']) && preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', (string) $field['max'], $max_match) && checkdate((int) $max_match[2], (int) $max_match[3], (int) $max_match[1]) && strcmp($raw, (string) $field['max']) > 0) {
 			$error = sprintf(
 				/* translators: 1: field label, 2: max date */
-				__('%1$s must be on or before %2$s.', 'smart-variations-images-premium'),
+				__('%1$s must be on or before %2$s.', RL_FSBI_Options_Framework::text_domain()),
 				$field_label,
 				$field['max']
 			);

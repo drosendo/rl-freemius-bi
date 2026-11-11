@@ -47,8 +47,9 @@ class RL_FSBI_Settings_Manager {
 		// whichever plugin defined the framework first.
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/fields/class-rl-field-interface.php';
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/library/rloptionsFramework/fields/class-rl-field-processing-interface.php';
+		// The framework ships its own Password field from 2.5.1; this plugin used to
+		// add one because it did not, and the two class names collided.
 		require_once RL_FSBI_PLUGIN_DIR . 'includes/fields/class-rl-fsbi-field-checkbox-list.php';
-		require_once RL_FSBI_PLUGIN_DIR . 'includes/fields/class-rl-fsbi-field-password.php';
 
 		$this->framework = new RL_FSBI_Options_Framework(
 			array(
@@ -72,7 +73,6 @@ class RL_FSBI_Settings_Manager {
 			function ( $fw ) {
 				if ( $fw instanceof RL_FSBI_Options_Framework ) {
 					$fw->register_field_renderer( new RL_FSBI_Field_Checkbox_List() );
-					$fw->register_field_renderer( new RL_FSBI_Field_Password() );
 				}
 			}
 		);
@@ -81,7 +81,6 @@ class RL_FSBI_Settings_Manager {
 
 		// Register custom field renderers after init so field_registry is initialized
 		$this->framework->register_field_renderer( new RL_FSBI_Field_Checkbox_List() );
-		$this->framework->register_field_renderer( new RL_FSBI_Field_Password() );
 
 		$this->add_tabs();
 		$this->add_sections();
@@ -2493,7 +2492,6 @@ class RL_FSBI_Settings_Manager {
 		if ( $this->framework ) {
 			$this->framework->init();
 			$this->framework->register_field_renderer( new RL_FSBI_Field_Checkbox_List() );
-			$this->framework->register_field_renderer( new RL_FSBI_Field_Password() );
 		}
 	}
 

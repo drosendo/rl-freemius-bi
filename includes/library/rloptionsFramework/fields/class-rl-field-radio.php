@@ -53,7 +53,7 @@ class RL_FSBI_Field_Radio implements RL_FSBI_Field_Interface, RL_FSBI_Field_Proc
 		if (!in_array((string) $value, $allowed, true)) {
 			$error = sprintf(
 				/* translators: %s: field label */
-				__('%s has an invalid option selected.', 'smart-variations-images-premium'),
+				__('%s has an invalid option selected.', RL_FSBI_Options_Framework::text_domain()),
 				$field_label
 			);
 			return false;

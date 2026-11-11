@@ -60,13 +60,15 @@ class RL_FSBI_Field_Color_Palette implements RL_FSBI_Field_Interface, RL_FSBI_Fi
 		}
 
 		$options    = $this->normalize_options((array) $raw_options);
-		$size       = in_array($field['size'] ?? 'medium', ['small', 'medium', 'large'], true) ? $field['size'] : 'medium';
-		$shape      = in_array($field['shape'] ?? 'round', ['round', 'square'], true) ? $field['shape'] : 'round';
+		$size       = (string) ($field['size'] ?? 'medium');
+		$size       = in_array($size, ['small', 'medium', 'large'], true) ? $size : 'medium';
+		$shape      = (string) ($field['shape'] ?? 'round');
+		$shape      = in_array($shape, ['round', 'square'], true) ? $shape : 'round';
 		$show_label = !empty($field['show_label']);
 		$current    = (string) ($value ?? ($field['default'] ?? ''));
 
 		if (empty($options)) {
-			echo '<p class="description">' . esc_html__('No color palette options configured.', 'smart-variations-images-premium') . '</p>';
+			echo '<p class="description">' . esc_html__('No color palette options configured.', RL_FSBI_Options_Framework::text_domain()) . '</p>';
 			return;
 		}
 
@@ -195,7 +197,7 @@ class RL_FSBI_Field_Color_Palette implements RL_FSBI_Field_Interface, RL_FSBI_Fi
 			if (!$matched) {
 				$error = sprintf(
 					/* translators: %s: field label */
-					__('%s has an invalid color selected.', 'smart-variations-images-premium'),
+					__('%s has an invalid color selected.', RL_FSBI_Options_Framework::text_domain()),
 					$field_label
 				);
 				return false;
@@ -211,7 +213,7 @@ class RL_FSBI_Field_Color_Palette implements RL_FSBI_Field_Interface, RL_FSBI_Fi
 
 		$error = sprintf(
 			/* translators: %s: field label */
-			__('%s must be a valid color.', 'smart-variations-images-premium'),
+			__('%s must be a valid color.', RL_FSBI_Options_Framework::text_domain()),
 			$field_label
 		);
 		return false;

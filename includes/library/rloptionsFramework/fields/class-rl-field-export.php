@@ -14,11 +14,11 @@ class RL_FSBI_Field_Export implements RL_FSBI_Field_Interface
 
 	public function render(array $field, $value, array $context = []): void
 	{
-		$framework = RL_FSBI_Options_Framework::instance();
+		$framework = $context['framework'] ?? RL_FSBI_Options_Framework::instance();
 		$json = $framework->export_settings();
 
-		$label = $field['button_label'] ?? __('Download Export File', 'smart-variations-images-premium');
-		$desc = $field['description'] ?? __('Download a complete backup of your current settings as a JSON file.', 'smart-variations-images-premium');
+		$label = $field['button_label'] ?? __('Download Export File', RL_FSBI_Options_Framework::text_domain());
+		$desc = $field['description'] ?? __('Download a complete backup of your current settings as a JSON file.', RL_FSBI_Options_Framework::text_domain());
 
 		if (!empty($desc)) {
 			echo '<p>' . wp_kses_post($desc) . '</p>';

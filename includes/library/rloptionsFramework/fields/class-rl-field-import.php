@@ -14,14 +14,14 @@ class RL_FSBI_Field_Import implements RL_FSBI_Field_Interface, RL_FSBI_Field_Pro
 
 	public function render(array $field, $value, array $context = []): void
 	{
-		$desc = $field['description'] ?? __('Select a previously exported JSON file to import settings.', 'smart-variations-images-premium');
-		$status_msg = $field['status_message'] ?? __('File loaded! Click "Save Changes" below to apply the import.', 'smart-variations-images-premium');
+		$desc = $field['description'] ?? __('Select a previously exported JSON file to import settings.', RL_FSBI_Options_Framework::text_domain());
+		$status_msg = $field['status_message'] ?? __('File loaded! Click "Save Changes" below to apply the import.', RL_FSBI_Options_Framework::text_domain());
 
 		if (!empty($desc)) {
 			echo '<p>' . wp_kses_post($desc) . '</p>';
 		}
 
-		$framework = RL_FSBI_Options_Framework::instance();
+		$framework = $context['framework'] ?? RL_FSBI_Options_Framework::instance();
 		$import_input_name = $framework->get_config('form_field_prefix') . '_import_json';
 
 		// File input for the user

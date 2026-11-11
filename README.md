@@ -990,6 +990,22 @@ bumping `Version:` means no site will ever see it.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
 
+### Unreleased - RL Options Framework 2.5.1
+
+Pulled from [drosendo/rl-options-framework](https://github.com/drosendo/rl-options-framework) (2.2.0 → 2.5.1) and re-vendored under `includes/library/rloptionsFramework/`, keeping the `RL_FSBI_` prefix so the copy cannot collide with the one RL Support Tickets ships.
+
+What the update brings:
+
+- **A blank optional `number` / `slider` field no longer aborts the whole save.** The workaround that declared those fields as `text` here can be undone.
+- **A field that renders its own `<form>` can no longer orphan the Save button** — the tags are stripped and the field is named in a log entry.
+- **Vendor handles are prefixed per instance** instead of registering `sweetalert2` / `tippy` globally.
+- **A second bundled copy is reported** via `rl_options_framework_duplicate_copy` instead of being silently reused.
+- `RL_OPTIONS_FRAMEWORK_VERSION` / `_FILE` identify the loaded copy.
+
+One adjustment in the host: the framework now ships its own `Password` field, whose class name collided with the one this plugin added when the framework had none. Ours is deleted and the built-in is used.
+
+Verified: framework reports 2.5.1, the settings page renders all 68 fields under `rl_options[...]` with a working Save, and the dashboard loads with its five KPIs and no fatals.
+
 ### Unreleased - one vertical rhythm for every card
 
 The panels are `display: contents`, so their cards land as siblings at different nesting depths and no single margin rule reached them all. That is how the Retention block ended up touching the churn chart while the Overview was correctly spaced.

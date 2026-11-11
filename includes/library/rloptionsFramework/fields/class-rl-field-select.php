@@ -34,7 +34,16 @@ class RL_FSBI_Field_Select implements RL_FSBI_Field_Interface, RL_FSBI_Field_Pro
 		$allowed_option_keys_callback = $context['allowed_option_keys_callback'] ?? null;
 		$allowed = is_callable($allowed_option_keys_callback) ? $allowed_option_keys_callback($field, $context['validation_context'] ?? []) : array_keys($field['options'] ?? []);
 		$allowed = array_map('strval', $allowed);
-		return in_array((string) $value, $allowed, true) ? (string) $value : ($field['default'] ?? null);
+
+		$candidate = is_scalar($value) ? (string) $value : '';
+		if (in_array($candidate, $allowed, true)) {
+			return $candidate;
+		}
+
+		// Never persist a default that is not part of the allowed option set.
+		$default = isset($field['default']) && is_scalar($field['default']) ? (string) $field['default'] : '';
+
+		return ($default !== '' && in_array($default, $allowed, true)) ? $default : '';
 	}
 
 	public function validate(array $field, $value, string &$error, array $context = []): bool
@@ -52,7 +61,7 @@ class RL_FSBI_Field_Select implements RL_FSBI_Field_Interface, RL_FSBI_Field_Pro
 		if (!in_array((string) $value, $allowed, true)) {
 			$error = sprintf(
 				/* translators: %s: field label */
-				__('%s has an invalid option selected.', 'smart-variations-images-premium'),
+				__('%s has an invalid option selected.', RL_FSBI_Options_Framework::text_domain()),
 				$field_label
 			);
 			return false;

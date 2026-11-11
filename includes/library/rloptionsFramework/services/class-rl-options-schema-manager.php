@@ -43,9 +43,9 @@ class RL_FSBI_Options_Schema_Manager {
 	 */
 	public function add_tab( string $slug, array $args ): void {
 		$args = $this->normalize_tab( $slug, $args );
-		$tabs = $this->framework->get_tabs();
+		$tabs = $this->framework->get_raw_tabs();
 		$tabs[ $slug ] = $args;
-		$this->framework->set_tabs( $tabs );
+		$this->framework->set_raw_tabs( $tabs );
 	}
 
 	/**
@@ -56,7 +56,7 @@ class RL_FSBI_Options_Schema_Manager {
 	 * @param array  $section     Section configuration.
 	 */
 	public function add_section( string $tab_slug, string $section_id, array $section ): void {
-		$tabs = $this->framework->get_tabs();
+		$tabs = $this->framework->get_raw_tabs();
 		if ( ! isset( $tabs[ $tab_slug ] ) ) {
 			$tabs[ $tab_slug ] = [
 				'label'    => ucwords( str_replace( '_', ' ', $tab_slug ) ),
@@ -67,7 +67,7 @@ class RL_FSBI_Options_Schema_Manager {
 
 		$section                                = $this->normalize_section( $section_id, $section );
 		$tabs[ $tab_slug ]['sections'][ $section_id ] = $section;
-		$this->framework->set_tabs( $tabs );
+		$this->framework->set_raw_tabs( $tabs );
 	}
 
 	/**
@@ -78,10 +78,10 @@ class RL_FSBI_Options_Schema_Manager {
 	 * @param array  $field       Field configuration.
 	 */
 	public function add_field( string $tab_slug, string $section_id, array $field ): void {
-		$tabs = $this->framework->get_tabs();
+		$tabs = $this->framework->get_raw_tabs();
 		if ( ! isset( $tabs[ $tab_slug ]['sections'][ $section_id ] ) ) {
 			$this->add_section( $tab_slug, $section_id, [ 'title' => ucwords( str_replace( '_', ' ', $section_id ) ) ] );
-			$tabs = $this->framework->get_tabs();
+			$tabs = $this->framework->get_raw_tabs();
 		}
 
 		$field = $this->normalize_field( $field );
@@ -90,7 +90,7 @@ class RL_FSBI_Options_Schema_Manager {
 		}
 
 		$tabs[ $tab_slug ]['sections'][ $section_id ]['fields'][ $field['id'] ] = $field;
-		$this->framework->set_tabs( $tabs );
+		$this->framework->set_raw_tabs( $tabs );
 	}
 
 	/**
@@ -104,6 +104,30 @@ class RL_FSBI_Options_Schema_Manager {
 		foreach ( $fields as $field ) {
 			$this->add_field( $tab_slug, $section_id, $field );
 		}
+	}
+
+	/**
+	 * Normalize a full tabs tree (used after the tabs filter runs).
+	 *
+	 * Definitions registered by third parties through the
+	 * `{option_name}_framework_tabs` filter bypass add_tab()/add_field(), so they
+	 * must be normalized here to get the same schema guarantees (including the
+	 * legacy `show_if` alias).
+	 *
+	 * @param array $tabs Tab definitions.
+	 */
+	public function normalize_tabs( array $tabs ): array {
+		$normalized = [];
+
+		foreach ( $tabs as $slug => $tab ) {
+			if ( ! is_array( $tab ) ) {
+				continue;
+			}
+
+			$normalized[ $slug ] = $this->normalize_tab( (string) $slug, $tab );
+		}
+
+		return $normalized;
 	}
 
 	/**
@@ -183,6 +207,14 @@ class RL_FSBI_Options_Schema_Manager {
 	public function normalize_conditions( array $item ): array {
 		$conditions = $item['conditions'] ?? [];
 
+		// Backward compatibility: legacy aliases map onto conditions.
+		foreach ( [ 'show_if', 'visibility_rules' ] as $legacy_key ) {
+			if ( empty( $conditions ) && ! empty( $item[ $legacy_key ] ) && is_array( $item[ $legacy_key ] ) ) {
+				$conditions = $item[ $legacy_key ];
+				break;
+			}
+		}
+
 		if ( ! empty( $conditions ) && is_array( $conditions ) ) {
 			// Support single condition array not wrapped in another array
 			if ( isset( $conditions['field'] ) ) {
@@ -208,8 +240,13 @@ class RL_FSBI_Options_Schema_Manager {
 		];
 
 		if ( isset( $group['relation'] ) ) {
-			$normalized['relation'] = strtoupper( $group['relation'] ) === 'OR' ? 'OR' : 'AND';
+			$normalized['relation'] = 'OR' === strtoupper( (string) $group['relation'] ) ? 'OR' : 'AND';
 			unset( $group['relation'] );
+		}
+
+		// Canonical shape: ['relation' => 'OR', 'rules' => [ ... ]].
+		if ( isset( $group['rules'] ) && is_array( $group['rules'] ) ) {
+			$group = $group['rules'];
 		}
 
 		foreach ( $group as $rule ) {
@@ -218,7 +255,7 @@ class RL_FSBI_Options_Schema_Manager {
 			}
 
 			// If it's a nested group (has relation, or doesn't have 'field' but has numeric keys)
-			if ( isset( $rule['relation'] ) || ( ! isset( $rule['field'] ) && wp_is_numeric_array( $rule ) ) ) {
+			if ( isset( $rule['relation'] ) || isset( $rule['rules'] ) || ( ! isset( $rule['field'] ) && wp_is_numeric_array( $rule ) ) ) {
 				$sub_group = $this->normalize_condition_group( $rule );
 				if ( ! empty( $sub_group['rules'] ) ) {
 					$normalized['rules'][] = $sub_group;
@@ -342,9 +379,9 @@ class RL_FSBI_Options_Schema_Manager {
 			$debug_field => [
 				'id'       => $debug_field,
 				'type'     => 'toggle',
-				'label'    => __( 'Enable Debug Mode', 'smart-variations-images-premium' ),
-				'text'     => __( 'Enable debug logging', 'smart-variations-images-premium' ),
-				'desc'     => __( 'Enable verbose debug logging for troubleshooting. Disable on production sites.', 'smart-variations-images-premium' ),
+				'label'    => __( 'Enable Debug Mode', RL_FSBI_Options_Framework::text_domain() ),
+				'text'     => __( 'Enable debug logging', RL_FSBI_Options_Framework::text_domain() ),
+				'desc'     => __( 'Enable verbose debug logging for troubleshooting. Disable on production sites.', RL_FSBI_Options_Framework::text_domain() ),
 				'default'  => false,
 				'priority' => 10,
 			],
@@ -354,9 +391,9 @@ class RL_FSBI_Options_Schema_Manager {
 			$debug_fields[ $local_assets_field ] = [
 				'id'       => $local_assets_field,
 				'type'     => 'toggle',
-				'label'    => __( 'Use Local Assets', 'smart-variations-images-premium' ),
-				'text'     => __( 'Load options framework libraries locally (GDPR compliant)', 'smart-variations-images-premium' ),
-				'desc'     => __( 'Controls how the RL Options Framework loads its own UI libraries (SweetAlert2, Tippy.js, jQuery UI theme). When enabled, these are served from your server. When disabled, they are loaded from public CDNs. This setting does not affect any other plugin assets.', 'smart-variations-images-premium' ),
+				'label'    => __( 'Use Local Assets', RL_FSBI_Options_Framework::text_domain() ),
+				'text'     => __( 'Load options framework libraries locally (GDPR compliant)', RL_FSBI_Options_Framework::text_domain() ),
+				'desc'     => __( 'Controls how the RL Options Framework loads its own UI libraries (SweetAlert2, Tippy.js, jQuery UI theme). When enabled, these are served from your server. When disabled, they are loaded from public CDNs. This setting does not affect any other plugin assets.', RL_FSBI_Options_Framework::text_domain() ),
 				'default'  => true,
 				'priority' => 20,
 			];
@@ -364,12 +401,12 @@ class RL_FSBI_Options_Schema_Manager {
 
 		return [
 			'support' => [
-				'label'    => __( 'Support', 'smart-variations-images-premium' ),
+				'label'    => __( 'Support', RL_FSBI_Options_Framework::text_domain() ),
 				'priority' => 900,
 				'sections' => [
 					'debug' => [
 						'id'     => 'debug',
-						'title'  => __( 'Debug Settings', 'smart-variations-images-premium' ),
+						'title'  => __( 'Debug Settings', RL_FSBI_Options_Framework::text_domain() ),
 						'fields' => $debug_fields,
 					],
 				],
@@ -386,8 +423,13 @@ class RL_FSBI_Options_Schema_Manager {
 	 */
 	public function filter_tabs_by_conditions( array $tabs, array $options ): array {
 		foreach ( $tabs as $slug => &$tab ) {
-			if ( ! empty( $tab['conditions'] ) && is_array( $tab['conditions'] ) ) {
-				$tab['_hidden'] = ! $this->evaluate_condition_group( $tab['conditions'], $options );
+			$conditions = ! empty( $tab['conditions'] ) && is_array( $tab['conditions'] )
+				? $tab['conditions']
+				: $this->normalize_conditions( $tab );
+
+			if ( ! empty( $conditions ) ) {
+				$tab['conditions'] = $conditions;
+				$tab['_hidden']    = ! $this->evaluate_condition_group( $conditions, $options );
 			}
 		}
 
@@ -418,40 +460,39 @@ class RL_FSBI_Options_Schema_Manager {
 			} elseif ( isset( $rule['field'] ) ) {
 				// Leaf condition
 				$field_id       = $rule['field'];
-				$operator       = strtolower( $rule['operator'] ?? 'equals' );
+				$operator       = strtolower( (string) ( $rule['operator'] ?? 'equals' ) );
 				$expected_value = $rule['value'] ?? true;
 				$current_value  = $options[ $field_id ] ?? '';
-
-				// Normalize boolean comparisons for toggles
-				if ( is_bool( $expected_value ) ) {
-					$current_value = ! empty( $current_value );
-				}
-				
-				// Handle truthy / falsy fallback for toggles saved as string '1' or '0'
-				if ( $current_value === '1' && is_bool( $expected_value ) ) {
-					$current_value = true;
-				}
-				if ( $current_value === '0' && is_bool( $expected_value ) ) {
-					$current_value = false;
-				}
-				if ( $current_value === '' && is_bool( $expected_value ) ) {
-					$current_value = false;
-				}
 
 				switch ( $operator ) {
 					case 'equals':
 					case '==':
-						$result = $current_value === $expected_value;
+						$result = $this->values_equal( $current_value, $expected_value );
 						break;
 					case 'not_equals':
 					case '!=':
-						$result = $current_value !== $expected_value;
+						$result = ! $this->values_equal( $current_value, $expected_value );
 						break;
 					case 'in':
-						$result = is_array( $expected_value ) ? in_array( $current_value, $expected_value, true ) : $current_value === $expected_value;
+						if ( is_array( $expected_value ) ) {
+							foreach ( $expected_value as $candidate ) {
+								if ( $this->values_equal( $current_value, $candidate ) ) {
+									$result = true;
+									break;
+								}
+							}
+						} else {
+							$result = $this->values_equal( $current_value, $expected_value );
+						}
 						break;
 					case 'not_in':
-						$result = is_array( $expected_value ) ? ! in_array( $current_value, $expected_value, true ) : $current_value !== $expected_value;
+						$result = true;
+						foreach ( (array) $expected_value as $candidate ) {
+							if ( $this->values_equal( $current_value, $candidate ) ) {
+								$result = false;
+								break;
+							}
+						}
 						break;
 					case '>':
 					case 'greater_than':
@@ -489,5 +530,30 @@ class RL_FSBI_Options_Schema_Manager {
 		}
 
 		return $relation === 'AND';
+	}
+
+	/**
+	 * Type-tolerant comparison used by the condition engine.
+	 *
+	 * Saved option values are strings (or bools for toggles) while rule values
+	 * are usually typed in PHP, so '3' and 3 (or '1' and true) must compare equal.
+	 *
+	 * @param mixed $current  Current option value.
+	 * @param mixed $expected Expected rule value.
+	 */
+	private function values_equal( $current, $expected ): bool {
+		if ( is_bool( $current ) || is_bool( $expected ) ) {
+			return (bool) $current === (bool) $expected;
+		}
+
+		if ( is_array( $current ) || is_array( $expected ) ) {
+			return wp_json_encode( $current ) === wp_json_encode( $expected );
+		}
+
+		if ( is_numeric( $current ) && is_numeric( $expected ) ) {
+			return (float) $current === (float) $expected;
+		}
+
+		return (string) $current === (string) $expected;
 	}
 }

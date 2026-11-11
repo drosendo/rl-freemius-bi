@@ -61,7 +61,7 @@ class RL_FSBI_Field_Multiselect implements RL_FSBI_Field_Interface, RL_FSBI_Fiel
 			if (!in_array((string) $item, $allowed, true)) {
 				$error = sprintf(
 					/* translators: %s: field label */
-					__('%s includes an invalid option.', 'smart-variations-images-premium'),
+					__('%s includes an invalid option.', RL_FSBI_Options_Framework::text_domain()),
 					$field_label
 				);
 				return false;

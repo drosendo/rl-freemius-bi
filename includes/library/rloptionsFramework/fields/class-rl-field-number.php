@@ -38,21 +38,45 @@ class RL_FSBI_Field_Number implements RL_FSBI_Field_Interface, RL_FSBI_Field_Pro
 
 	public function sanitize(array $field, $value, array $context = [])
 	{
-		if (isset($field['step']) && floatval($field['step']) !== intval($field['step'])) {
-			return isset($value) ? floatval($value) : null;
+		$is_float = isset($field['step']) && (float) $field['step'] !== (float) (int) $field['step'];
+
+		if ($value === null || $value === '' || !is_numeric($value)) {
+			$fallback = isset($field['fallback']) && is_numeric($field['fallback'])
+				? $field['fallback']
+				: ($field['default'] ?? null);
+			if (!is_numeric($fallback)) {
+				$fallback = isset($field['min']) && is_numeric($field['min']) ? $field['min'] : 0;
+			}
+			$value = $fallback;
 		}
-		return isset($value) ? intval($value) : null;
+
+		$number = (float) $value;
+
+		if (isset($field['min']) && is_numeric($field['min']) && $number < (float) $field['min']) {
+			$number = (float) $field['min'];
+		}
+
+		if (isset($field['max']) && is_numeric($field['max']) && $number > (float) $field['max']) {
+			$number = (float) $field['max'];
+		}
+
+		return $is_float ? $number : (int) round($number);
 	}
 
 	public function validate(array $field, $value, string &$error, array $context = []): bool
 	{
 		$field_label = $context['field_label'] ?? 'Field';
-		$text_domain = $context['text_domain'] ?? 'default';
+
+		// Empty is valid here: required fields are rejected by the processor before
+		// type validation runs, so an untouched optional number must not fail the save.
+		if ($value === '' || $value === null) {
+			return true;
+		}
 
 		if (!is_numeric($value)) {
 			$error = sprintf(
 				/* translators: %s: field label */
-				__('%s must be a valid number.', 'smart-variations-images-premium'),
+				__('%s must be a valid number.', RL_FSBI_Options_Framework::text_domain()),
 				$field_label
 			);
 			return false;
@@ -61,7 +85,7 @@ class RL_FSBI_Field_Number implements RL_FSBI_Field_Interface, RL_FSBI_Field_Pro
 		if (isset($field['min']) && $value < $field['min']) {
 			$error = sprintf(
 				/* translators: 1: field label, 2: min value */
-				__('%1$s must be at least %2$s.', 'smart-variations-images-premium'),
+				__('%1$s must be at least %2$s.', RL_FSBI_Options_Framework::text_domain()),
 				$field_label,
 				$field['min']
 			);
@@ -71,7 +95,7 @@ class RL_FSBI_Field_Number implements RL_FSBI_Field_Interface, RL_FSBI_Field_Pro
 		if (isset($field['max']) && $value > $field['max']) {
 			$error = sprintf(
 				/* translators: 1: field label, 2: max value */
-				__('%1$s must be no more than %2$s.', 'smart-variations-images-premium'),
+				__('%1$s must be no more than %2$s.', RL_FSBI_Options_Framework::text_domain()),
 				$field_label,
 				$field['max']
 			);

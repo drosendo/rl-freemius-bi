@@ -27,6 +27,13 @@ class RL_FSBI_Options_Render_Service
 	private $framework;
 
 	/**
+	 * Current option values for the rendering request (avoids repeated lookups).
+	 *
+	 * @var array|null
+	 */
+	private ?array $current_options = null;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RL_FSBI_Options_Framework $framework Framework instance.
@@ -48,6 +55,7 @@ class RL_FSBI_Options_Render_Service
 		if (!is_array($options)) {
 			$options = [];
 		}
+		$this->current_options = $options;
 		$tabs = $this->framework->filter_tabs_by_conditions($tabs, $options);
 
 		$current_tab = $this->framework->get_current_tab_slug($tabs);
@@ -65,10 +73,10 @@ class RL_FSBI_Options_Render_Service
 
 			<?php if (empty($tabs)): ?>
 				<div class="notice notice-warning">
-					<p><?php esc_html_e('No settings tabs have been registered yet.', 'smart-variations-images-premium'); ?></p>
+					<p><?php esc_html_e('No settings tabs have been registered yet.', RL_FSBI_Options_Framework::text_domain()); ?></p>
 					<p><?php 
 						/* translators: %s: filter name */
-						printf(esc_html__('Use the %s filter to add settings tabs.', 'smart-variations-images-premium'), '<code>' . esc_html($this->framework->config['option_name'] . '_framework_tabs') . '</code>'); 
+						printf(esc_html__('Use the %s filter to add settings tabs.', RL_FSBI_Options_Framework::text_domain()), '<code>' . esc_html($this->framework->config['option_name'] . '_framework_tabs') . '</code>'); 
 					?></p>
 					</p>
 				</div>
@@ -79,12 +87,20 @@ class RL_FSBI_Options_Render_Service
 				<nav class="nav-tab-wrapper" role="tablist">
 					<?php foreach ($tabs as $slug => $tab): ?>
 						<?php
-						$active = $slug === $current_tab ? ' nav-tab-active' : '';
-						$hidden = !empty($tab['_hidden']) ? ' style="display:none;"' : '';
+						$is_active = $slug === $current_tab;
+						$is_hidden = !empty($tab['_hidden']);
+						$active = $is_active ? ' nav-tab-active' : '';
+						$hidden = $is_hidden ? ' style="display:none;"' : '';
 						$tab_visibility = $tab['conditions'] ?? [];
 						$tab_conditions = !empty($tab_visibility) ? ' data-tab-conditions=\'' . esc_attr(wp_json_encode($tab_visibility)) . '\'' : '';
 						?>
 						<a class="nav-tab<?php echo esc_attr($active); ?>" href="<?php echo esc_url($this->framework->get_tab_url($slug)); ?>"
+							id="<?php echo esc_attr('rl-tab-' . $slug); ?>"
+							role="tab"
+							aria-controls="<?php echo esc_attr('rl-panel-' . $slug); ?>"
+							aria-selected="<?php echo $is_active ? 'true' : 'false'; ?>"
+							tabindex="<?php echo $is_active ? '0' : '-1'; ?>"
+							<?php echo $is_hidden ? 'aria-hidden="true" ' : ''; ?>
 							data-rl-tab="<?php echo esc_attr($slug); ?>" <?php echo $tab_conditions; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?> <?php echo $hidden; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 							<?php echo esc_html($tab['label']); ?>
 						</a>
@@ -106,6 +122,10 @@ class RL_FSBI_Options_Render_Service
 						$hidden = !empty($tab['_hidden']) ? ' style="display:none;"' : '';
 						?>
 						<section class="rl-tab-panel<?php echo esc_attr($panel_active); ?>"
+							id="<?php echo esc_attr('rl-panel-' . $slug); ?>"
+							role="tabpanel"
+							aria-labelledby="<?php echo esc_attr('rl-tab-' . $slug); ?>"
+							aria-hidden="<?php echo $slug === $current_tab ? 'false' : 'true'; ?>"
 							data-rl-panel="<?php echo esc_attr($slug); ?>" <?php echo $hidden; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 							<?php
 							if (!empty($tab['description'])) {
@@ -128,7 +148,7 @@ class RL_FSBI_Options_Render_Service
 
 				<div class="rl-submit-bar">
 					<button type="submit" class="button button-primary">
-						<?php esc_html_e('Save changes', 'smart-variations-images-premium'); ?>
+						<?php esc_html_e('Save changes', RL_FSBI_Options_Framework::text_domain()); ?>
 					</button>
 				</div>
 			</form>
@@ -192,6 +212,15 @@ class RL_FSBI_Options_Render_Service
 		$section_id = $section['id'];
 
 		$section_classes = ['rl-section'];
+
+		if (!empty($section['class']) && is_string($section['class'])) {
+			foreach (preg_split('/\s+/', trim($section['class'])) as $extra_class) {
+				$extra_class = sanitize_html_class($extra_class);
+				if ('' !== $extra_class) {
+					$section_classes[] = $extra_class;
+				}
+			}
+		}
 		if ($is_accordion) {
 			$section_classes[] = 'is-accordion';
 		}
@@ -243,7 +272,7 @@ class RL_FSBI_Options_Render_Service
 	private function render_section_inner(array $section, array $options): void
 	{
 		if (empty($section['fields'])) {
-			echo '<p class="description">' . esc_html__('No settings available for this section yet.', 'smart-variations-images-premium') . '</p>';
+			echo '<p class="description">' . esc_html__('No settings available for this section yet.', RL_FSBI_Options_Framework::text_domain()) . '</p>';
 			return;
 		}
 
@@ -254,6 +283,24 @@ class RL_FSBI_Options_Render_Service
 			}
 			$this->render_field($field, $options, 0);
 		}
+	}
+
+	/**
+	 * Render one field row as a string.
+	 *
+	 * Public so the schema builder can show the *real* control while editing,
+	 * instead of a mock-up.
+	 *
+	 * @param array $field   Field configuration.
+	 * @param array $options Current option values.
+	 * @return string
+	 */
+	public function render_single_field(array $field, array $options = []): string
+	{
+		ob_start();
+		$this->render_field($field, $options, 0);
+
+		return (string) ob_get_clean();
 	}
 
 	/**
@@ -273,8 +320,24 @@ class RL_FSBI_Options_Render_Service
 		$field_type = $field['type'];
 		$field_label = $field['label'] ?? '';
 		$field_label = $this->framework->normalize_field_label((string) $field_label);
-		$field_desc = $field['description'] ?? $field['desc'] ?? '';
+		// `description` is always present after normalization, so pick the first non-empty value.
+		$field_desc = '';
+		foreach (['desc', 'description', 'tooltip'] as $desc_key) {
+			if (isset($field[$desc_key]) && '' !== trim((string) $field[$desc_key])) {
+				$field_desc = $field[$desc_key];
+				break;
+			}
+		}
 		$field_classes = ['rl-field', 'rl-field-' . $field_type];
+
+		if (!empty($field['class']) && is_string($field['class'])) {
+			foreach (preg_split('/\s+/', trim($field['class'])) as $extra_class) {
+				$extra_class = sanitize_html_class($extra_class);
+				if ('' !== $extra_class) {
+					$field_classes[] = $extra_class;
+				}
+			}
+		}
 
 		$field_value = $options[$field_id] ?? ($field['default'] ?? null);
 
@@ -315,6 +378,7 @@ class RL_FSBI_Options_Render_Service
 		if (!empty($field['width'])) {
 			$field_classes[] = 'rl-field-width-' . preg_replace('/[^a-z0-9_\-]/', '', $field['width']);
 		}
+
 
 		// Add indent classes if specified or inherited from nesting
 		$indent_level = null;
@@ -520,6 +584,49 @@ class RL_FSBI_Options_Render_Service
 	 */
 	private function render_field_control(array $field, $value): void
 	{
+		ob_start();
+		$this->render_field_control_markup($field, $value);
+
+		echo $this->strip_nested_forms((string) ob_get_clean(), $field); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- renderers escape their own output.
+	}
+
+	/**
+	 * Remove `<form>` tags emitted by a field renderer.
+	 *
+	 * The framework wraps every field in its own form. A renderer that prints a
+	 * nested form produces HTML the browser repairs by dropping the inner start tag
+	 * but honouring its end tag, which closes the outer form and leaves the Save
+	 * button orphaned outside it — a save that silently does nothing.
+	 *
+	 * @param string $html  Rendered field control markup.
+	 * @param array  $field Field definition.
+	 * @return string Markup without form tags.
+	 */
+	private function strip_nested_forms(string $html, array $field): string
+	{
+		if (!preg_match('#<form\b[^>]*>|</form\s*>#i', $html)) {
+			return $html;
+		}
+
+		RL_FSBI_Logger::warn(
+			'Field output contains a <form> tag. Nested forms close the settings form and break saving; the tag was stripped.',
+			[
+				'field' => (string) ($field['id'] ?? ''),
+				'type'  => (string) ($field['type'] ?? ''),
+			]
+		);
+
+		return (string) preg_replace('#<form\b[^>]*>|</form\s*>#i', '', $html);
+	}
+
+	/**
+	 * Build the field control markup.
+	 *
+	 * @param array       $field Field definition.
+	 * @param string|bool $value Current value.
+	 */
+	private function render_field_control_markup(array $field, $value): void
+	{
 		$field_id = $field['id'];
 		$field_name = $this->framework->get_input_name($field_id);
 		$input_id = $this->framework->get_input_id($field_id);
@@ -535,7 +642,8 @@ class RL_FSBI_Options_Render_Service
 						'input_id' => $input_id,
 						'field_name' => $field_name,
 						'text_domain' => (string) $this->framework->config['text_domain'],
-						'options_state' => $this->framework->get_options(),
+						'options_state' => $this->current_options ?? $this->framework->get_options(),
+						'framework' => $this->framework,
 						'geo_options_callback' => function (array $geo_field, string $geo_type, array $state = []): array {
 							return $this->framework->get_geo_field_options($geo_field, $geo_type, $state);
 						},

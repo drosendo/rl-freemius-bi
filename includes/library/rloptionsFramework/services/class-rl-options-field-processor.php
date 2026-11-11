@@ -37,6 +37,36 @@ class RL_FSBI_Options_Field_Processor {
 	}
 
 	/**
+	 * Whether a field type stores an array value (e.g. multiselect).
+	 *
+	 * @param array $field Field definition.
+	 */
+	public function accepts_array_value( array $field ): bool {
+		$type = (string) ( $field['type'] ?? 'text' );
+
+		if ( ! empty( $field['multiple'] ) ) {
+			return true;
+		}
+
+		// Composite renderers always store an array of sub-values.
+		$registry = $this->framework->field_registry();
+		$renderer = $registry ? $registry->get( $type ) : null;
+
+		if ( class_exists( 'RL_FSBI_Field_Composite' ) && $renderer instanceof RL_FSBI_Field_Composite ) {
+			return true;
+		}
+
+		$array_types = apply_filters(
+			'rl_options_framework_array_field_types',
+			[ 'multiselect', 'gallery', 'multi_text', 'sortable', 'sorter', 'country_state_city', 'button_set' ],
+			$field,
+			$this->framework
+		);
+
+		return in_array( $type, is_array( $array_types ) ? $array_types : [], true );
+	}
+
+	/**
 	 * Validate expected field schema and log warnings for invalid contracts.
 	 */
 	public function validate_field_schema( array $field ): void {
@@ -102,6 +132,11 @@ class RL_FSBI_Options_Field_Processor {
 		// Allow custom sanitize callback to take precedence
 		if ( isset( $field['sanitize_callback'] ) && is_callable( $field['sanitize_callback'] ) ) {
 			return call_user_func( $field['sanitize_callback'], $value, $field );
+		}
+
+		// Scalar field types must never receive array payloads.
+		if ( ! $this->accepts_array_value( $field ) && null !== $value && ! is_scalar( $value ) ) {
+			return '';
 		}
 
 		// Delegate to field type's processing interface if available
@@ -184,6 +219,16 @@ class RL_FSBI_Options_Field_Processor {
 		$config      = $this->framework->config;
 		$field_label = $this->get_field_label( $field );
 
+		// Scalar field types must never receive array payloads (e.g. field[]=x).
+		if ( ! $this->accepts_array_value( $field ) && null !== $value && ! is_scalar( $value ) ) {
+			$error = sprintf(
+				/* translators: %s: field title */
+				__( '%s has an invalid value.', RL_FSBI_Options_Framework::text_domain() ),
+				$field_label
+			);
+			return false;
+		}
+
 		// Custom validation callback takes precedence
 		if ( isset( $field['validate_callback'] ) && is_callable( $field['validate_callback'] ) ) {
 			$result = call_user_func( $field['validate_callback'], $value, $field );
@@ -194,7 +239,7 @@ class RL_FSBI_Options_Field_Processor {
 			if ( false === $result ) {
 				$error = sprintf(
 					/* translators: %s: field title */
-					__( '%s is invalid.', 'smart-variations-images-premium' ),
+					__( '%s is invalid.', RL_FSBI_Options_Framework::text_domain() ),
 					$field_label
 				);
 				return false;
@@ -206,7 +251,7 @@ class RL_FSBI_Options_Field_Processor {
 		if ( ! empty( $field['required'] ) && ( $value === null || $value === '' ) ) {
 			$error = sprintf(
 				/* translators: %s: field title */
-				__( '%s is required.', 'smart-variations-images-premium' ),
+				__( '%s is required.', RL_FSBI_Options_Framework::text_domain() ),
 				$field_label
 			);
 			return false;
@@ -216,7 +261,7 @@ class RL_FSBI_Options_Field_Processor {
 		if ( ! empty( $field['required_if'] ) && is_array( $field['required_if'] ) && $this->is_required_by_rules( $field['required_if'], $validation_context ) && ( $value === null || $value === '' ) ) {
 			$error = sprintf(
 				/* translators: %s: field title */
-				__( '%s is required for the selected dependency values.', 'smart-variations-images-premium' ),
+				__( '%s is required for the selected dependency values.', RL_FSBI_Options_Framework::text_domain() ),
 				$field_label
 			);
 			return false;
@@ -309,30 +354,83 @@ class RL_FSBI_Options_Field_Processor {
 		switch ( $operator ) {
 			case 'equals':
 			case '==':
-				if ( $current === null && ( $expected === '0' || $expected === false || $expected === '' ) ) {
-					return true;
-				}
-				return $current == $expected;
+				return $this->values_equal( $current, $expected );
 			case 'not_equals':
 			case '!=':
-				if ( $current === null && ( $expected === '0' || $expected === false || $expected === '' ) ) {
-					return false;
-				}
-				return $current != $expected;
+				return ! $this->values_equal( $current, $expected );
 			case 'in':
-				return is_array( $expected ) ? in_array( $current, $expected, true ) : $current == $expected;
+				foreach ( (array) $expected as $candidate ) {
+					if ( $this->values_equal( $current, $candidate ) ) {
+						return true;
+					}
+				}
+				return false;
 			case 'not_in':
-				return is_array( $expected ) ? ! in_array( $current, $expected, true ) : $current != $expected;
+				foreach ( (array) $expected as $candidate ) {
+					if ( $this->values_equal( $current, $candidate ) ) {
+						return false;
+					}
+				}
+				return true;
 			case 'empty':
 				return $current === null || $current === '' || $current === [];
 			case 'not_empty':
 				return ! ( $current === null || $current === '' || $current === [] );
 			case 'falsy':
 				return ! $current;
+			case 'contains':
+				if ( is_array( $current ) ) {
+					foreach ( $current as $item ) {
+						if ( $this->values_equal( $item, $expected ) ) {
+							return true;
+						}
+					}
+					return false;
+				}
+				return is_scalar( $current ) && is_scalar( $expected )
+					&& '' !== (string) $expected
+					&& false !== strpos( (string) $current, (string) $expected );
+			case 'match':
+				if ( ! is_scalar( $current ) || ! is_string( $expected ) || '' === $expected ) {
+					return false;
+				}
+
+				$delimiter    = substr( $expected, 0, 1 );
+				$is_delimited = strlen( $expected ) > 2
+					&& in_array( $delimiter, [ '/', '#', '~' ], true )
+					&& substr( $expected, -1 ) === $delimiter;
+				$pattern      = $is_delimited ? $expected : '/' . str_replace( '/', '\\/', $expected ) . '/';
+
+				return 1 === @preg_match( $pattern, (string) $current ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			case 'truthy':
 			default:
 				return (bool) $current;
 		}
+	}
+
+	/**
+	 * Type-tolerant comparison used by required_if rules.
+	 *
+	 * Stored option values are strings (or bools for toggles) while rule values
+	 * are usually typed in PHP, so '3' must match 3 and '1' must match true.
+	 *
+	 * @param mixed $current  Current option value.
+	 * @param mixed $expected Expected rule value.
+	 */
+	private function values_equal( $current, $expected ): bool {
+		if ( is_bool( $current ) || is_bool( $expected ) ) {
+			return (bool) $current === (bool) $expected;
+		}
+
+		if ( is_array( $current ) || is_array( $expected ) ) {
+			return wp_json_encode( $current ) === wp_json_encode( $expected );
+		}
+
+		if ( is_numeric( $current ) && is_numeric( $expected ) ) {
+			return (float) $current === (float) $expected;
+		}
+
+		return (string) $current === (string) $expected;
 	}
 
 	/**

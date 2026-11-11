@@ -7,7 +7,7 @@
  * Theme/plugin developers register their own presets and bundles.
  *
  * @package RL_FSBI_Options_Framework
- * @version 2.1.0
+ * @version 2.4.0
  */
 
 if (!defined('ABSPATH')) {

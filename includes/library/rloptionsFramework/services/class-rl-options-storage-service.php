@@ -105,14 +105,14 @@ class RL_FSBI_Options_Storage_Service {
 		if ( json_last_error() !== JSON_ERROR_NONE ) {
 			return new WP_Error(
 				'invalid_json',
-				__( 'Invalid JSON format.', 'smart-variations-images-premium' )
+				__( 'Invalid JSON format.', RL_FSBI_Options_Framework::text_domain() )
 			);
 		}
 
 		if ( ! isset( $data['settings'] ) || ! is_array( $data['settings'] ) ) {
 			return new WP_Error(
 				'invalid_format',
-				__( 'Invalid settings format.', 'smart-variations-images-premium' )
+				__( 'Invalid settings format.', RL_FSBI_Options_Framework::text_domain() )
 			);
 		}
 
@@ -128,7 +128,7 @@ class RL_FSBI_Options_Storage_Service {
 		if ( empty( $input ) && ! empty( $raw_settings ) ) {
 			return new WP_Error(
 				'invalid_settings_payload',
-				__( 'Imported settings do not contain any recognized framework fields.', 'smart-variations-images-premium' )
+				__( 'Imported settings do not contain any recognized framework fields.', RL_FSBI_Options_Framework::text_domain() )
 			);
 		}
 
@@ -141,6 +141,10 @@ class RL_FSBI_Options_Storage_Service {
 				continue;
 			}
 
+			if ( ! $this->framework->is_storable_field( $field ) ) {
+				continue;
+			}
+
 			$value = $this->framework->prepare_value_for_validation( $field, $input[ $field_id ] );
 			$error = '';
 
@@ -149,7 +153,7 @@ class RL_FSBI_Options_Storage_Service {
 					? $error
 					: sprintf(
 						/* translators: %s: field label */
-						__( 'Invalid value for %s.', 'smart-variations-images-premium' ),
+						__( 'Invalid value for %s.', RL_FSBI_Options_Framework::text_domain() ),
 						$this->framework->get_field_label( $field )
 					);
 				continue;
@@ -190,6 +194,10 @@ class RL_FSBI_Options_Storage_Service {
 		$this->create_backup();
 
 		foreach ( $fields_map as $field_id => $field ) {
+			if ( ! $this->framework->is_storable_field( $field ) ) {
+				continue;
+			}
+
 			if ( isset( $field['default'] ) ) {
 				$defaults[ $field_id ] = $field['default'];
 			}

@@ -8,16 +8,22 @@ A modern, standalone, **plugin-agnostic** options framework for WordPress plugin
 
 ## ✨ Features
 
-**Field Types (20 built-in)**
-- `text`, `textarea`, `number`, `date`, `datetime`
-- `select`, `multiselect`, `radio`, `checkbox`, `toggle`
-- `color` (WP Color Picker)
-- `image` (WP Media Library)
-- `image_select` (visual option picker)
-- `country`, `state`, `city` (cascading geo fields)
-- `html` / `info` (static content blocks)
-- `export`, `import`, `reset` (system action fields)
+**Field Types (47 built-in)**
+- Text & numbers: `text`, `textarea`, `password`, `number`, `slider`, `spinner`
+- Choice: `select`, `multiselect`, `radio`, `checkbox`, `toggle`, `switch`, `button_set`
+- Media: `image`, `image_select`, `media` (image/video/audio/file), `gallery`
+- Styling (composite arrays): `color`, `color_palette`, `color_gradient`, `link_color`, `border`,
+  `box_shadow`, `dimensions`, `spacing`, `typography`, `background`
+- Collections: `multi_text`, `sortable`, `sorter`
+- Date & time: `date`, `datetime`
+- Geo: `country`, `state`, `city`, `country_state_city`
+- Editors: `code` (CodeMirror), `editor` (TinyMCE)
+- System: `html`, `raw`, `info`, `divider`, `icon_select`, `export`, `import`, `reset`, `reset_section`
+- Aliases: `select_image`, `color_rgba`, `palette_color`, `content`, `ace_editor`, `select2`
 - Custom field types via the field registry
+
+Full parity map with Redux core fields: see
+[`DOCUMENTATION.md` → Redux parity](./DOCUMENTATION.md#redux-parity).
 
 **UI & Layout**
 - Tabbed interface with icon support
@@ -29,10 +35,11 @@ A modern, standalone, **plugin-agnostic** options framework for WordPress plugin
 - Nested `AND` / `OR` visibility conditions on fields, sections, and tabs
 - Field validation (built-in + custom callbacks)
 - Field sanitization per type
-- AJAX save with SweetAlert2 notifications
+- AJAX save with a busy submit button and a single non-blocking success toast
 - Import / Export settings as JSON (schema-validated)
 - Backup & Restore
 - Tab state persistence via `localStorage`
+- Opt-in **RL Builder**: drag-and-drop schema designer with conditions/rules editors and PHP export
 
 **Developer-Friendly**
 - Zero plugin-specific coupling
@@ -41,6 +48,37 @@ A modern, standalone, **plugin-agnostic** options framework for WordPress plugin
 - `composer.json` included — installable via Composer
 
 ---
+
+## 🧪 Live field demo
+
+`demo/rl-options-fields-demo.php` is a standalone plugin that renders **every field type** with a
+copy-ready PHP snippet under each field:
+
+```bash
+ln -s "$(pwd)/demo" /path/to/wp-content/plugins/rl-options-fields-demo
+wp plugin activate rl-options-fields-demo
+# Settings → Fields Demo
+```
+
+See [`demo/README.md`](./demo/README.md) for details.
+
+## 🧱 Visual schema builder (optional)
+
+Setting `'builder' => true` in the config adds a **RL Builder** screen under the same menu where you
+can drag fields into tabs/sections, wire `conditions` and `required_if` rules per field, and export
+the result as ready-to-paste PHP (`add_tab()`/`add_section()`/`add_field()` calls or a
+`{option_name}_framework_tabs` filter array). Drafts are stored in `{option_name}_builder_draft`;
+the builder never touches saved option values.
+
+```php
+$framework = new RL_FSBI_Options_Framework([
+    'option_name' => 'my_plugin_settings',
+    'page_slug'   => 'my-plugin-settings',
+    'builder'     => true, // Settings → RL Builder
+]);
+```
+
+See [DOCUMENTATION.md § 24](./DOCUMENTATION.md#24-visual-schema-builder-rl-builder).
 
 ## 📦 Installation
 
@@ -57,6 +95,12 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/library/rloptionsFramework/
 composer require rosendolabs/rl-options-framework
 ```
 
+> [!IMPORTANT]
+> Prefer Composer when more than one plugin uses the framework. All classes are global, so with
+> copy & require the first plugin to load wins and the second silently reuses that build. `main.php`
+> reports the conflict (path + version) via the `rl_options_framework_duplicate_copy` action, and
+> vendor handles are scoped per instance through `asset_handle_prefix`.
+
 ---
 
 ## 🚀 Quick Start
@@ -64,7 +108,7 @@ composer require rosendolabs/rl-options-framework
 ```php
 add_action( 'plugins_loaded', function () {
 
-    $framework = new RL_Options_Framework([
+    $framework = new RL_FSBI_Options_Framework([
         'option_name'       => 'my_plugin_settings',
         'form_field_prefix' => 'my_plugin',
         'page_slug'         => 'my-plugin-settings',
@@ -151,6 +195,9 @@ $value = $framework->get_option('api_key', '');
     'step'    => 1,
 ]
 ```
+
+An empty optional number is valid and is never a reason to reject the save; add `'required' => true`
+to enforce a value.
 
 ---
 
@@ -529,7 +576,7 @@ Show or hide any field, section, or tab based on another field's value.
     'type'        => 'text',
     'label'       => 'VAT Number',
     'required_if' => [
-        ['field' => 'business_type', 'operator' => 'equals', 'expected' => 'company'],
+        ['field' => 'business_type', 'operator' => 'equals', 'value' => 'company'],
     ],
 ]
 ```
@@ -550,7 +597,20 @@ Show or hide any field, section, or tab based on another field's value.
 | `text_domain` | `string` | `'rl-options-framework'` | i18n text domain |
 | `ajax_action` | `string` | `'rl_save_options_ajax'` | AJAX action name |
 | `assets_url` | `string` | Auto-detected | URL to the `assets/` folder |
-| `version` | `string` | `'2.2.0'` | For cache-busting enqueued assets |
+| `plugin_url` | `string` | `''` | Optional host plugin URL (informational) |
+| `version` | `string` | `RL_FSBI_Options_Framework::VERSION` | For cache-busting enqueued assets |
+| `asset_handle_prefix` | `string` | `page_slug` | Prefix for shared vendor handles (`-sweetalert2`, `-tippy`, `-popper`); set it when two plugins bundle the library |
+| `context` | `string` | `'auto'` | Asset resolution: `auto`, `plugin` (needs `init($plugin)` with `get_plugin_url()`), `theme` |
+| `register_menu` | `bool` | `true` | Register the admin submenu automatically |
+| `sync_history` | `bool` | `false` | Keep the active tab in the URL |
+| `debug_level` | `string` | `'error'` | `error`, `warn`, `info`, `debug` (PHP + JS logging) |
+| `swal_fallback` | `bool` | `true` | Use `window.alert` when SweetAlert2 is unavailable |
+| `debug_field_id` | `string` | `'enable_debug'` | Saved-option key that enables verbose debug |
+| `use_local_assets_toggle` | `bool` | `true` | Add a Support-tab toggle for local vs CDN vendor assets |
+| `local_assets_field_id` | `string` | `'rloptions_local_assets'` | Saved-option key for that toggle |
+| `color_palette` | `array` | `[]` | Global default palette for `color` / `color_palette` fields |
+
+Full hook and API reference: [`DOCUMENTATION.md`](./DOCUMENTATION.md).
 
 ---
 
@@ -592,8 +652,8 @@ The framework provides a unified logging utility for both PHP and JS. You can co
 ### PHP Logging
 
 ```php
-RL_Logger::set_prefix( '[My Plugin]' );
-RL_Logger::info( 'This is an info log.' );
+RL_FSBI_Logger::set_prefix( '[My Plugin]' );
+RL_FSBI_Logger::info( 'This is an info log.' );
 ```
 
 ### JS Logging
@@ -601,7 +661,7 @@ RL_Logger::info( 'This is an info log.' );
 The JS logger is a standalone script that is automatically enqueued globally when debugging is enabled. Add a debug toggle to your settings:
 
 ```php
-$framework = new RL_Options_Framework([
+$framework = new RL_FSBI_Options_Framework([
     'debug_field_id' => 'enable_debug',
 ]);
 // Add 'enable_debug' as a toggle field...
@@ -642,9 +702,64 @@ Developed by **[David Rosendo](https://github.com/drosendo)** · a **[RosendoLab
 
 ## 📦 Changelog
 
+### 2.5.1
+
+Framework-level fixes for hosts that bundle this library — no API changes.
+
+- A blank optional `number` / `slider` field no longer aborts the whole save; empty values are left to
+  `required` / `required_if` instead of failing the numeric check
+- A field renderer that prints its own `<form>` can no longer close the settings form and orphan the
+  Save button — the tags are stripped and the field is named in a log warning
+- Vendor handles (`sweetalert2` / `popper` / `tippy`) are prefixed per instance (default `page_slug`,
+  override with `asset_handle_prefix`) so two plugins bundling the library cannot collide
+- A second bundled copy now reports the conflict (path + version) via `RL_FSBI_OPTIONS_FRAMEWORK_VERSION`,
+  `RL_FSBI_OPTIONS_FRAMEWORK_FILE` and the `rl_options_framework_duplicate_copy` action
+
+### 2.5.0
+
+Live RL Builder: the canvas renders the real field controls while you build.
+
+- WYSIWYG canvas — every row is rendered by the settings-page renderer
+  (`RL_FSBI_Options_Render_Service::render_single_field()`) through a new preview endpoint, cached per
+  definition and debounced
+- **Preview page** mode hides the palette/inspector and shows the schema full width exactly like the
+  settings page, with interactive controls
+- Undo/redo (60 snapshots), dirty indicator, duplicate (`Ctrl/⌘+D`), delete (`Delete`), collapsible
+  tabs/sections, palette filter and an inline searchable **+ Add field** picker
+- Conditional fields are dimmed with an explanation; `raw`/callback fields show *Rendered by PHP*
+- Composite fields (`border`, `box_shadow`, `dimensions`, `spacing`, `typography`, `background`,
+  `link_color`, `color_gradient`) use the block-editor look: uppercase labels, hairline rows, 40px
+  controls, unit shown inside the number box, opt-in range sliders and a link-sides toggle
+
+### 2.4.0
+
+- 24 new field types (47 total): `button_set`, `switch`, `slider`, `spinner`, `password`,
+  `divider`, `raw`, `code`, `editor`, `icon_select`, `media`, `gallery`, `multi_text`,
+  `sortable`, `sorter`, `border`, `box_shadow`, `dimensions`, `spacing`, `link_color`,
+  `background`, `typography`, `color_gradient` (+ `info` listed)
+- Aliases for Redux naming: `select_image`, `color_rgba`, `palette_color`, `content`,
+  `ace_editor`, `select2`
+- CodeMirror is enqueued only when a `code` field is present; TinyMCE content is synced on save
+- Fixed integer steps storing floats and composite fields being rejected by the array guard
+
+### 2.3.0
+
+Drop-in hardening. Host plugins need no migration.
+
+- Legacy `show_if` is accepted again for tabs, sections and fields (normalized into `conditions`)
+- Fixed canonical `['relation' => 'OR', 'rules' => [...]]` normalization (OR groups were flattened to AND)
+- Type-tolerant condition comparisons (`'3'` matches `3`, `'1'` matches `true`)
+- Array payloads (`field[]=x`) return a validation error instead of a `TypeError`/HTTP 500
+- Added the documented `get_country_subdivisions()` / `get_country_municipalities()` helpers
+- Added `get_storage_service()` (import/reset handlers previously referenced an undefined method)
+- Display-only field types are no longer validated or persisted
+- Instance-scoped AJAX endpoints so multiple frameworks can coexist
+- Namespaced vendor handles, WAF-safe assets URL, no hardcoded host strings
+- Dependency-free test suite: `php tests/run.php`
+
 ### 2.2.0
 - Added nested `AND` / `OR` condition groups for fields, sections and tabs
-- Removed all legacy visibility aliases (`show_if`, `visibility_rules`)
+- Legacy visibility aliases (`show_if`) were deprecated in favour of `conditions`; see 2.3.0 for the current compatibility guarantee
 - Renamed plugin-specific CSS classes to generic `rl-options-*` prefix
 - Added GPL-2.0 `LICENSE` file and `example-plugin.php` quick-start
 

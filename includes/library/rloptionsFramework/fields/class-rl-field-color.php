@@ -86,7 +86,7 @@ class RL_FSBI_Field_Color implements RL_FSBI_Field_Interface, RL_FSBI_Field_Proc
 
 		$error = sprintf(
 			/* translators: %s: field label */
-			__('%s must be a valid hex color.', 'smart-variations-images-premium'),
+			__('%s must be a valid hex color.', RL_FSBI_Options_Framework::text_domain()),
 			$field_label
 		);
 		return false;

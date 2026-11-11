@@ -42,35 +42,42 @@ class RL_FSBI_Options_Assets_Service {
 	 */
 	public function enqueue_global_assets(): void
 	{
+		$config      = $this->framework->get_config();
+		$assets_url  = $this->resolve_assets_url();
 		$debug_level = $this->resolve_debug_level();
-		if ('debug' === $debug_level) {
-			$config = $this->framework->get_config();
-			$assets_url = $this->resolve_assets_url();
-			
-			wp_enqueue_script(
-				$config['page_slug'] . '-rl-logger',
-				$assets_url . 'js/rl-logger.js',
-				[],
-				$config['version'],
-				false // Load early in head or body
-			);
-			
-			// We need to pass the debug level to the global window object
-			wp_localize_script(
-				$config['page_slug'] . '-rl-logger',
-				'rlFrameworkDebugConfig',
-				[
-					'debug_level' => $debug_level,
-				]
-			);
-			
-			// Add inline script to set the debug level early
-			wp_add_inline_script(
-				$config['page_slug'] . '-rl-logger',
-				'window.rlFrameworkDebugLevel = rlFrameworkDebugConfig.debug_level;',
-				'before'
-			);
+		$handle      = $config['page_slug'] . '-rl-logger';
+
+		// Always register the logger: other framework scripts depend on this handle,
+		// and an unregistered dependency makes WordPress drop the dependent script.
+		wp_register_script(
+			$handle,
+			$assets_url . 'js/rl-logger.js',
+			[],
+			$config['version'],
+			false
+		);
+
+		if ('debug' !== $debug_level) {
+			return;
 		}
+
+		wp_enqueue_script($handle);
+
+		// We need to pass the debug level to the global window object
+		wp_localize_script(
+			$handle,
+			'rlFrameworkDebugConfig',
+			[
+				'debug_level' => $debug_level,
+			]
+		);
+
+		// Add inline script to set the debug level early
+		wp_add_inline_script(
+			$handle,
+			'window.rlFrameworkDebugLevel = rlFrameworkDebugConfig.debug_level;',
+			'before'
+		);
 	}
 
 	public function enqueue_assets(string $hook): void
@@ -85,60 +92,17 @@ class RL_FSBI_Options_Assets_Service {
 
 		wp_enqueue_style('dashicons');
 
-		// CSS for image_select field type
-		$custom_css = "
-			.rl-image-select-options {
-				display: flex;
-				flex-wrap: wrap;
-				gap: 15px;
-			}
-			.rl-image-select-option {
-				cursor: pointer;
-				position: relative;
-				display: inline-block;
-			}
-			.rl-image-select-option input[type='radio'] {
-				position: absolute;
-				opacity: 0;
-				width: 0;
-				height: 0;
-			}
-			.rl-image-select-option img {
-				display: block;
-				border: 2px solid #ddd;
-				border-radius: 4px;
-				transition: all 0.2s ease;
-				padding: 2px;
-				background: #fff;
-			}
-			.rl-image-select-option:hover img {
-				border-color: #999;
-			}
-			.rl-image-select-option input[type='radio']:checked + img {
-				border-color: #2271b1;
-				box-shadow: 0 0 0 1px #2271b1;
-			}
-			.rl-image-select-label {
-				display: block;
-				text-align: center;
-				margin-top: 5px;
-				font-size: 12px;
-				font-weight: 500;
-				color: #646970;
-			}
-			.rl-image-select-option input[type='radio']:checked ~ .rl-image-select-label {
-				color: #135e96;
-				font-weight: 600;
-			}
-		";
-		wp_register_style('rl-fsbi-framework-custom-css', false, [], $this->framework->get_config('version'));
-		wp_enqueue_style('rl-fsbi-framework-custom-css');
-		wp_add_inline_style('rl-fsbi-framework-custom-css', $custom_css);
-
 		wp_enqueue_style('wp-color-picker');
 
 		$config = $this->framework->get_config();
 		$assets_url = $this->resolve_assets_url();
+
+		// Shared vendor handles are prefixed per instance; two plugins bundling this
+		// library must not fight over a single global handle name.
+		$handle_prefix = $this->framework->asset_handle_prefix();
+		$sweetalert_handle = $handle_prefix . '-sweetalert2';
+		$tippy_handle = $handle_prefix . '-tippy';
+		$popper_handle = $handle_prefix . '-popper';
 
 		wp_enqueue_style(
 			$config['page_slug'] . '-framework',
@@ -152,14 +116,14 @@ class RL_FSBI_Options_Assets_Service {
 
 		// SweetAlert2 for better notifications
 		wp_enqueue_style(
-			'rl-fsbi-sweetalert2',
+			$sweetalert_handle,
 			$sweetalert_css_url,
 			[],
 			'11.0.0'
 		);
 		// Tippy.js CSS for tooltips
 		wp_enqueue_style(
-			'rl-fsbi-tippy',
+			$tippy_handle,
 			$tippy_css_url,
 			[],
 			'6.3.7'
@@ -173,7 +137,7 @@ class RL_FSBI_Options_Assets_Service {
 		wp_enqueue_script('jquery-ui-datepicker');
 		wp_localize_jquery_ui_datepicker(); // i18n: locale-aware month/day names
 		wp_enqueue_script(
-			'rl-fsbi-sweetalert2',
+			$sweetalert_handle,
 			$sweetalert_js_url,
 			[],
 			'11.0.0',
@@ -182,7 +146,7 @@ class RL_FSBI_Options_Assets_Service {
 
 		// Popper.js (required for Tippy.js)
 		wp_enqueue_script(
-			'popper-js',
+			$popper_handle,
 			$popper_js_url,
 			[],
 			'2.11.8',
@@ -191,9 +155,9 @@ class RL_FSBI_Options_Assets_Service {
 
 		// Tippy.js for tooltips
 		wp_enqueue_script(
-			'rl-fsbi-tippy',
+			$tippy_handle,
 			$tippy_js_url,
-			['popper-js'],
+			[$popper_handle],
 			'6.3.7',
 			true
 		);
@@ -201,13 +165,37 @@ class RL_FSBI_Options_Assets_Service {
 		// Enqueue WordPress media uploader
 		wp_enqueue_media();
 
+		// Only depend on the logger when it is actually enqueued (debug mode).
+		$framework_deps = ['jquery', 'wp-color-picker', 'jquery-ui-datepicker', $sweetalert_handle, $tippy_handle];
+		$logger_handle  = $config['page_slug'] . '-rl-logger';
+		if (wp_script_is($logger_handle, 'enqueued')) {
+			$framework_deps[] = $logger_handle;
+		}
+
 		wp_enqueue_script(
 			$config['page_slug'] . '-framework',
 			$assets_url . 'js/options-framework.js',
-			['jquery', 'wp-color-picker', 'jquery-ui-datepicker', 'rl-fsbi-sweetalert2', 'rl-fsbi-tippy', $config['page_slug'] . '-rl-logger'],
+			$framework_deps,
 			$config['version'],
 			true
 		);
+
+		// CodeMirror settings, only when a `code` field is present on the page.
+		$has_code_field = false;
+		foreach ( $this->framework->get_fields_index() as $candidate ) {
+			$candidate_type = (string) ( $candidate['type'] ?? '' );
+			if ( 'code' === $candidate_type || 'ace_editor' === $candidate_type ) {
+				$has_code_field = true;
+				break;
+			}
+		}
+
+		if ( $has_code_field && function_exists( 'wp_enqueue_code_editor' ) ) {
+			$code_settings = wp_enqueue_code_editor( [ 'type' => 'text/html' ] );
+			if ( is_array( $code_settings ) ) {
+				wp_localize_script( $config['page_slug'] . '-framework', 'rlCodeEditorSettings', $code_settings );
+			}
+		}
 
 		wp_localize_script(
 			$config['page_slug'] . '-framework',
@@ -217,8 +205,8 @@ class RL_FSBI_Options_Assets_Service {
 				'optionField' => $config['form_field_prefix'],
 				'ajax_url' => admin_url('admin-ajax.php'),
 				'ajax_action' => $config['ajax_action'],
-				'provider_action' => 'rl_options_framework_field_options',
-				'validate_action' => 'rl_options_framework_field_validate',
+				'provider_action' => $this->framework->provider_action(),
+				'validate_action' => $this->framework->validate_action(),
 				'nonce' => wp_create_nonce($config['ajax_action'] . '_nonce'),
 				'sync_history' => !empty($config['sync_history']),
 				'swal_fallback' => !empty($config['swal_fallback']),
@@ -272,9 +260,14 @@ class RL_FSBI_Options_Assets_Service {
 			$context = 'auto';
 		}
 
-		// Try plugin context (if plugin object available)
-		if (('auto' === $context || 'plugin' === $context) && isset($config['_plugin_instance']) && method_exists($config['_plugin_instance'], 'get_plugin_url')) {
-			return trailingslashit($config['_plugin_instance']->get_plugin_url() . 'includes/library/rloptionsFramework/assets');
+		// Try plugin context (host object passed to init()).
+		$plugin = $this->framework->plugin_instance();
+		if (null === $plugin && isset($config['_plugin_instance'])) {
+			$plugin = $config['_plugin_instance'];
+		}
+
+		if (('auto' === $context || 'plugin' === $context) && is_object($plugin) && method_exists($plugin, 'get_plugin_url')) {
+			return trailingslashit($plugin->get_plugin_url() . 'includes/library/rloptionsFramework/assets');
 		}
 
 		$relative = 'includes/library/rloptionsFramework/assets/';
@@ -294,8 +287,8 @@ class RL_FSBI_Options_Assets_Service {
 			}
 		}
 
-		// Fallback: __FILE__ is in services/, so one level up reaches rloptionsFramework/assets/
-		return trailingslashit(plugin_dir_url(__FILE__) . '../assets');
+		// Fallback: resolve from the framework root so the public URL contains no "../" segments.
+		return trailingslashit(plugin_dir_url(dirname(__FILE__, 2) . '/main.php') . 'assets');
 	}
 
 	/**

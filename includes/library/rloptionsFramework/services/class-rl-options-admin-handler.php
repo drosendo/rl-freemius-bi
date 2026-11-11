@@ -45,7 +45,7 @@ class RL_FSBI_Options_Admin_Handler {
 
 		if ( ! current_user_can( $this->framework->get_config( 'capability' ) ) ) {
 			RL_FSBI_Logger::error( 'User does not have required capability.', [ 'capability' => $this->framework->get_config( 'capability' ) ] );
-			wp_die( esc_html__( 'You are not allowed to manage these settings.', 'smart-variations-images-premium' ) );
+			wp_die( esc_html__( 'You are not allowed to manage these settings.', RL_FSBI_Options_Framework::text_domain() ) );
 		}
 
 		$nonce_action = $this->framework->get_config( 'page_slug' ) . '_save_options';
@@ -60,7 +60,7 @@ class RL_FSBI_Options_Admin_Handler {
 		$reset_section_input_name = $this->framework->get_config( 'form_field_prefix' ) . '_reset_section';
 		if ( ! empty( $_POST[ $reset_section_input_name ] ) ) {
 			$reset_section_payload = sanitize_text_field( wp_unslash( $_POST[ $reset_section_input_name ] ) );
-			$parts = explode( ':', $reset_section_payload );
+			$parts = array_map( 'sanitize_key', explode( ':', $reset_section_payload ) );
 			if ( count( $parts ) === 2 ) {
 				$this->framework->get_storage_service()->reset_section_to_defaults( $parts[0], $parts[1] );
 				
@@ -103,25 +103,12 @@ class RL_FSBI_Options_Admin_Handler {
 		$field_errors      = [];
 
 		foreach ( $fields_map as $field_id => $field ) {
-			// A field missing from the payload was not rendered (inactive tab,
-			// unmet condition). Keep the stored value instead of blanking it.
-			if ( ! array_key_exists( $field_id, $input ) ) {
+			if ( ! $this->framework->is_storable_field( $field ) ) {
 				continue;
 			}
 
 			$value = $input[ $field_id ] ?? null;
 			$value = $this->framework->prepare_value_for_validation( $field, $value );
-
-			if ( in_array( $field_id, [ 'slider_position', 'gallery_type' ], true ) ) {
-				RL_FSBI_Logger::debug(
-					sprintf(
-						'Processing %s: value="%s", type=%s',
-						$field_id,
-						$value,
-						$field['type'] ?? 'unknown'
-					)
-				);
-			}
 
 			$error = '';
 
@@ -142,17 +129,6 @@ class RL_FSBI_Options_Admin_Handler {
 			// Sanitize and save.
 			$sanitized_value       = $this->framework->sanitize_field_value( $field, $value );
 			$saved[ $field_id ]    = $sanitized_value;
-
-			if ( in_array( $field_id, [ 'slider_position', 'gallery_type' ], true ) ) {
-				RL_FSBI_Logger::debug(
-					sprintf(
-						'Sanitized %s: "%s" -> "%s"',
-						$field_id,
-						$value,
-						$sanitized_value
-					)
-				);
-			}
 		}
 
 		// If validation errors, redirect with error message.
@@ -166,7 +142,7 @@ class RL_FSBI_Options_Admin_Handler {
 					[
 						'page'        => $this->framework->get_config( 'page_slug' ),
 						$message_param => 'error',
-						$error_param   => rawurlencode( $error_message ),
+						$error_param   => $error_message,
 					],
 					admin_url( 'admin.php' )
 				)
@@ -224,7 +200,7 @@ class RL_FSBI_Options_Admin_Handler {
 		if ( ! $ajax_nonce_valid && ! $form_nonce_valid ) {
 			wp_send_json_error(
 				[
-					'message' => __( 'Security check failed. Please refresh the page and try again.', 'smart-variations-images-premium' ),
+					'message' => __( 'Security check failed. Please refresh the page and try again.', RL_FSBI_Options_Framework::text_domain() ),
 				],
 				403
 			);
@@ -234,7 +210,7 @@ class RL_FSBI_Options_Admin_Handler {
 		if ( ! current_user_can( $this->framework->get_config( 'capability' ) ) ) {
 			wp_send_json_error(
 				[
-					'message' => __( 'You are not allowed to manage these settings.', 'smart-variations-images-premium' ),
+					'message' => __( 'You are not allowed to manage these settings.', RL_FSBI_Options_Framework::text_domain() ),
 				]
 			);
 		}
@@ -248,6 +224,7 @@ class RL_FSBI_Options_Admin_Handler {
 		$import_input_name = $this->framework->get_config( 'form_field_prefix' ) . '_import_json';
 		if ( ! empty( $_POST[ $import_input_name ] ) ) {
 			$import_json = wp_unslash( $_POST[ $import_input_name ] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			$import_json = is_string( $import_json ) ? trim( $import_json ) : '';
 			
 			$import_result = $this->framework->get_storage_service()->import_settings( $import_json );
 			
@@ -266,7 +243,7 @@ class RL_FSBI_Options_Admin_Handler {
 
 			wp_send_json_success(
 				[
-					'message' => __( 'Settings imported successfully. The page will reload.', 'smart-variations-images-premium' ),
+					'message' => __( 'Settings imported successfully. The page will reload.', RL_FSBI_Options_Framework::text_domain() ),
 					'imported' => true,
 				]
 			);
@@ -283,7 +260,7 @@ class RL_FSBI_Options_Admin_Handler {
 
 			wp_send_json_success(
 				[
-					'message' => __( 'Settings reset successfully. The page will reload.', 'smart-variations-images-premium' ),
+					'message' => __( 'Settings reset successfully. The page will reload.', RL_FSBI_Options_Framework::text_domain() ),
 					'imported' => true, // We can reuse the `imported` flag to trigger the page reload in JS
 				]
 			);
@@ -293,7 +270,7 @@ class RL_FSBI_Options_Admin_Handler {
 		$reset_section_input_name = $this->framework->get_config( 'form_field_prefix' ) . '_reset_section';
 		if ( ! empty( $_POST[ $reset_section_input_name ] ) ) {
 			$reset_section_payload = sanitize_text_field( wp_unslash( $_POST[ $reset_section_input_name ] ) );
-			$parts = explode( ':', $reset_section_payload );
+			$parts = array_map( 'sanitize_key', explode( ':', $reset_section_payload ) );
 			if ( count( $parts ) === 2 ) {
 				$this->framework->get_storage_service()->reset_section_to_defaults( $parts[0], $parts[1] );
 				
@@ -303,7 +280,7 @@ class RL_FSBI_Options_Admin_Handler {
 
 				wp_send_json_success(
 					[
-						'message' => __( 'Section settings reset successfully. The page will reload.', 'smart-variations-images-premium' ),
+						'message' => __( 'Section settings reset successfully. The page will reload.', RL_FSBI_Options_Framework::text_domain() ),
 						'imported' => true, // Reusing `imported` flag to trigger page reload
 					]
 				);
@@ -328,26 +305,12 @@ class RL_FSBI_Options_Admin_Handler {
 		$field_errors      = [];
 
 		foreach ( $fields_map as $field_id => $field ) {
-			// A field missing from the payload was not rendered (inactive tab,
-			// unmet condition). Keep the stored value instead of blanking it.
-			if ( ! array_key_exists( $field_id, $input ) ) {
+			if ( ! $this->framework->is_storable_field( $field ) ) {
 				continue;
 			}
 
 			$value = $input[ $field_id ] ?? null;
 			$value = $this->framework->prepare_value_for_validation( $field, $value );
-
-			// Debug specific fields.
-			if ( in_array( $field_id, [ 'slider_position', 'gallery_type' ], true ) ) {
-				RL_FSBI_Logger::debug(
-					sprintf(
-						'AJAX Processing %s: value="%s", type=%s',
-						$field_id,
-						$value,
-						$field['type'] ?? 'unknown'
-					)
-				);
-			}
 
 			$error = '';
 
@@ -368,17 +331,6 @@ class RL_FSBI_Options_Admin_Handler {
 			// Sanitize and save.
 			$sanitized_value    = $this->framework->sanitize_field_value( $field, $value );
 			$saved[ $field_id ] = $sanitized_value;
-
-			if ( in_array( $field_id, [ 'slider_position', 'gallery_type' ], true ) ) {
-				RL_FSBI_Logger::debug(
-					sprintf(
-						'AJAX Sanitized %s: "%s" -> "%s"',
-						$field_id,
-						$value,
-						$sanitized_value
-					)
-				);
-			}
 		}
 
 		// If validation errors, return error.
@@ -405,7 +357,7 @@ class RL_FSBI_Options_Admin_Handler {
 
 		wp_send_json_success(
 			[
-				'message' => __( 'Settings saved successfully.', 'smart-variations-images-premium' ),
+				'message' => __( 'Settings saved successfully.', RL_FSBI_Options_Framework::text_domain() ),
 				'saved'   => count( $saved ),
 			]
 		);
@@ -421,14 +373,14 @@ class RL_FSBI_Options_Admin_Handler {
 		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
 		if ( empty( $nonce ) || ! wp_verify_nonce( $nonce, $this->framework->get_config( 'ajax_action' ) . '_nonce' ) ) {
 			wp_send_json_error(
-				[ 'message' => __( 'Security check failed.', 'smart-variations-images-premium' ) ],
+				[ 'message' => __( 'Security check failed.', RL_FSBI_Options_Framework::text_domain() ) ],
 				403
 			);
 		}
 
 		if ( ! current_user_can( $this->framework->get_config( 'capability' ) ) ) {
 			wp_send_json_error(
-				[ 'message' => __( 'You are not allowed to perform this action.', 'smart-variations-images-premium' ) ],
+				[ 'message' => __( 'You are not allowed to perform this action.', RL_FSBI_Options_Framework::text_domain() ) ],
 				403
 			);
 		}
@@ -442,7 +394,7 @@ class RL_FSBI_Options_Admin_Handler {
 		$fields_map = $this->framework->get_fields_index();
 		if ( $field_id === '' || empty( $fields_map[ $field_id ] ) ) {
 			wp_send_json_error(
-				[ 'message' => __( 'Unknown field.', 'smart-variations-images-premium' ) ],
+				[ 'message' => __( 'Unknown field.', RL_FSBI_Options_Framework::text_domain() ) ],
 				400
 			);
 		}
@@ -468,14 +420,14 @@ class RL_FSBI_Options_Admin_Handler {
 		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
 		if ( empty( $nonce ) || ! wp_verify_nonce( $nonce, $this->framework->get_config( 'ajax_action' ) . '_nonce' ) ) {
 			wp_send_json_error(
-				[ 'message' => __( 'Security check failed.', 'smart-variations-images-premium' ) ],
+				[ 'message' => __( 'Security check failed.', RL_FSBI_Options_Framework::text_domain() ) ],
 				403
 			);
 		}
 
 		if ( ! current_user_can( $this->framework->get_config( 'capability' ) ) ) {
 			wp_send_json_error(
-				[ 'message' => __( 'You are not allowed to perform this action.', 'smart-variations-images-premium' ) ],
+				[ 'message' => __( 'You are not allowed to perform this action.', RL_FSBI_Options_Framework::text_domain() ) ],
 				403
 			);
 		}
@@ -489,7 +441,7 @@ class RL_FSBI_Options_Admin_Handler {
 		$fields_map = $this->framework->get_fields_index();
 		if ( $field_id === '' || empty( $fields_map[ $field_id ] ) ) {
 			wp_send_json_error(
-				[ 'message' => __( 'Unknown field.', 'smart-variations-images-premium' ) ],
+				[ 'message' => __( 'Unknown field.', RL_FSBI_Options_Framework::text_domain() ) ],
 				400
 			);
 		}

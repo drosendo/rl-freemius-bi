@@ -64,14 +64,14 @@ class RL_FSBI_Field_State implements RL_FSBI_Field_Interface, RL_FSBI_Field_Proc
 		$geo_callback = $context['geo_options_callback'] ?? null;
 		if (!is_callable($geo_callback)) {
 			/* translators: %s: field label */
-			$error = sprintf(__('%s has an invalid geographic value.', 'smart-variations-images-premium'), $field_label);
+			$error = sprintf(__('%s has an invalid geographic value.', RL_FSBI_Options_Framework::text_domain()), $field_label);
 			return false;
 		}
 
 		$allowed = array_keys(call_user_func($geo_callback, $field, 'state', $context['validation_context'] ?? []));
 		if (!in_array((string) $value, $allowed, true)) {
 			/* translators: %s: field label */
-			$error = sprintf(__('%s has an invalid geographic value.', 'smart-variations-images-premium'), $field_label);
+			$error = sprintf(__('%s has an invalid geographic value.', RL_FSBI_Options_Framework::text_domain()), $field_label);
 			return false;
 		}
 

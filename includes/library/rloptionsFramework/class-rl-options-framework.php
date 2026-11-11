@@ -69,7 +69,7 @@
  * ```
  *
  * @package RL_FSBI_Options_Framework
- * @version 2.1.0
+ * @version 2.5.1
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -125,11 +125,79 @@ if (!function_exists('rl_options_framework_get_country_municipalities')) {
 final class RL_FSBI_Options_Framework
 {
 	/**
+	 * Framework version. Single source of truth for asset cache busting.
+	 */
+	public const VERSION = '2.5.1';
+
+	/**
+	 * Resolved text domain, shared by framework-owned field renderers.
+	 *
+	 * @var string
+	 */
+	private static string $text_domain = 'rl-options-framework';
+
+	/**
 	 * Singleton instance (for backward compatibility).
 	 *
 	 * @var RL_FSBI_Options_Framework
 	 */
 	private static $instance = null;
+
+	/**
+	 * Registered raw (unfiltered) tab definitions by instance.
+	 *
+	 * @var array<string,array>
+	 */
+	private array $raw_tabs = [];
+
+	/**
+	 * Whether the legacy global AJAX endpoints were already registered.
+	 *
+	 * @var bool
+	 */
+	private static bool $legacy_ajax_registered = false;
+
+	/**
+	 * Field types that never persist a value.
+	 *
+	 * @var string[]
+	 */
+	private array $non_storing_types = [ 'html', 'info', 'export', 'import', 'reset', 'reset_section', 'divider', 'raw', 'content' ];
+
+	/**
+	 * Framework version.
+	 */
+	public static function version(): string
+	{
+		return self::VERSION;
+	}
+
+	/**
+	 * Configured text domain, usable by stateless field renderers.
+	 */
+	public static function text_domain(): string
+	{
+		return self::$text_domain;
+	}
+
+	/**
+	 * Prefix for shared vendor script/style handles (SweetAlert2, Tippy, Popper).
+	 *
+	 * Defaults to the page slug, which is unique per options page, so two plugins
+	 * bundling this library never register the same handle. The first registration
+	 * otherwise wins and the other plugin silently loads a foreign copy.
+	 */
+	public function asset_handle_prefix(): string
+	{
+		$prefix = (string) ( $this->config['asset_handle_prefix'] ?? '' );
+		if ( '' === $prefix ) {
+			$prefix = (string) ( $this->config['page_slug'] ?? '' );
+		}
+
+		$prefix = sanitize_key( $prefix );
+
+		return '' !== $prefix ? $prefix : 'rl-options-framework';
+	}
 
 	/**
 	 * Plugin instance.
@@ -237,6 +305,13 @@ final class RL_FSBI_Options_Framework
 	private ?RL_FSBI_Options_Assets_Service $assets_service = null;
 
 	/**
+	 * Optional visual schema builder service.
+	 *
+	 * @var RL_FSBI_Options_Builder|null
+	 */
+	private ?RL_FSBI_Options_Builder $builder = null;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $config Framework configuration.
@@ -255,7 +330,10 @@ final class RL_FSBI_Options_Framework
 			'ajax_action'       => 'rl_save_options_ajax',
 			'assets_url'        => '',
 			'plugin_url'        => '',
-			'version'           => '2.1.0',
+			'version'           => self::VERSION,
+			// Prefix for shared vendor handles (SweetAlert2, Tippy, Popper).
+			// Empty falls back to the page slug so plugin copies cannot collide.
+			'asset_handle_prefix' => '',
 			'context'           => 'auto', // auto|plugin|theme
 			'register_menu'     => true,
 			'sync_history'      => false,
@@ -267,9 +345,17 @@ final class RL_FSBI_Options_Framework
 			// Local assets toggle (GDPR/privacy). Keep enabled and configurable by default.
 			'use_local_assets_toggle' => true,
 			'local_assets_field_id'   => 'rloptions_local_assets',
+			// Global default palette for color and color_palette fields.
+			'color_palette'           => [],
+			// Opt-in visual schema builder (drag & drop + PHP export).
+			'builder'                 => false,
+			'builder_page_slug'       => '',
 		];
 
 		$this->config = wp_parse_args($config, $defaults);
+
+		// Field renderers are stateless; they resolve the text domain statically.
+		self::$text_domain = (string) $this->config['text_domain'];
 	}
 
 	/**
@@ -304,6 +390,8 @@ final class RL_FSBI_Options_Framework
 
 		if ($plugin) {
 			$this->plugin = $plugin;
+			// Expose the host object to the assets service (context => plugin).
+			$this->config['_plugin_instance'] = $plugin;
 		}
 
 		RL_FSBI_Logger::set_level((string) ($this->config['debug_level'] ?? 'error'));
@@ -343,6 +431,11 @@ final class RL_FSBI_Options_Framework
 		// Initialize assets service for admin asset enqueueing.
 		$this->assets_service = new RL_FSBI_Options_Assets_Service($this);
 
+		// Optional visual schema builder (opt-in via config).
+		$this->builder = new RL_FSBI_Options_Builder($this);
+		$this->builder->register();
+
+
 		// Register admin menu unless host project opts to fully control menu wiring.
 		if (!empty($this->config['register_menu'])) {
 			add_action('admin_menu', [$this, 'register_menu'], 60);
@@ -352,8 +445,18 @@ final class RL_FSBI_Options_Framework
 		add_action('wp_enqueue_scripts', [$this, 'enqueue_frontend_assets']);
 		add_action('admin_post_' . $this->config['page_slug'] . '_save', [$this, 'handle_save']);
 		add_action('wp_ajax_' . $this->config['ajax_action'], [$this, 'handle_ajax_save']);
-		add_action('wp_ajax_rl_options_framework_field_options', [$this, 'handle_ajax_field_options']);
-		add_action('wp_ajax_rl_options_framework_field_validate', [$this, 'handle_ajax_field_validate']);
+
+		// Instance-scoped AJAX endpoints so multiple frameworks can coexist.
+		add_action('wp_ajax_' . $this->provider_action(), [$this, 'handle_ajax_field_options']);
+		add_action('wp_ajax_' . $this->validate_action(), [$this, 'handle_ajax_field_validate']);
+
+		// Legacy global endpoints: registered once for backward compatibility.
+		if (!self::$legacy_ajax_registered) {
+			self::$legacy_ajax_registered = true;
+			add_action('wp_ajax_rl_options_framework_field_options', [$this, 'handle_ajax_field_options']);
+			add_action('wp_ajax_rl_options_framework_field_validate', [$this, 'handle_ajax_field_validate']);
+		}
+
 		add_action('admin_notices', [$this, 'render_notices']);
 
 		// Register REST routes and handle late-boot scenario via service.
@@ -375,6 +478,90 @@ final class RL_FSBI_Options_Framework
 	public function rest_api(): ?RL_FSBI_Options_Rest_Api
 	{
 		return $this->rest_api;
+	}
+
+	/**
+	 * Access the visual schema builder (null unless enabled).
+	 */
+	public function builder(): ?RL_FSBI_Options_Builder
+	{
+		return $this->builder;
+	}
+
+	/**
+	 * Access the storage service (backup/import/export/reset).
+	 */
+	public function get_storage_service(): ?RL_FSBI_Options_Storage_Service
+	{
+		return $this->storage_service;
+	}
+
+	/**
+	 * Access the field processor service (validation/sanitization).
+	 */
+	public function get_field_processor(): ?RL_FSBI_Options_Field_Processor
+	{
+		return $this->field_processor;
+	}
+
+	/**
+	 * Access the admin handler service.
+	 */
+	public function get_admin_handler(): ?RL_FSBI_Options_Admin_Handler
+	{
+		return $this->admin_handler;
+	}
+
+	/**
+	 * Access the host object passed to init(), when available.
+	 *
+	 * @return object|null
+	 */
+	public function plugin_instance()
+	{
+		return $this->plugin;
+	}
+
+	/**
+	 * AJAX action used to resolve provider-backed field options.
+	 */
+	public function provider_action(): string
+	{
+		return 'rl_of_' . sanitize_key((string) $this->config['option_name']) . '_field_options';
+	}
+
+	/**
+	 * AJAX action used for inline field validation.
+	 */
+	public function validate_action(): string
+	{
+		return 'rl_of_' . sanitize_key((string) $this->config['option_name']) . '_field_validate';
+	}
+
+	/**
+	 * Whether a field persists a value in the options row.
+	 *
+	 * Display-only field types (html, info, buttons) are validated and rendered
+	 * but never stored.
+	 *
+	 * @param array $field Field definition.
+	 */
+	public function is_storable_field(array $field): bool
+	{
+		$type = (string) ($field['type'] ?? 'text');
+
+		if (isset($field['store'])) {
+			return (bool) $field['store'];
+		}
+
+		$non_storing = apply_filters(
+			'rl_options_framework_non_storing_field_types',
+			$this->non_storing_types,
+			$field,
+			$this
+		);
+
+		return !in_array($type, is_array($non_storing) ? $non_storing : $this->non_storing_types, true);
 	}
 
 	/**
@@ -426,6 +613,29 @@ final class RL_FSBI_Options_Framework
 	 * @param array $tabs Tabs array.
 	 */
 	public function set_tabs(array $tabs): void
+	{
+		$this->tabs = $tabs;
+	}
+
+	/**
+	 * Raw, unfiltered tab definitions used for schema registration.
+	 *
+	 * Reading through this accessor avoids re-running the tabs filter (and
+	 * re-sorting the whole tree) on every add_field()/add_section() call.
+	 *
+	 * @return array
+	 */
+	public function get_raw_tabs(): array
+	{
+		return $this->tabs;
+	}
+
+	/**
+	 * Replace the raw tab definitions (used by the schema manager).
+	 *
+	 * @param array $tabs Tab definitions.
+	 */
+	public function set_raw_tabs(array $tabs): void
 	{
 		$this->tabs = $tabs;
 	}
@@ -605,14 +815,14 @@ final class RL_FSBI_Options_Framework
 		if (isset($_GET[$message_param]) && 'saved' === $_GET[$message_param]) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			printf(
 				'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
-				esc_html__('Settings saved.', 'smart-variations-images-premium')
+				esc_html__('Settings saved.', RL_FSBI_Options_Framework::text_domain())
 			);
 		}
 
 		if (isset($_GET[$message_param]) && 'error' === $_GET[$message_param] && !empty($_GET[$error_param])) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			printf(
 				'<div class="notice notice-error is-dismissible"><p>%s</p></div>',
-				esc_html(wp_unslash($_GET[$error_param])) // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+				esc_html(sanitize_text_field(rawurldecode(wp_unslash((string) $_GET[$error_param])))) // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			);
 		}
 	}
@@ -720,15 +930,49 @@ final class RL_FSBI_Options_Framework
 	}
 
 	/**
-	 * Normalize options into [{value,label}] transport format.
-	/**
 	 * Public helper: return countries as [{code,name,region,capital}].
 	 *
-	 * Delegates to REST API service.
+	 * Delegates to the REST API service, which is created on demand so the
+	 * helper is safe to call before init().
 	 */
 	public function get_country_reference_countries(): array
 	{
-		return $this->rest_api->get_country_reference_countries();
+		return $this->rest_api_service()->get_country_reference_countries();
+	}
+
+	/**
+	 * Public helper: return subdivisions for a country as [{value,label}].
+	 *
+	 * @param string $country_code ISO 3166-1 alpha-2 country code.
+	 * @return array<int,array{value:string,label:string}>
+	 */
+	public function get_country_subdivisions(string $country_code): array
+	{
+		return $this->rest_api_service()->get_country_subdivisions_data($country_code);
+	}
+
+	/**
+	 * Public helper: return municipalities as [{value,label}].
+	 *
+	 * @param string $country_code ISO 3166-1 alpha-2 country code.
+	 * @param string $subdivision  Optional subdivision slug.
+	 * @return array<int,array{value:string,label:string}>
+	 */
+	public function get_country_municipalities(string $country_code, string $subdivision = ''): array
+	{
+		return $this->rest_api_service()->get_country_municipalities_data($country_code, $subdivision);
+	}
+
+	/**
+	 * REST API service, created on demand.
+	 */
+	private function rest_api_service(): RL_FSBI_Options_Rest_Api
+	{
+		if (null === $this->rest_api) {
+			$this->rest_api = new RL_FSBI_Options_Rest_Api($this);
+		}
+
+		return $this->rest_api;
 	}
 
 	/**
@@ -740,6 +984,10 @@ final class RL_FSBI_Options_Framework
 	 */
 	public function normalize_options_for_transport(array $options, array $mapping = []): array
 	{
+		if (null === $this->field_processor) {
+			$this->field_processor = new RL_FSBI_Options_Field_Processor($this);
+		}
+
 		return $this->field_processor->normalize_options_for_transport($options, $mapping);
 	}
 
@@ -843,6 +1091,28 @@ final class RL_FSBI_Options_Framework
 	}
 
 	/**
+	 * Update a single option value.
+	 *
+	 * When the key belongs to a registered field the value is sanitized against
+	 * that field's schema before it is persisted.
+	 *
+	 * @param string $key   Field ID.
+	 * @param mixed  $value New value.
+	 */
+	public function set_option(string $key, $value): bool
+	{
+		$fields = $this->get_fields_index();
+		if (isset($fields[$key])) {
+			$value = $this->sanitize_field_value($fields[$key], $value);
+		}
+
+		$options         = $this->get_options();
+		$options[$key]   = $value;
+
+		return (bool) update_option($this->config['option_name'], $options);
+	}
+
+	/**
 	 * Register (or override) a tab definition.
 	 *
 	 * Delegates to schema manager.
@@ -908,6 +1178,11 @@ final class RL_FSBI_Options_Framework
 	{
 		$filter_name = $this->config['option_name'] . '_framework_tabs';
 		$tabs = apply_filters($filter_name, $this->tabs, $this); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound
+
+		// Definitions added through the filter bypass the schema manager, so normalize them here.
+		if ($this->schema_manager && is_array($tabs)) {
+			$tabs = $this->schema_manager->normalize_tabs($tabs);
+		}
 
 		uasort(
 			$tabs,

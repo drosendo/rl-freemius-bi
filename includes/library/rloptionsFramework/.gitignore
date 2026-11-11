@@ -1,4 +1,4 @@
-# IDE and local customization files
+# AI agent / IDE customization files — local use only, not part of the library
 .github/
 tasks/
 .history/
@@ -9,3 +9,6 @@ composer.lock
 
 # Private planning / internal docs
 ROADMAP-v3.md
+
+# OS / editor noise
+.DS_Store

@@ -32,7 +32,11 @@
 		try {
 			if (typeof Swal !== 'undefined' && Swal && typeof Swal.fire === 'function') {
 				blurActiveElementForModal();
-				return Swal.fire(Object.assign({ returnFocus: false }, config));
+
+				// `returnFocus` is not supported for toasts and logs a console warning.
+				const options = config && config.toast ? config : Object.assign({ returnFocus: false }, config);
+
+				return Swal.fire(options);
 			}
 		} catch (err) {
 			rlWarn('Swal.fire failed, using alert fallback.', err);
@@ -48,11 +52,379 @@
 		}
 	}
 
+	/**
+	 * Non-blocking feedback. Used for success so saving does not require an extra click.
+	 *
+	 * The toast is anchored bottom-right (next to the Save button) and forced above the
+	 * WordPress admin bar, whose z-index (99999) otherwise clips SweetAlert (1060).
+	 */
+	function showToast(icon, message) {
+		return safeSwal({
+			toast: true,
+			position: 'bottom-end',
+			icon: icon,
+			title: message,
+			showConfirmButton: false,
+			timer: 3000,
+			timerProgressBar: true,
+			customClass: {
+				container: 'rl-toast-container',
+				popup: 'rl-toast-popup'
+			},
+			didOpen: (popup) => {
+				const container = popup && popup.parentElement;
+				if (!container) {
+					return;
+				}
+
+				container.style.zIndex = '100001';
+				container.style.top = 'auto';
+				container.style.bottom = '24px';
+				container.style.right = '24px';
+			}
+		}, message);
+	}
+
+	/**
+	 * Reflect a pending save on the submit button instead of opening a second dialog.
+	 */
+	function setButtonBusy($button, busy) {
+		if (!$button || !$button.length) {
+			return;
+		}
+
+		if (busy) {
+			if (typeof $button.data('rlOriginalLabel') === 'undefined') {
+				$button.data('rlOriginalLabel', $button.text());
+			}
+
+			$button
+				.prop('disabled', true)
+				.addClass('is-busy')
+				.attr('aria-busy', 'true')
+				.text('Saving...');
+			return;
+		}
+
+		const originalLabel = $button.data('rlOriginalLabel');
+		$button
+			.prop('disabled', false)
+			.removeClass('is-busy')
+			.removeAttr('aria-busy');
+
+		if (originalLabel) {
+			$button.text(originalLabel);
+		}
+	}
+
 	rlInfo('RL Options Framework Script Loaded', {
 		debugLevel: framework.debug_level || 'error',
 		syncHistory: shouldSyncHistory,
 		swalFallback: useSwalFallback,
 	});
+
+	/**
+	 * Behaviour for the extended field set (slider, spinner, media, gallery, sortable…).
+	 */
+	function initExtendedFields() {
+		// button_set: reflect state on the wrapper
+		$(document).on('change', '.rl-button-set input', function() {
+			$(this).closest('.rl-button-set').find('.rl-button-set-item').each(function() {
+				const $item = $(this);
+				$item.toggleClass('is-active', $item.find('input').prop('checked'));
+			});
+		});
+
+		// slider: keep range and number in sync
+		$(document).on('input change', '.rl-slider-range', function() {
+			$(this).closest('.rl-slider').find('.rl-slider-number').val(this.value);
+		});
+		$(document).on('input change', '.rl-slider-number', function() {
+			const $slider = $(this).closest('.rl-slider');
+			const $range = $slider.find('.rl-slider-range');
+			let value = parseFloat(this.value);
+			if (isNaN(value)) {
+				return;
+			}
+			const min = parseFloat($range.attr('min') || '0');
+			const max = parseFloat($range.attr('max') || '100');
+			value = Math.min(max, Math.max(min, value));
+			$range.val(value);
+		});
+
+		// composite: range mirrors the number input (block-editor behaviour)
+		$(document).on('input', '.rl-gb-range', function() {
+			const $number = $('#' + $(this).data('rl-range-for'));
+
+			if ($number.length) {
+				$number.val(this.value).trigger('input');
+			}
+		});
+		$(document).on('input change', '.rl-gb-number .rl-gb-input', function() {
+			const $range = $(this).closest('.rl-gb-row').find('.rl-gb-range');
+			const value = parseFloat(this.value);
+
+			if ($range.length && !isNaN(value)) {
+				$range.val(value);
+			}
+		});
+
+		// composite: link the four sides so one value drives them all
+		$(document).on('click', '.rl-gb-link', function(event) {
+			event.preventDefault();
+			const $composite = $(this).closest('.rl-composite');
+			const linked = $(this).attr('aria-pressed') !== 'true';
+
+			$composite.find('.rl-gb-link').attr('aria-pressed', linked ? 'true' : 'false');
+			$composite.toggleClass('is-linked', linked);
+
+			if (linked) {
+				const value = $composite.find('[data-rl-side]').first().val();
+				$composite.find('[data-rl-side]').val(value);
+			}
+		});
+		$(document).on('input', '.rl-composite.is-linked [data-rl-side]', function() {
+			$(this)
+				.closest('.rl-composite')
+				.find('[data-rl-side]')
+				.not(this)
+				.val(this.value);
+		});
+
+		// composite: keep the unit suffix inside the number box in sync
+		$(document).on('change', '.rl-gb-unit-select', function() {
+			const $composite = $(this).closest('.rl-composite');
+			const label = $(this).find('option:selected').text();
+
+			$composite.find('[data-rl-suffix]').each(function() {
+				$(this).text(label);
+			});
+			$composite.find('.rl-gb-range').each(function() {
+				$(this).attr('aria-valuetext', $(this).val() + ' ' + label);
+			});
+		});
+
+		// spinner: +/- buttons
+		$(document).on('click', '.rl-spinner-up, .rl-spinner-down', function() {
+			const $input = $(this).closest('.rl-spinner').find('.rl-spinner-input');
+			const step = parseFloat($input.attr('step') || '1') || 1;
+			const min = parseFloat($input.attr('min') || '');
+			const max = parseFloat($input.attr('max') || '');
+			let value = parseFloat($input.val() || '0') + ($(this).hasClass('rl-spinner-up') ? step : -step);
+			if (!isNaN(min) && value < min) { value = min; }
+			if (!isNaN(max) && value > max) { value = max; }
+			$input.val(value).trigger('change');
+		});
+
+		// password: reveal toggle
+		$(document).on('click', '.rl-password-toggle', function() {
+			const $button = $(this);
+			const $input = $button.siblings('input');
+			const reveal = 'password' === $input.attr('type');
+
+			$input.attr('type', reveal ? 'text' : 'password');
+			$button.attr('aria-pressed', reveal ? 'true' : 'false');
+			$button.text(reveal ? 'Hide' : 'Show');
+		});
+
+		// icon_select: search, pick, clear
+		$(document).on('input', '.rl-icon-search', function() {
+			const term = String(this.value || '').toLowerCase();
+			$(this).siblings('.rl-icon-grid').find('.rl-icon-option').each(function() {
+				const $option = $(this);
+				$option.toggle($option.data('icon').indexOf(term) !== -1);
+			});
+		});
+		$(document).on('click', '.rl-icon-option', function() {
+			const $option = $(this);
+			const $wrap = $option.closest('.rl-icon-select');
+			$wrap.find('.rl-icon-option').removeClass('is-selected').attr('aria-selected', 'false');
+			$option.addClass('is-selected').attr('aria-selected', 'true');
+			$wrap.find('.rl-icon-value').val($option.data('icon')).trigger('change');
+		});
+		$(document).on('click', '.rl-icon-clear', function() {
+			const $wrap = $(this).closest('.rl-icon-select');
+			$wrap.find('.rl-icon-option').removeClass('is-selected').attr('aria-selected', 'false');
+			$wrap.find('.rl-icon-value').val('').trigger('change');
+		});
+
+		// media: pick any media type
+		$(document).on('click', '.rl-pick-media', function(e) {
+			e.preventDefault();
+			if (!window.wp || !wp.media) {
+				return;
+			}
+
+			const $button = $(this);
+			const inputId = $button.data('input-id');
+			const $input = $('#' + inputId);
+			const mediaType = $button.data('media-type') || 'image';
+			const $preview = $button.closest('.rl-media-field').find('.rl-media-preview');
+			const $clear = $button.siblings('.rl-clear-media');
+			const frame = wp.media({ title: 'Select media', button: { text: 'Use this media' }, multiple: false, library: { type: mediaType } });
+
+			frame.on('select', function() {
+				const attachment = frame.state().get('selection').first().toJSON();
+				$input.val(attachment.url).trigger('change');
+				$clear.show();
+
+				if (mediaType === 'video') {
+					$preview.html('<video src="' + attachment.url + '" style="max-width:240px;height:auto;" controls></video>');
+				} else if (mediaType === 'audio') {
+					$preview.html('<audio src="' + attachment.url + '" controls></audio>');
+				} else {
+					$preview.html('<img src="' + attachment.url + '" style="max-width:160px;height:auto;display:block;" />');
+				}
+			});
+
+			frame.open();
+		});
+		$(document).on('click', '.rl-clear-media', function(e) {
+			e.preventDefault();
+			const $button = $(this);
+			$('#' + $button.data('input-id')).val('').trigger('change');
+			$button.closest('.rl-media-field').find('.rl-media-preview').empty();
+			$button.hide();
+		});
+
+		// gallery: add / remove attachments
+		$(document).on('click', '.rl-gallery-add', function(e) {
+			e.preventDefault();
+			if (!window.wp || !wp.media) {
+				return;
+			}
+
+			const $gallery = $(this).closest('.rl-gallery');
+			const frame = wp.media({ title: 'Add images', button: { text: 'Add to gallery' }, multiple: true, library: { type: 'image' } });
+
+			frame.on('select', function() {
+				const $items = $gallery.find('.rl-gallery-items');
+
+				frame.state().get('selection').each(function(model) {
+					const attachment = model.toJSON();
+					if ($items.find('[data-id="' + attachment.id + '"]').length) {
+						return;
+					}
+					$items.append(
+						'<span class="rl-gallery-item" data-id="' + attachment.id + '">' +
+						'<img src="' + (attachment.sizes && attachment.sizes.thumbnail ? attachment.sizes.thumbnail.url : attachment.url) + '" alt="" />' +
+						'<button type="button" class="rl-gallery-remove" aria-label="Remove image">&times;</button></span>'
+					);
+				});
+
+				syncGallery($gallery);
+			});
+
+			frame.open();
+		});
+		$(document).on('click', '.rl-gallery-remove', function(e) {
+			e.preventDefault();
+			const $gallery = $(this).closest('.rl-gallery');
+			$(this).closest('.rl-gallery-item').remove();
+			syncGallery($gallery);
+		});
+		function syncGallery($gallery) {
+			const ids = $gallery.find('.rl-gallery-item').map(function() {
+				return String($(this).data('id'));
+			}).get();
+			$gallery.find('.rl-gallery-input').val(ids.join(',')).trigger('change');
+		}
+
+		// multi_text: add / remove rows
+		$(document).on('click', '.rl-multi-text-add', function(e) {
+			e.preventDefault();
+			const $wrap = $(this).closest('.rl-multi-text');
+			const name = $wrap.data('name');
+			$wrap.find('.rl-multi-text-rows').append(
+				'<div class="rl-multi-text-row"><input type="text" class="regular-text" name="' + name + '[]" value="" />' +
+				'<button type="button" class="button rl-multi-text-remove" aria-label="Remove row">&times;</button></div>'
+			);
+		});
+		$(document).on('click', '.rl-multi-text-remove', function(e) {
+			e.preventDefault();
+			const $rows = $(this).closest('.rl-multi-text-rows');
+			$(this).closest('.rl-multi-text-row').remove();
+			if (!$rows.children().length) {
+				$rows.append('<div class="rl-multi-text-row"><input type="text" class="regular-text" name="' + $(this).closest('.rl-multi-text').data('name') + '[]" value="" /><button type="button" class="button rl-multi-text-remove" aria-label="Remove row">&times;</button></div>');
+			}
+		});
+
+		// sortable / sorter: enable + drag ordering
+		$(document).on('change', '.rl-sortable-toggle', function() {
+			const $item = $(this).closest('.rl-sortable-item');
+			const enabled = $(this).prop('checked');
+			$item.toggleClass('is-enabled', enabled);
+			$item.find('.rl-sortable-value').prop('disabled', !enabled);
+		});
+
+		let $dragItem = null;
+		$(document).on('dragstart', '.rl-sortable-item', function() {
+			$dragItem = $(this);
+			$(this).addClass('is-dragging');
+		});
+		$(document).on('dragend', '.rl-sortable-item', function() {
+			$(this).removeClass('is-dragging');
+		});
+		$(document).on('dragover', '.rl-sortable-list', function(e) {
+			e.preventDefault();
+			if (!$dragItem) {
+				return;
+			}
+			const $list = $(this);
+			const $after = $list.find('.rl-sortable-item:not(.is-dragging)').filter(function() {
+				const box = this.getBoundingClientRect();
+				return e.originalEvent.clientY < box.top + box.height / 2;
+			}).first();
+
+			if ($after.length) {
+				$dragItem.insertBefore($after);
+			} else {
+				$list.append($dragItem);
+			}
+		});
+		$(document).on('drop', '.rl-sortable-list', function(e) {
+			e.preventDefault();
+		});
+
+		// color_gradient: live preview
+		$(document).on('input change', '.rl-composite-color_gradient input, .rl-composite-color_gradient select', function() {
+			const $wrap = $(this).closest('.rl-composite-color_gradient');
+			const $preview = $wrap.next('.rl-gradient-preview');
+			if (!$preview.length) {
+				return;
+			}
+			const from = $wrap.find('[name$="[from]"]').val() || 'transparent';
+			const to = $wrap.find('[name$="[to]"]').val() || 'transparent';
+			const angle = parseInt($wrap.find('[name$="[angle]"]').val() || '180', 10);
+			const type = $wrap.find('[name$="[type]"]').val() || 'linear';
+			$preview.css('background', type === 'radial'
+				? 'radial-gradient(circle, ' + from + ' 0%, ' + to + ' 100%)'
+				: 'linear-gradient(' + angle + 'deg, ' + from + ' 0%, ' + to + ' 100%)');
+		});
+
+		// code: CodeMirror
+		initCodeEditors();
+	}
+
+	function initCodeEditors() {
+		if (!window.wp || !wp.codeEditor || typeof wp.codeEditor.initialize !== 'function') {
+			return;
+		}
+
+		const settings = window.rlCodeEditorSettings || {};
+		document.querySelectorAll('textarea.rl-code-editor').forEach(function(textarea) {
+			if (textarea.dataset.rlCodeMirrorReady === '1') {
+				return;
+			}
+			textarea.dataset.rlCodeMirrorReady = '1';
+
+			try {
+				wp.codeEditor.initialize(textarea, settings);
+			} catch (err) {
+				rlWarn('Code editor init failed.', err);
+			}
+		});
+	}
 
 	function initTooltips() {
 		if (typeof tippy === 'undefined') {
@@ -226,17 +598,21 @@
 			links.forEach((link) => {
 				const isActive = link.dataset.rlTab === slug;
 				link.classList.toggle('nav-tab-active', isActive);
+				link.setAttribute('aria-selected', isActive ? 'true' : 'false');
+				link.setAttribute('tabindex', isActive ? '0' : '-1');
 			});
 
 			panels.forEach((panel) => {
 				const isActive = panel.dataset.rlPanel === slug;
 				panel.classList.toggle('is-active', isActive);
+				panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
 				
 				// Open first accordion section when tab becomes active
 				if (isActive) {
 					openFirstAccordionInPanel(panel);
 					openFirstSidebarInPanel(panel);
 					initColorPickers(panel);
+					initCodeEditors();
 				}
 			});
 
@@ -267,6 +643,36 @@
 				event.preventDefault();
 				activateTab(link.dataset.rlTab);
 			});
+		});
+
+		// Keyboard navigation between tabs (WAI-ARIA tabs pattern).
+		navWrapper.addEventListener('keydown', (event) => {
+			const visibleLinks = links.filter((link) => link.offsetParent !== null);
+			const currentIndex = visibleLinks.indexOf(document.activeElement);
+
+			if (currentIndex === -1) {
+				return;
+			}
+
+			let nextIndex = null;
+			if (event.key === 'ArrowRight') {
+				nextIndex = (currentIndex + 1) % visibleLinks.length;
+			} else if (event.key === 'ArrowLeft') {
+				nextIndex = (currentIndex - 1 + visibleLinks.length) % visibleLinks.length;
+			} else if (event.key === 'Home') {
+				nextIndex = 0;
+			} else if (event.key === 'End') {
+				nextIndex = visibleLinks.length - 1;
+			}
+
+			if (nextIndex === null || nextIndex === currentIndex) {
+				return;
+			}
+
+			event.preventDefault();
+			const nextLink = visibleLinks[nextIndex];
+			nextLink.focus();
+			activateTab(nextLink.dataset.rlTab);
 		});
 		
 		// Restore last active tab from localStorage or URL hash
@@ -743,6 +1149,15 @@
 
 		if (previousValue && Array.from(select.options).some((o) => o.value === previousValue)) {
 			select.value = previousValue;
+		} else if (previousValue) {
+			// Keep a saved value that the refreshed list no longer offers, otherwise
+			// the next save would silently persist the empty/default option.
+			const staleOption = document.createElement('option');
+			staleOption.value = previousValue;
+			staleOption.textContent = previousValue;
+			select.appendChild(staleOption);
+			select.value = previousValue;
+			rlWarn('Provider options do not include the saved value; keeping it.', previousValue);
 		} else if (hasEmptyOption) {
 			select.value = '';
 		}
@@ -1447,6 +1862,7 @@
 		
 		initTooltips();
 		initColorPickers();
+		initExtendedFields();
 		initColorPaletteFields();
 		initDateTimePickers();
 		initTabs();
@@ -1474,15 +1890,37 @@
 			rlLog('Form fields count:', $form.find('input, select, textarea').length);
 			
 			// Remove default submit handler
+			let isSaving = false;
+
 			$form.off('submit').on('submit', function(e) {
 				e.preventDefault();
+
+				if (isSaving) {
+					return false;
+				}
+
 				$(this).trigger('rl:validated-submit');
 			}).off('rl:validated-submit').on('rl:validated-submit', function() {
+				
+				if (isSaving) {
+					return false;
+				}
+				
+				isSaving = true;
 				
 				rlLog('='.repeat(70));
 				rlLog('📝 FORM SUBMISSION TRIGGERED');
 				rlLog('='.repeat(70));
 				
+				// Rich-text fields live in TinyMCE until they are flushed to their textarea.
+				if (window.tinymce && typeof window.tinymce.triggerSave === 'function') {
+					try {
+						window.tinymce.triggerSave();
+					} catch (err) {
+						rlWarn('TinyMCE sync failed.', err);
+					}
+				}
+
 				const formData = $(this).serialize();
 				const $submitBtn = $(this).find('button[type="submit"], input[type="submit"]');
 				
@@ -1508,24 +1946,9 @@
 				}
 				rlLog(`Total option fields: ${fieldCount}`);
 				
-				// Disable submit button
-				$submitBtn.prop('disabled', true);
+				// Disable submit button and show inline progress (no modal needed).
+				setButtonBusy($submitBtn, true);
 				rlLog('Submit button disabled');
-				
-				// Show loading state if SweetAlert is available.
-				if (typeof Swal !== 'undefined' && Swal && typeof Swal.fire === 'function') {
-					safeSwal({
-						title: 'Saving...',
-						text: 'Please wait while your settings are being saved.',
-						allowOutsideClick: false,
-						allowEscapeKey: false,
-						showConfirmButton: false,
-						didOpen: () => {
-							Swal.showLoading();
-						}
-					});
-				}
-				rlLog('Loading dialog shown');
 				rlLog('Sending AJAX request...');
 				
 				$.ajax({
@@ -1538,7 +1961,8 @@
 						rlLog('Response:', response);
 						rlLog('Response type:', typeof response);
 						
-						$submitBtn.prop('disabled', false);
+						setButtonBusy($submitBtn, false);
+						isSaving = false;
 						
 						// Handle response - it might be a string or object
 						let data = response;
@@ -1574,16 +1998,13 @@
 							rlLog('  - Saved fields:', saved);
 							
 							closeSwalIfOpen();
-							safeSwal({
-								icon: 'success',
-								title: 'Success',
-								text: message,
-								confirmButtonText: 'OK'
-							}, message).then(function() {
-								if (data.data && data.data.imported) {
+							showToast('success', message);
+
+							if (data.data && data.data.imported) {
+								window.setTimeout(function() {
 									window.location.reload();
-								}
-							});
+								}, 900);
+							}
 						} else {
 
 							const message = (data.data && data.data.message) || (data.message) || 'Failed to save settings.';
@@ -1620,7 +2041,8 @@
 						rlError('Full XHR:', xhr);
 						rlLog('='.repeat(70));
 						
-						$submitBtn.prop('disabled', false);
+						setButtonBusy($submitBtn, false);
+						isSaving = false;
 						
 						const responseText = (xhr && typeof xhr.responseText === 'string') ? xhr.responseText.trim() : '';
 						const isSecurityError = xhr && xhr.status === 403;

@@ -27,7 +27,7 @@ class RL_FSBI_Field_Textarea implements RL_FSBI_Field_Interface, RL_FSBI_Field_P
 
 	public function sanitize(array $field, $value, array $context = [])
 	{
-		return isset($value) ? wp_kses_post($value) : '';
+		return is_scalar($value) ? wp_kses_post((string) $value) : '';
 	}
 
 	public function validate(array $field, $value, string &$error, array $context = []): bool
@@ -35,10 +35,19 @@ class RL_FSBI_Field_Textarea implements RL_FSBI_Field_Interface, RL_FSBI_Field_P
 		$field_label = $context['field_label'] ?? 'Field';
 		$text_domain = $context['text_domain'] ?? 'default';
 
-		if (isset($field['maxlength']) && mb_strlen($value) > $field['maxlength']) {
+		if (null !== $value && !is_scalar($value)) {
+			$error = sprintf(
+				/* translators: %s: field label */
+				__('%s has an invalid value.', RL_FSBI_Options_Framework::text_domain()),
+				$field_label
+			);
+			return false;
+		}
+
+		if (isset($field['maxlength']) && mb_strlen((string) $value) > $field['maxlength']) {
 			$error = sprintf(
 				/* translators: 1: field label, 2: max length */
-				__('%1$s must be no more than %2$s characters.', 'smart-variations-images-premium'),
+				__('%1$s must be no more than %2$s characters.', RL_FSBI_Options_Framework::text_domain()),
 				$field_label,
 				$field['maxlength']
 			);
@@ -48,7 +57,7 @@ class RL_FSBI_Field_Textarea implements RL_FSBI_Field_Interface, RL_FSBI_Field_P
 		if (isset($field['pattern']) && !preg_match($field['pattern'], $value)) {
 			$error = sprintf(
 				/* translators: %s: field label */
-				__('%s has an invalid format.', 'smart-variations-images-premium'),
+				__('%s has an invalid format.', RL_FSBI_Options_Framework::text_domain()),
 				$field_label
 			);
 			return false;
