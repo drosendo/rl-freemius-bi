@@ -1668,3 +1668,87 @@ p.rl-fsbi-field-desc,
 .swal2-container .swal2-actions {
 	margin-top: 16px;
 }
+
+/*
+ * Sticky toolbar and tab bar.
+ *
+ * The toolbar carries the controls every tab needs - plugin, currency, dates,
+ * plan, sync and last-synced - so it stays in reach instead of scrolling away.
+ * wp-admin's own admin bar is 32px (46px below 783px), and the offset accounts
+ * for it so the header never hides underneath.
+ */
+.rl-fsbi-dashboard .rl-fsbi-toolbar {
+	position: sticky;
+	top: var(--wp-admin--admin-bar--height, 32px);
+	z-index: 20;
+	background: var(--fsbi-bg, #111521);
+	padding-bottom: 0;
+	margin-bottom: 4px;
+}
+
+.rl-fsbi-tabs {
+	display: flex;
+	gap: 2px;
+	margin: 4px 0 0;
+	border-bottom: 1px solid var(--fsbi-border, #2b3150);
+	overflow-x: auto;
+	scrollbar-width: thin;
+}
+
+.rl-fsbi-tab {
+	appearance: none;
+	background: transparent;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	color: var(--fsbi-muted, #9aa4cc);
+	font-size: 13px;
+	font-weight: 500;
+	line-height: 1.2;
+	padding: 8px 13px;
+	margin: 0;
+	cursor: pointer;
+	white-space: nowrap;
+	border-radius: 4px 4px 0 0;
+}
+
+.rl-fsbi-tab:hover {
+	color: var(--fsbi-text, #e7ebff);
+	background: rgba(95, 107, 255, 0.08);
+}
+
+.rl-fsbi-tab[aria-selected="true"] {
+	color: #fff;
+	border-bottom-color: var(--fsbi-accent, #5f6bff);
+	background: rgba(95, 107, 255, 0.14);
+}
+
+.rl-fsbi-tab:focus-visible {
+	outline: 2px solid var(--fsbi-accent, #5f6bff);
+	outline-offset: -2px;
+}
+
+/* Hidden tabs are removed from the flow entirely, not just invisible. */
+.rl-fsbi-panel[hidden] {
+	display: none !important;
+}
+
+.rl-fsbi-placeholder {
+	padding: 20px 22px;
+}
+
+@media (max-width: 1200px) {
+	.rl-fsbi-dashboard .rl-fsbi-toolbar {
+		padding-bottom: 2px;
+	}
+
+	.rl-fsbi-tab {
+		padding: 9px 11px;
+		font-size: 12px;
+	}
+}
+
+@media (max-width: 783px) {
+	.rl-fsbi-dashboard .rl-fsbi-toolbar {
+		top: 46px;
+	}
+}

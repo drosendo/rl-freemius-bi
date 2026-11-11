@@ -149,6 +149,9 @@
 		 */
 		init: function() {
 			this.applyDefaultFilters();
+			// Tabs first: the hash decides which panel is visible before any data
+			// arrives, so a link to #growth does not flash the overview.
+			this.initTabs();
 			this.bindEvents();
 			this.initTooltips();
 			this.showLoading(this.loadingText('contacting'));
@@ -354,6 +357,121 @@
 		 * @memberof FSBI
 		 * @returns {void}
 		 */
+		/**
+		 * Hash-routed tabs.
+		 *
+		 * The hash is the source of truth, so browser back/forward and a pasted
+		 * link to #growth both land on the right panel. Tabs are a real tablist:
+		 * one tab in the tab order at a time, arrow keys move between them,
+		 * Home/End jump to the ends, and aria-selected carries the state.
+		 *
+		 * @function initTabs
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
+		initTabs: function() {
+			this.tabList = Array.prototype.slice.call(document.querySelectorAll('.rl-fsbi-tab'));
+			if (!this.tabList.length) {
+				return;
+			}
+
+			this.tabList.forEach((tab) => {
+				tab.addEventListener('click', () => {
+					const slug = tab.getAttribute('data-tab');
+					if (window.location.hash !== '#' + slug) {
+						window.location.hash = slug;
+					} else {
+						this.showTab(slug);
+					}
+				});
+
+				tab.addEventListener('keydown', (event) => {
+					const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End'];
+					if (keys.indexOf(event.key) === -1) {
+						return;
+					}
+
+					event.preventDefault();
+					const index = this.tabList.indexOf(tab);
+					let next = index;
+
+					if ('ArrowRight' === event.key) {
+						next = (index + 1) % this.tabList.length;
+					} else if ('ArrowLeft' === event.key) {
+						next = (index - 1 + this.tabList.length) % this.tabList.length;
+					} else if ('Home' === event.key) {
+						next = 0;
+					} else if ('End' === event.key) {
+						next = this.tabList.length - 1;
+					}
+
+					const target = this.tabList[next];
+					if (target) {
+						target.focus();
+						this.showTab(target.getAttribute('data-tab'), true);
+					}
+				});
+			});
+
+			window.addEventListener('hashchange', () => this.applyTabFromHash());
+			this.applyTabFromHash();
+		},
+
+		/**
+		 * Show the panel named in the URL hash, falling back to overview.
+		 *
+		 * A #wporg link on a product with no WordPress.org slug must not leave
+		 * the dashboard blank, so an unknown tab resolves to overview.
+		 *
+		 * @function applyTabFromHash
+		 * @memberof FSBI
+		 * @returns {void}
+		 */
+		applyTabFromHash: function() {
+			const slug = (window.location.hash || '').replace(/^#/, '');
+			this.showTab(slug || 'overview');
+		},
+
+		/**
+		 * Show one panel and mark its tab selected.
+		 *
+		 * @function showTab
+		 * @memberof FSBI
+		 * @param {string}  slug  Tab slug.
+		 * @param {boolean} focus Move focus to the tab as well.
+		 * @returns {void}
+		 */
+		showTab: function(slug, focus) {
+			const panels = Array.prototype.slice.call(document.querySelectorAll('.rl-fsbi-panel[data-panel]'));
+			const wanted = panels.some((panel) => panel.getAttribute('data-panel') === slug) ? slug : 'overview';
+
+			panels.forEach((panel) => {
+				const isActive = panel.getAttribute('data-panel') === wanted;
+				if (isActive) {
+					panel.removeAttribute('hidden');
+				} else {
+					panel.setAttribute('hidden', 'hidden');
+				}
+			});
+
+			this.tabList.forEach((tab) => {
+				const isActive = tab.getAttribute('data-tab') === wanted;
+				tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+				tab.setAttribute('tabindex', isActive ? '0' : '-1');
+				if (isActive && focus) {
+					tab.focus();
+				}
+			});
+
+			// Arrow-key activation must keep the URL honest without pushing a
+			// history entry per keystroke, so it rewrites the current entry.
+			if (focus && window.location.hash !== '#' + wanted) {
+				window.history.replaceState(null, '', '#' + wanted);
+			}
+
+			this.currentTab = wanted;
+		},
+
 		applyDefaultFilters: function() {
 			const currencyFilter = document.getElementById('rl-fsbi-currency-filter');
 			if (currencyFilter) {

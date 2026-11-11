@@ -990,6 +990,18 @@ bumping `Version:` means no site will ever see it.
 - **Counts now reconcile with the active total.** "Failed payments" read the raw status, so it reported **337** against a KPI of **190** — it restricted to a different population than the KPI (which also requires a known billing cycle and excludes expired rows). Both it and the plan distribution now use the exact row set the KPI counts: **1** of 190 and **104 + 86 = 190**, against **0** of 45 and **29 + 16 = 45** on the demo product. The label became "Active subs with a failed payment" and the tooltip says it counts subscriptions, not attempts.
 - **`rl-fsbi-wporg-chart` is gone.** The Freemius sales-volume canvas is `rl-fsbi-sales-volume-chart` and reads the payload's `daily_sales_volume` key; `wporg_growth` stays as a payload alias for older consumers.
 
+### Unreleased - sticky header and hash-routed tabs (phase 1, step 2)
+
+The toolbar is now sticky and carries a tab bar underneath it: Overview, Growth, Retention, Customers, Marketing, and WordPress.org **only when the product has a wp.org slug** - that tab is not rendered for a product without one, so no wp.org figure can ever sit beside a Freemius figure by accident.
+
+Routing is driven by the URL hash, so browser back and forward move between tabs and a pasted link to `#growth` or `#wporg` opens that panel directly. An unknown hash falls back to `#overview` rather than leaving the page blank - important because a saved `#wporg` link stays valid for a product whose slug is later removed.
+
+The tablist is a real tablist: `role="tablist"`, `role="tab"` with `aria-controls`, `role="tabpanel"` with `aria-labelledby`, one tab in the tab order at a time (`tabindex` 0 on the selected tab, -1 on the rest), `aria-selected` carrying state, and ArrowLeft / ArrowRight / Home / End moving between tabs. Arrow activation rewrites the current history entry instead of pushing a new one, so keyboard exploration does not flood the back button.
+
+Panels hide with the `hidden` attribute and `.rl-fsbi-panel[hidden] { display: none !important; }`, which overrides the `display: contents` used in step 1.
+
+Verified: click, back, forward, direct `#growth`, direct `#wporg` and `#nonsense` (falls back to overview) all select the expected tab and show exactly the expected panels; a real click followed by ArrowRight moves focus and selection from Overview to Growth; no console errors. Header height 166px at 1024 and 1200, 163px at 1280, 132px at 1920, with the tab bar never overflowing at any of them.
+
 ### Unreleased - dashboard panels (phase 1, step 1)
 
 The product dashboard's detailed cards now live in `<section class="rl-fsbi-panel" data-panel="...">` groups: `growth` (sales activity and the mini stats, expected renewals, trial funnel, forecast, the four charts, sales volume, Freemius installs), `wporg` (the WordPress.org card alone), `marketing` (coupons) and `customers` (monthly revenue breakdown). `overview` and `retention` are declared but empty until steps 4 and 2 fill them.

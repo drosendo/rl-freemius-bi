@@ -120,8 +120,33 @@ if ( ! defined( 'WPINC' ) ) {
 			<button id="rl-fsbi-sync-cancel-btn" class="button" type="button" hidden><?php echo esc_html__( 'Cancel Sync', 'rl-freemius-bi' ); ?></button>
 			<span class="rl-fsbi-last-synced" id="rl-fsbi-last-synced" title="<?php echo esc_attr__( 'When the local copy of your Freemius data was last refreshed, in the site timezone.', 'rl-freemius-bi' ); ?>"></span>
 		</div>
+
+		<?php
+		$dashboard_tabs = array(
+			'overview'  => __( 'Overview', 'rl-freemius-bi' ),
+			'growth'    => __( 'Growth', 'rl-freemius-bi' ),
+			'retention' => __( 'Retention', 'rl-freemius-bi' ),
+			'customers' => __( 'Customers', 'rl-freemius-bi' ),
+			'marketing' => __( 'Marketing', 'rl-freemius-bi' ),
+		);
+		// WordPress.org data is never mixed with Freemius figures, so it gets its
+		// own tab - and no tab at all when the product has no slug.
+		if ( ! empty( $GLOBALS['rl_fsbi_has_wporg'] ) ) {
+			$dashboard_tabs['wporg'] = __( 'WordPress.org', 'rl-freemius-bi' );
+		}
+		?>
+		<div class="rl-fsbi-tabs" role="tablist" aria-label="<?php echo esc_attr__( 'Dashboard sections', 'rl-freemius-bi' ); ?>">
+			<?php foreach ( $dashboard_tabs as $tab_slug => $tab_label ) : ?>
+				<button type="button" class="rl-fsbi-tab" role="tab" id="rl-fsbi-tab-<?php echo esc_attr( $tab_slug ); ?>"
+					data-tab="<?php echo esc_attr( $tab_slug ); ?>"
+					aria-controls="rl-fsbi-panel-<?php echo esc_attr( $tab_slug ); ?>"
+					aria-selected="<?php echo 'overview' === $tab_slug ? 'true' : 'false'; ?>"
+					tabindex="<?php echo 'overview' === $tab_slug ? '0' : '-1'; ?>"><?php echo esc_html( $tab_label ); ?></button>
+			<?php endforeach; ?>
+		</div>
 	</div>
 
+	<section class="rl-fsbi-panel" data-panel="overview" id="rl-fsbi-panel-overview" role="tabpanel" aria-labelledby="rl-fsbi-tab-overview" tabindex="0">
 	<div class="rl-fsbi-top-grid">
 		<div class="rl-fsbi-card rl-fsbi-hero-card">
 			<div class="rl-fsbi-card-label"><?php echo esc_html__( 'Total Net Revenue', 'rl-freemius-bi' ); ?></div>
@@ -254,8 +279,17 @@ if ( ! defined( 'WPINC' ) ) {
 		</div>
 	</div>
 
+	</section>
+
+	<section class="rl-fsbi-panel" data-panel="retention" id="rl-fsbi-panel-retention" role="tabpanel" aria-labelledby="rl-fsbi-tab-retention" tabindex="0">
+		<div class="rl-fsbi-card rl-fsbi-placeholder">
+			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Retention', 'rl-freemius-bi' ); ?></div>
+			<p class="rl-fsbi-card-sub"><?php echo esc_html__( 'Cohort retention, MRR movement and cancellation themes arrive in the next step.', 'rl-freemius-bi' ); ?></p>
+		</div>
+	</section>
+
 	<div class="rl-fsbi-content-grid">
-		<section class="rl-fsbi-panel" data-panel="growth">
+		<section class="rl-fsbi-panel" data-panel="growth" id="rl-fsbi-panel-growth" role="tabpanel" aria-labelledby="rl-fsbi-tab-growth" tabindex="0">
 		<div class="rl-fsbi-card rl-fsbi-span-2">
 			<div class="rl-fsbi-panel-title" id="rl-fsbi-sales-activity-title"><?php echo esc_html__( 'Sales Activity', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-sales-activity-chart"></canvas>
@@ -403,7 +437,7 @@ if ( ! defined( 'WPINC' ) ) {
 
 		<?php if ( ! empty( $GLOBALS['rl_fsbi_has_wporg'] ) ) : ?>
 		</section>
-		<section class="rl-fsbi-panel" data-panel="wporg">
+		<section class="rl-fsbi-panel" data-panel="wporg" id="rl-fsbi-panel-wporg" role="tabpanel" aria-labelledby="rl-fsbi-tab-wporg" tabindex="0">
 		<div class="rl-fsbi-card rl-fsbi-wporg-widget" id="rl-fsbi-wporg-widget">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'WordPress.org (free)', 'rl-freemius-bi' ); ?></div>
 			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'From the public WordPress.org plugins API. These are installs of the free plugin from the WordPress.org directory — a different population from the Freemius install records beside them, so the two are shown separately and never added together.', 'rl-freemius-bi' ); ?></div>
@@ -435,7 +469,7 @@ if ( ! defined( 'WPINC' ) ) {
 		</section>
 	</div>
 
-	<section class="rl-fsbi-panel" data-panel="marketing">
+	<section class="rl-fsbi-panel" data-panel="marketing" id="rl-fsbi-panel-marketing" role="tabpanel" aria-labelledby="rl-fsbi-tab-marketing" tabindex="0">
 	<div class="rl-fsbi-card rl-fsbi-coupons-card">
 		<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Coupons', 'rl-freemius-bi' ); ?></div>
 		<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Redemptions in the selected period with the coupon definition as Freemius reports it. Uses counts this period; the limit, remaining and expiry are the coupon\'s own. Discount given is derived from the amount actually charged.', 'rl-freemius-bi' ); ?></div>
@@ -461,7 +495,7 @@ if ( ! defined( 'WPINC' ) ) {
 	</section>
 	</div>
 
-	<section class="rl-fsbi-panel" data-panel="customers">
+	<section class="rl-fsbi-panel" data-panel="customers" id="rl-fsbi-panel-customers" role="tabpanel" aria-labelledby="rl-fsbi-tab-customers" tabindex="0">
 	<div class="rl-fsbi-card rl-fsbi-table-card">
 		<div class="rl-fsbi-card-header-flex">
 			<div>
