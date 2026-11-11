@@ -1698,6 +1698,8 @@
 				pointRadius: 1.5,
 			}));
 
+			const isMoney = key === 'forecast' || key === 'portfolio';
+
 			this.charts[key] = new Chart(canvas, {
 				type: 'line',
 				data: {
@@ -1715,7 +1717,7 @@
 							callbacks: {
 								label: (ctx) => {
 									const value = Number(ctx.parsed.y || 0);
-									const formatted = key === 'forecast' || key === 'portfolio'
+									const formatted = isMoney
 										? this.formatCurrency(value, this.getDisplayCurrency())
 										: value.toLocaleString();
 									return `${ctx.dataset.label}: ${formatted}`;
@@ -1725,7 +1727,13 @@
 					},
 					scales: {
 						x: { ticks: { color: '#9ca8d6' }, grid: { color: 'rgba(255,255,255,0.08)' } },
-						y: { beginAtZero: true, ticks: { color: '#9ca8d6', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.08)' } },
+						// Unit counts get integer ticks only, so a low-volume series
+						// reads 0/1/2/3 instead of half payments.
+						y: {
+							beginAtZero: true,
+							ticks: { color: '#9ca8d6', maxTicksLimit: 8, precision: isMoney ? undefined : 0 },
+							grid: { color: 'rgba(255,255,255,0.08)' },
+						},
 					},
 				},
 			});

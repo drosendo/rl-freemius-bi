@@ -5470,7 +5470,7 @@ class RL_FSBI_Admin
 		$currency_distribution = $this->build_distribution_series($payments, 'currency', 'gross', $commission_rate, $report_currency);
 		$country_distribution = $this->build_distribution_series($payments, 'country_code', 'net', $commission_rate, $report_currency);
 		$plan_distribution = $this->build_plan_distribution_series($subscriptions);
-		$wporg_growth = $this->build_wporg_growth_series($annual_payments);
+		$daily_sales_volume = $this->build_daily_sales_volume_series($annual_payments);
 
 		$raw_currency_distribution = array();
 		for ($i = 0; $i < count($currency_distribution['labels']); $i++) {
@@ -5534,7 +5534,8 @@ class RL_FSBI_Admin
 				'currency_distribution' => $currency_distribution,
 				'country_distribution' => $country_distribution,
 				'plan_distribution'    => $plan_distribution,
-				'wporg_growth'         => $wporg_growth,
+				'wporg_growth'         => $daily_sales_volume,
+				'daily_sales_volume'   => $daily_sales_volume,
 			),
 			'table' => $monthly_table,
 
@@ -5831,31 +5832,10 @@ class RL_FSBI_Admin
 		$period_start_stamp  = $period_start ? strtotime($period_start . ' 00:00:00') : false;
 
 		if (false !== $period_start_stamp) {
-			foreach ($subscriptions as $subscription) {
-				$created_at = ! empty($subscription->created_at) ? strtotime((string) $subscription->created_at) : false;
-				$expires_at = ! empty($subscription->expires_at) ? strtotime((string) $subscription->expires_at) : false;
-				$meta       = json_decode((string) ($subscription->metadata ?? ''), true);
-				$status     = strtolower((string) ($subscription->status ?? ''));
-
-				$cancel_stamp = is_array($meta) && ! empty($meta['canceled_at']) ? strtotime((string) $meta['canceled_at']) : false;
-				if (false === $cancel_stamp && in_array($status, array('cancelled', 'canceled'), true) && ! empty($subscription->updated_at)) {
-					$cancel_stamp = strtotime((string) $subscription->updated_at);
-				}
-
-				$existed_at_start = (false === $created_at || $created_at <= $period_start_stamp)
-					&& (false === $expires_at || $expires_at >= $period_start_stamp)
-					&& (false === $cancel_stamp || $cancel_stamp > $period_start_stamp);
-
-				if ($existed_at_start) {
-					$churn_base++;
-				}
-
-				if (false !== $cancel_stamp && $cancel_stamp >= $period_start_stamp && $cancel_stamp <= $as_of_timestamp) {
-					$churn_cancellations++;
-				}
-			}
-
-			$churn_rate = $churn_base > 0 ? round(($churn_cancellations / $churn_base) * 100, 2) : 0.0;
+			$churn_window       = $this->count_churn_window($subscriptions, $period_start_stamp, $as_of_timestamp);
+			$churn_base         = $churn_window['base'];
+			$churn_cancellations = $churn_window['cancellations'];
+			$churn_rate         = $churn_window['rate'];
 		}
 
 		return array(
@@ -6278,47 +6258,70 @@ class RL_FSBI_Admin
 	{
 		$labels = array();
 		$canceled = array();
-		$active = array();
+		$rates = array();
+		$now = time();
 
 		for ($i = 5; $i >= 0; $i--) {
-			$key = gmdate('Y-m', strtotime('-' . $i . ' months'));
-			$labels[] = $key;
-			$canceled[$key] = 0;
-			$active[$key] = 0;
-		}
+			$month_start = strtotime(gmdate('Y-m-01', strtotime('-' . $i . ' months')));
+			$month_end   = strtotime(gmdate('Y-m-d', $month_start) . ' +1 month -1 second');
+			$labels[]    = gmdate('Y-m', $month_start);
 
-		foreach ($subscriptions as $subscription) {
-			$status = strtolower((string) $subscription->status);
-			$meta = json_decode((string) ($subscription->metadata ?? ''), true);
-			$created_at = ! empty($subscription->created_at) ? strtotime((string) $subscription->created_at) : 0;
-			$canceled_at = is_array($meta) && ! empty($meta['canceled_at']) ? strtotime((string) $meta['canceled_at']) : 0;
-			$updated_month = ! empty($subscription->updated_at) ? substr((string) $subscription->updated_at, 0, 7) : '';
-
-			foreach ($labels as $label) {
-				$month_end = strtotime($label . '-01 +1 month -1 second');
-				$exists = ! $created_at || $created_at <= $month_end;
-				$was_canceled = $canceled_at && $canceled_at <= $month_end;
-
-				if ($exists && ! $was_canceled && in_array($status, array('active', 'paid', 'trialing', 'trial_ended'), true)) {
-					$active[$label]++;
-				}
-			}
-
-			if (in_array($status, array('cancelled', 'canceled'), true) && isset($canceled[$updated_month])) {
-				$canceled[$updated_month]++;
-			}
-		}
-
-		$rates = array();
-		foreach ($labels as $label) {
-			$base = max(1, (int) $active[$label]);
-			$rates[] = round(((int) $canceled[$label] / $base) * 100, 2);
+			// Same window rule as the Churn KPI: cancellations inside the window
+			// divided by the base that existed when it opened. The two figures
+			// are read side by side, so they must not be computed differently.
+			$window = $this->count_churn_window($subscriptions, $month_start, min($month_end, $now));
+			$canceled[] = $window['cancellations'];
+			$rates[]    = $window['rate'];
 		}
 
 		return array(
 			'labels' => $labels,
-			'canceled' => array_values($canceled),
+			'canceled' => $canceled,
 			'churn_rate' => $rates,
+		);
+	}
+
+	/**
+	 * Count cancellations in a window against the base that existed at its start.
+	 *
+	 * @param array $subscriptions Subscription rows.
+	 * @param int   $window_start  Window start timestamp.
+	 * @param int   $window_end    Window end timestamp.
+	 * @return array{base:int,cancellations:int,rate:float}
+	 */
+	private function count_churn_window($subscriptions, $window_start, $window_end)
+	{
+		$base = 0;
+		$cancellations = 0;
+
+		foreach ($subscriptions as $subscription) {
+			$created_at = ! empty($subscription->created_at) ? strtotime((string) $subscription->created_at) : false;
+			$expires_at = ! empty($subscription->expires_at) ? strtotime((string) $subscription->expires_at) : false;
+			$meta       = json_decode((string) ($subscription->metadata ?? ''), true);
+			$status     = strtolower((string) ($subscription->status ?? ''));
+
+			$cancel_stamp = is_array($meta) && ! empty($meta['canceled_at']) ? strtotime((string) $meta['canceled_at']) : false;
+			if (false === $cancel_stamp && in_array($status, array('cancelled', 'canceled'), true) && ! empty($subscription->updated_at)) {
+				$cancel_stamp = strtotime((string) $subscription->updated_at);
+			}
+
+			$existed_at_start = (false === $created_at || $created_at <= $window_start)
+				&& (false === $expires_at || $expires_at >= $window_start)
+				&& (false === $cancel_stamp || $cancel_stamp > $window_start);
+
+			if ($existed_at_start) {
+				$base++;
+			}
+
+			if (false !== $cancel_stamp && $cancel_stamp >= $window_start && $cancel_stamp <= $window_end) {
+				$cancellations++;
+			}
+		}
+
+		return array(
+			'base' => $base,
+			'cancellations' => $cancellations,
+			'rate' => $base > 0 ? round(($cancellations / $base) * 100, 2) : 0.0,
 		);
 	}
 
@@ -6385,9 +6388,12 @@ class RL_FSBI_Admin
 	}
 
 	/**
-	 * Build WP.org growth placeholder from recent daily purchase activity.
+	 * Count payment events per day over the last 90 days.
+	 *
+	 * This is Freemius billing activity. It is not a WordPress.org install
+	 * count, and the two must never be presented as one series.
 	 */
-	private function build_wporg_growth_series($payments)
+	private function build_daily_sales_volume_series($payments)
 	{
 		$bucket = array();
 		$start_ts = strtotime('-90 days');

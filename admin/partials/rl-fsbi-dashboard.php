@@ -290,7 +290,8 @@ if ( ! defined( 'WPINC' ) ) {
 		</div>
 
 		<div class="rl-fsbi-card rl-fsbi-span-3">
-			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'WP.org Growth & Downloads', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Freemius Sales Volume (Daily, Last 90 Days)', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Number of payment events recorded per day. This is Freemius billing activity, not WordPress.org install counts.', 'rl-freemius-bi' ); ?></div>
 			<canvas id="rl-fsbi-wporg-chart"></canvas>
 		</div>
 	</div>
