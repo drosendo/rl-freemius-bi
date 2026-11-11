@@ -564,6 +564,16 @@
 	grid-column: span 3;
 }
 
+.rl-fsbi-wporg-widget {
+	grid-column: span 3;
+}
+
+.rl-fsbi-wporg-chart-wrap {
+	position: relative;
+	height: 120px;
+	margin-top: 10px;
+}
+
 .rl-fsbi-wporg-note {
 	margin: 10px 0 0;
 	font-size: 11px;

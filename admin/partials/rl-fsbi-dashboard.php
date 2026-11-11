@@ -363,6 +363,21 @@ if ( ! defined( 'WPINC' ) ) {
 			<canvas id="rl-fsbi-wporg-chart"></canvas>
 		</div>
 
+		<div class="rl-fsbi-card rl-fsbi-wporg-widget" id="rl-fsbi-wporg-widget">
+			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'WordPress.org (free)', 'rl-freemius-bi' ); ?></div>
+			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'From the public WordPress.org plugins API. These are installs of the free plugin from the WordPress.org directory — a different population from the Freemius install records beside them, so the two are shown separately and never added together.', 'rl-freemius-bi' ); ?></div>
+			<dl class="rl-fsbi-block-metrics">
+				<div><dt><?php echo esc_html__( 'Active installs', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-wporg-active">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Total downloads', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-wporg-downloads">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Version', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-wporg-version">—</dd></div>
+				<div><dt><?php echo esc_html__( 'Last updated', 'rl-freemius-bi' ); ?></dt><dd id="rl-fsbi-wporg-updated">—</dd></div>
+			</dl>
+			<p class="rl-fsbi-card-sub rl-fsbi-wporg-note" id="rl-fsbi-wporg-note" hidden></p>
+			<div class="rl-fsbi-wporg-chart-wrap">
+				<canvas id="rl-fsbi-wporg-installs-chart" aria-label="<?php echo esc_attr__( 'WordPress.org daily downloads', 'rl-freemius-bi' ); ?>" role="img"></canvas>
+			</div>
+		</div>
+
 		<div class="rl-fsbi-card rl-fsbi-installs-widget">
 			<div class="rl-fsbi-panel-title"><?php echo esc_html__( 'Freemius Installs', 'rl-freemius-bi' ); ?></div>
 			<div class="rl-fsbi-card-sub rl-fsbi-chart-note"><?php echo esc_html__( 'Install records reported to Freemius by the plugin itself. WordPress.org shows a different population and is never combined with this figure.', 'rl-freemius-bi' ); ?></div>

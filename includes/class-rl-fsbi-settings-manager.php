@@ -166,6 +166,18 @@ class RL_FSBI_Settings_Manager {
 			$api_desc .= ' (' . $status . ')';
 		}
 
+		// Support-tab documentation for the read-only endpoint, so the contract
+		// lives next to the settings rather than only in the repository.
+		$this->framework->add_section(
+			'support',
+			'rest_summary',
+			array(
+				'title'       => esc_html__( 'Read-Only Summary Endpoint', 'rl-freemius-bi' ),
+				'description' => esc_html__( 'A stable JSON contract for other systems. Aggregates only: no emails, user ids, install secrets or API keys.', 'rl-freemius-bi' ),
+				'priority'    => 100,
+			)
+		);
+
 		$this->framework->add_section(
 			'api_config',
 			'freemius_api',
@@ -546,6 +558,28 @@ class RL_FSBI_Settings_Manager {
 				'default' => 0,
 				'min'     => 0,
 				'max'     => 3650,
+			)
+		);
+
+		$this->framework->add_field(
+			'sync_settings',
+			'sync_config',
+			array(
+				'id'      => 'rl_fsbi_wporg_slug',
+				'type'    => 'text',
+				'label'   => esc_html__( 'WordPress.org Plugin Slug', 'rl-freemius-bi' ),
+				'desc'    => esc_html__( 'Optional. The slug of the free plugin on WordPress.org (the part after /plugin/ in its URL). It powers the "WordPress.org (free)" widget with active installs and the 90-day download history, fetched once a day from the public WordPress.org API. WordPress.org installs and Freemius installs are different populations and are never added together.', 'rl-freemius-bi' ),
+				'default' => '',
+			)
+		);
+
+		$this->framework->add_field(
+			'support',
+			'rest_summary',
+			array(
+				'id'   => 'rl_fsbi_rest_summary_docs',
+				'type' => 'html',
+				'html' => $this->get_rest_summary_docs_html(),
 			)
 		);
 
@@ -1432,6 +1466,81 @@ class RL_FSBI_Settings_Manager {
 				<?php wp_nonce_field( 'rl_fsbi_user_backfill' ); ?>
 				<button type="submit" class="button"><?php echo esc_html__( 'Run user backfill now', 'rl-freemius-bi' ); ?></button>
 			</form>
+		</div>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Support-tab documentation for GET /wp-json/rl-freemius-bi/v1/summary.
+	 *
+	 * @return string
+	 */
+	private function get_rest_summary_docs_html(): string {
+		$endpoint = rest_url( 'rl-freemius-bi/v1/summary' );
+		$fields   = array(
+			esc_html__( 'generated_at', 'rl-freemius-bi' )        => esc_html__( 'When the figures were assembled, ISO 8601 UTC.', 'rl-freemius-bi' ),
+			esc_html__( 'plugin_id', 'rl-freemius-bi' )           => esc_html__( 'Scope the figures cover. 0 means every tracked plugin.', 'rl-freemius-bi' ),
+			esc_html__( 'currency', 'rl-freemius-bi' )            => esc_html__( 'Report currency of the money figures. Default EUR.', 'rl-freemius-bi' ),
+			esc_html__( 'period', 'rl-freemius-bi' )              => esc_html__( 'start, end and months the request resolved to.', 'rl-freemius-bi' ),
+			esc_html__( 'new_subscriptions', 'rl-freemius-bi' )   => esc_html__( 'Per month: new (first payment from a new customer), reactivation (first payment from someone whose earlier subscription had ended) and total.', 'rl-freemius-bi' ),
+			esc_html__( 'renewals', 'rl-freemius-bi' )            => esc_html__( 'Renewal payments per month.', 'rl-freemius-bi' ),
+			esc_html__( 'cancellations', 'rl-freemius-bi' )       => esc_html__( 'Cancellations per month, measured against the base that existed at the start of that month.', 'rl-freemius-bi' ),
+			esc_html__( 'refunds', 'rl-freemius-bi' )             => esc_html__( 'Refund amounts and counts per month.', 'rl-freemius-bi' ),
+			esc_html__( 'mrr', 'rl-freemius-bi' )                 => esc_html__( 'Monthly recurring revenue at the end of the period, converted to the report currency.', 'rl-freemius-bi' ),
+			esc_html__( 'net_revenue_by_month', 'rl-freemius-bi' ) => esc_html__( 'Net revenue per month, converted at each transaction day\'s rate.', 'rl-freemius-bi' ),
+			esc_html__( 'gross_revenue_by_month', 'rl-freemius-bi' ) => esc_html__( 'Gross revenue per month, same conversion rule.', 'rl-freemius-bi' ),
+			esc_html__( 'coupons', 'rl-freemius-bi' )             => esc_html__( 'Per coupon: code, discount, status (active/expired/exhausted/inactive), uses in the period, limit, remaining, expiry, revenue and the discount given.', 'rl-freemius-bi' ),
+		);
+
+		$params = array(
+			esc_html__( 'plugin_id', 'rl-freemius-bi' ) => esc_html__( 'Optional. Tracked plugin id, or omit for all.', 'rl-freemius-bi' ),
+			esc_html__( 'months', 'rl-freemius-bi' )    => esc_html__( 'Optional. Trailing months, clamped to 1–36. Default 12.', 'rl-freemius-bi' ),
+			esc_html__( 'currency', 'rl-freemius-bi' )  => esc_html__( 'Optional. Three-letter code, falls back to EUR.', 'rl-freemius-bi' ),
+		);
+
+		ob_start();
+		?>
+		<div class="rl-fsbi-rest-docs">
+			<style>
+				.rl-fsbi-rest-docs{max-width:860px}
+				.rl-fsbi-rest-docs code{background:#f0f0f1;padding:2px 6px;border-radius:3px}
+				.rl-fsbi-rest-docs pre{background:#1d2327;color:#e7ebff;padding:12px 14px;border-radius:6px;overflow:auto;font-size:12px;line-height:1.5}
+				.rl-fsbi-rest-docs table{width:100%;border-collapse:collapse;margin:10px 0 16px;font-size:13px}
+				.rl-fsbi-rest-docs th,.rl-fsbi-rest-docs td{text-align:left;padding:7px 10px;border-bottom:1px solid #f0f0f1;vertical-align:top}
+				.rl-fsbi-rest-docs th{width:190px;font-weight:600}
+				.rl-fsbi-rest-docs h4{margin:16px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#50575e}
+			</style>
+
+			<p>
+				<?php echo esc_html__( 'Endpoint:', 'rl-freemius-bi' ); ?>
+				<code><?php echo esc_html( $endpoint ); ?></code>
+			</p>
+
+			<h4><?php echo esc_html__( 'Authentication', 'rl-freemius-bi' ); ?></h4>
+			<p>
+				<?php echo esc_html__( 'Requires a user who can manage options. A browser session works, and so does a WordPress application password — create one under Users → Profile → Application Passwords, then call the endpoint from a script. Anonymous requests are refused with 401.', 'rl-freemius-bi' ); ?>
+			</p>
+			<pre>curl -u "admin:xxxx xxxx xxxx xxxx xxxx xxxx" \
+  <?php echo esc_html( $endpoint ); ?>?months=12</pre>
+
+			<h4><?php echo esc_html__( 'Query parameters', 'rl-freemius-bi' ); ?></h4>
+			<table>
+				<?php foreach ( $params as $name => $desc ) : ?>
+					<tr><th><code><?php echo esc_html( $name ); ?></code></th><td><?php echo esc_html( $desc ); ?></td></tr>
+				<?php endforeach; ?>
+			</table>
+
+			<h4><?php echo esc_html__( 'Response fields', 'rl-freemius-bi' ); ?></h4>
+			<table>
+				<?php foreach ( $fields as $name => $desc ) : ?>
+					<tr><th><code><?php echo esc_html( $name ); ?></code></th><td><?php echo esc_html( $desc ); ?></td></tr>
+				<?php endforeach; ?>
+			</table>
+
+			<p class="description">
+				<?php echo esc_html__( 'Money figures are converted at the exchange rate of the day each transaction happened, so totals can differ by a few cents from a sum taken elsewhere. Responses are sent with Cache-Control: private, max-age=300.', 'rl-freemius-bi' ); ?>
+			</p>
 		</div>
 		<?php
 		return (string) ob_get_clean();

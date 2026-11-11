@@ -941,6 +941,16 @@ bumping `Version:` means no site will ever see it.
 - Coupon 114792 rendered as *"Coupon #114792"*, inactive, no discount, unlimited uses, no expiry — while Freemius held `WINBACK30`, 30% off, 500 uses, valid to 31 December 2026. The definitions were only ever fetched during a full sync, so a site that upgraded kept rendering placeholders until the next crawl. They are now fetched on demand when the local copy is empty, with an hourly lock so a broken key cannot turn every page load into an outbound request.
 - The table shows **code, discount, status, uses / limit, remaining, expiry, revenue and discount given**. Status distinguishes `active`, `expired`, `exhausted` and `inactive` — `jekra` at 1 of 1 uses now reads Exhausted rather than Active. Discount given is derived from the amount actually charged (`gross × rate / (100 − rate)` for percentage coupons, value × uses for fixed ones) because Freemius stores no pre-discount price on the payment.
 
+**WordPress.org installs are fetched properly, and kept apart.**
+- The dashboard used to state that WordPress.org data was not fetched. It now is: active installs come from the plugins API `1.2`, the lifetime download total from `1.0` (each endpoint carries only one of the two), and the 90-day download history from the stats endpoint — cached for a day. Set the slug under **Synchronization → WordPress.org Plugin Slug**.
+- The figures live in their own **WordPress.org (free)** widget, which names its source and says outright that these are directory installs of the free plugin, a different population from the Freemius records in the neighbouring widget. The two are never added or compared.
+
+**Every chart is now named, not just most of them.**
+- Sales Activity, Freemius Sales Volume, expected renewals and the new-subscription mini chart gained `role="img"`, a spoken title describing what is plotted, and the **View as table** toggle. The titles replace the code-path names the first pass produced, so a screen reader announces *"Sales activity: purchases, renewals, trials and refunds per day"* rather than *"sales chart"*. All 12 canvases are labelled, 12 tables available.
+
+**The endpoint documents itself.**
+- **Settings → Support** now documents `GET /wp-json/rl-freemius-bi/v1/summary`: the resolved URL, application-password authentication with a ready `curl`, every query parameter and every response field. The coupon objects in the response carry discount, status, limit and discount given too.
+
 ### 1.3.30 (2026-11-10)
 - **An autofilled email can no longer become a bogus Developer ID.** A vendor reported that the backfill failed after signing up, and that the browser had filled the Developer ID field with their email address. The field was a plain text input with no autocomplete hints, and the sanitizer kept only the digits — so `john1985@gmail.com` was saved as `1985`, a perfectly valid id belonging to someone else. Every request then authenticated as the wrong account, and the failure described the API rather than the field. The sanitizer now rejects non-numeric input and keeps the previous value, the backfill error names the missing or non-numeric credential, a notice on the plugin screens says the value was not saved, and the credential fields carry `autocomplete="off"` with a numeric keypad on mobile.
 

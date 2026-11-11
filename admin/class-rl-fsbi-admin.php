@@ -3447,6 +3447,9 @@ class RL_FSBI_Admin
 			$start_date,
 			$end_date,
 			(int) get_option('rl_fsbi_cache_generation', 1),
+			// Included so a code update cannot serve a payload assembled by the
+			// previous version, which may not contain the newest keys.
+			defined('RL_FSBI_VERSION') ? RL_FSBI_VERSION : '',
 		)));
 
 		$cached_payload = get_transient($payload_cache_key);
@@ -3532,6 +3535,9 @@ class RL_FSBI_Admin
 			$this->settings->get_option('rl_fsbi_conversion_currency', 'EUR')
 		);
 		$data['plans']         = $this->get_plans_for_filter($plugin_id);
+		$data['wporg']         = $plugin_id > 0
+			? $this->get_wporg_snapshot((string) $this->settings->get_option('rl_fsbi_wporg_slug', ''))
+			: array('available' => false, 'slug' => '', 'reason' => 'scope');
 		$data['plan_filter']   = $plan_filter;
 
 		$last_sync_utc = (string) $this->settings->get_option('rl_fsbi_last_sync_at_utc', (string) get_option('rl_fsbi_last_sync_at_utc', ''));
@@ -7035,15 +7041,109 @@ class RL_FSBI_Admin
 			'gross_revenue_by_month' => $gross_by_month,
 			'coupons'       => array_map(static function ($coupon) {
 				return array(
-					'code'      => (string) $coupon['code'],
-					'uses'      => (int) $coupon['uses'],
-					'revenue'   => (float) $coupon['revenue'],
-					'discount'  => (string) $coupon['discount'],
-					'remaining' => $coupon['remaining'],
-					'expires'   => (string) $coupon['expires'],
+					'code'           => (string) $coupon['code'],
+					'discount'       => $coupon['discount'],
+					'status'         => (string) $coupon['status'],
+					'uses'           => (int) $coupon['uses'],
+					'limit'          => $coupon['limit'],
+					'remaining'      => $coupon['remaining'],
+					'expires'        => (string) $coupon['expires'],
+					'revenue'        => (float) $coupon['revenue'],
+					'discount_given' => (float) $coupon['discount_given'],
 				);
 			}, $coupons),
 		);
+	}
+
+	/**
+	 * WordPress.org install and download figures, cached for a day.
+	 *
+	 * Public API, no key. These numbers describe free-plugin installs, which is
+	 * a different population from the Freemius install records used elsewhere
+	 * on the dashboard, so they are kept apart and never summed.
+	 *
+	 * @param string $slug WordPress.org plugin slug.
+	 * @return array{available:bool,slug:string,reason?:string,active_installs?:int,total_downloads?:int,version?:string,last_updated?:string,downloads?:array}
+	 */
+	private function get_wporg_snapshot($slug)
+	{
+		$slug = sanitize_title($slug);
+		if ('' === $slug) {
+			return array('available' => false, 'slug' => '', 'reason' => 'no_slug');
+		}
+
+		$cache_key = 'rl_fsbi_wporg_' . md5($slug);
+		$cached    = get_transient($cache_key);
+		if (is_array($cached)) {
+			return $cached;
+		}
+
+		// 1.2 reports active installs but never the download total, and 1.0 is the
+		// other way round, so both are read. The pair is cached for a day.
+		$info_url = add_query_arg(
+			array(
+				'action'        => 'plugin_information',
+				'request[slug]' => $slug,
+			),
+			'https://api.wordpress.org/plugins/info/1.2/'
+		);
+
+		$response = wp_remote_get($info_url, array('timeout' => 15, 'headers' => array('Accept' => 'application/json')));
+
+		$snapshot = array('available' => false, 'slug' => $slug, 'reason' => 'unreachable');
+
+		if (! is_wp_error($response) && 200 === (int) wp_remote_retrieve_response_code($response)) {
+			$body = json_decode((string) wp_remote_retrieve_body($response), true);
+
+			if (is_array($body) && empty($body['error'])) {
+				$snapshot = array(
+					'available'        => true,
+					'slug'             => $slug,
+					'name'             => isset($body['name']) ? sanitize_text_field((string) $body['name']) : '',
+					'active_installs'  => isset($body['active_installs']) ? (int) $body['active_installs'] : 0,
+					'total_downloads'  => 0,
+					'version'          => isset($body['version']) ? sanitize_text_field((string) $body['version']) : '',
+					'last_updated'     => isset($body['last_updated']) ? sanitize_text_field((string) $body['last_updated']) : '',
+					'fetched_at'       => gmdate('Y-m-d H:i:s'),
+					'downloads'        => array('labels' => array(), 'values' => array()),
+				);
+
+				$totals = wp_remote_get(
+					'https://api.wordpress.org/plugins/info/1.0/' . rawurlencode($slug) . '.json',
+					array('timeout' => 15, 'headers' => array('Accept' => 'application/json'))
+				);
+
+				if (! is_wp_error($totals) && 200 === (int) wp_remote_retrieve_response_code($totals)) {
+					$totals_body = json_decode((string) wp_remote_retrieve_body($totals), true);
+					if (is_array($totals_body) && isset($totals_body['downloaded'])) {
+						$snapshot['total_downloads'] = (int) $totals_body['downloaded'];
+					}
+				}
+
+				$stats_url = add_query_arg(
+					array('slug' => $slug, 'limit' => 90),
+					'https://api.wordpress.org/stats/plugin/1.0/downloads.php'
+				);
+				$stats = wp_remote_get($stats_url, array('timeout' => 15, 'headers' => array('Accept' => 'application/json')));
+
+				if (! is_wp_error($stats) && 200 === (int) wp_remote_retrieve_response_code($stats)) {
+					$raw = json_decode((string) wp_remote_retrieve_body($stats), true);
+					if (is_array($raw) && ! empty($raw)) {
+						ksort($raw);
+						$snapshot['downloads'] = array(
+							'labels' => array_keys($raw),
+							'values' => array_map('intval', array_values($raw)),
+						);
+					}
+				}
+			} elseif (is_array($body) && ! empty($body['error'])) {
+				$snapshot['reason'] = 'not_found';
+			}
+		}
+
+		set_transient($cache_key, $snapshot, DAY_IN_SECONDS);
+
+		return $snapshot;
 	}
 
 	/**

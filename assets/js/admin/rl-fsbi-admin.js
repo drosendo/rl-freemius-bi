@@ -1791,6 +1791,36 @@
 		},
 
 		/**
+		 * Spoken title for a chart, keyed by the chart id it draws into.
+		 *
+		 * Screen-reader users get the title before the values, so it says what
+		 * the chart plots and where the numbers come from rather than naming a
+		 * code path.
+		 *
+		 * @function chartTitle
+		 * @memberof FSBI
+		 * @param {string} key - Chart key.
+		 * @param {string} canvasId - Canvas element id.
+		 * @returns {string}
+		 */
+		chartTitle: function(key, canvasId) {
+			const titles = {
+				'rl-fsbi-sales-activity-chart': 'Sales activity: purchases, renewals, trials and refunds per day',
+				'rl-fsbi-wporg-chart': 'Freemius sales volume: payment events per day over the last 90 days',
+				'rl-fsbi-portfolio-chart': 'Net revenue over the last 12 months',
+				'rl-fsbi-revenue-overview-chart': 'Revenue overview over the last 12 months',
+				'rl-fsbi-forecast-chart': 'Forecast revenue from upcoming renewals over the next 12 months',
+				'rl-fsbi-churn-chart': 'Churn trend: cancellations and churn rate per month',
+				'rl-fsbi-currency-chart': 'Revenue by billing currency',
+				'rl-fsbi-country-chart': 'Revenue by customer country',
+				'rl-fsbi-plan-chart': 'Active subscriptions by plan',
+				'rl-fsbi-expected-renewals-chart': 'Expected renewals per day for the current month',
+			};
+
+			return titles[canvasId] || `${key} chart`;
+		},
+
+		/**
 		 * Attach an accessible label and a data table to a chart.
 		 *
 		 * A canvas is opaque to a screen reader, so every chart gets a label and
@@ -1961,6 +1991,7 @@
 			this.setText('rl-fsbi-installs-total', count(installs.total));
 
 			this.renderCoupons(data.coupons || []);
+			this.updateWporgWidget(data.wporg || {});
 
 			const lastSynced = document.getElementById('rl-fsbi-last-synced');
 			if (lastSynced) {
@@ -2019,6 +2050,11 @@
 				return;
 			}
 
+			this.attachChartTable('rl-fsbi-newsubs-chart', 'New paid subscriptions over the last six months', labels, [
+				{ name: 'New customers', values: newSeries, format: 'count' },
+				{ name: 'Reactivations', values: reSeries, format: 'count' },
+			]);
+
 			this.charts.growth = new Chart(canvas, {
 				type: 'bar',
 				data: {
@@ -2072,7 +2108,7 @@
 
 			this.attachChartTable(
 				canvasId,
-				`${key} chart`,
+				this.chartTitle(key, canvasId),
 				labels,
 				datasets.map((set) => ({ name: set.label, values: set.data, format: isMoney ? 'money' : 'count' }))
 			);
@@ -2140,7 +2176,7 @@
 
 			this.attachChartTable(
 				canvasId,
-				`${key} chart`,
+				this.chartTitle(key, canvasId),
 				labels,
 				datasets.map((set) => ({ name: set.label, values: set.data, format: currency ? 'money' : 'count' }))
 			);
@@ -2189,7 +2225,7 @@
 				this.charts[key].destroy();
 			}
 
-			this.attachChartTable(canvasId, `${key} chart`, labels, [
+			this.attachChartTable(canvasId, this.chartTitle(key, canvasId), labels, [
 				{ name: 'Canceled', values: bars, format: 'count' },
 				{ name: 'Churn Rate', values: line, format: 'percent' },
 			]);
@@ -2282,6 +2318,19 @@
 			});
 
 			const self = this;
+
+			const renewalSeries = [
+				{ name: 'Expected revenue', values: (expectedRenewals.total_amounts || []), format: 'money' },
+				{ name: 'Completed revenue', values: (expectedRenewals.completed_amounts || []), format: 'money' },
+			];
+
+			this.attachChartTable(
+				'rl-fsbi-expected-renewals-chart',
+				this.chartTitle('expectedRenewals', 'rl-fsbi-expected-renewals-chart'),
+				dayLabels,
+				renewalSeries
+			);
+
 			this.charts['expectedRenewals'] = new Chart(canvas, {
 				data: {
 					labels: dayLabels,
@@ -2442,10 +2491,99 @@
 				},
 			});
 
-			this.attachChartTable(canvasId, `${key} distribution`, labels, [
+			this.attachChartTable(canvasId, this.chartTitle(key, canvasId), labels, [
 				{ name: 'Value', values: values, format: asMoney ? 'money' : 'count' },
 			]);
 			this.renderPieLegend(canvas, labels, values, palette, asMoney, currency);
+		},
+
+		/**
+		 * Render the WordPress.org (free) widget.
+		 *
+		 * Deliberately its own card: wp.org directory installs and Freemius
+		 * install records count different populations, so they are never summed
+		 * or compared, only shown side by side with their sources named.
+		 *
+		 * @function updateWporgWidget
+		 * @memberof FSBI
+		 * @param {Object} wporg - Snapshot from the WordPress.org API.
+		 * @returns {void}
+		 */
+		updateWporgWidget: function(wporg) {
+			const note = document.getElementById('rl-fsbi-wporg-note');
+			const explain = (message) => {
+				if (note) {
+					note.textContent = message;
+					note.hidden = false;
+				}
+			};
+
+			if (!wporg.available) {
+				const reasons = {
+					no_slug: 'Add the WordPress.org plugin slug under Settings → Synchronization to show directory installs here.',
+					scope: 'Pick a single plugin to see its WordPress.org figures.',
+					not_found: 'No plugin with that slug was found on WordPress.org.',
+					unreachable: 'WordPress.org did not answer. Figures will retry on the next page load.'
+				};
+				explain(reasons[wporg.reason] || reasons.unreachable);
+
+				['rl-fsbi-wporg-active', 'rl-fsbi-wporg-downloads', 'rl-fsbi-wporg-version', 'rl-fsbi-wporg-updated'].forEach((id) => this.setText(id, '—'));
+				return;
+			}
+
+			if (note) {
+				note.hidden = true;
+			}
+
+			this.setText('rl-fsbi-wporg-active', Number(wporg.active_installs || 0).toLocaleString());
+			this.setText('rl-fsbi-wporg-downloads', Number(wporg.total_downloads || 0).toLocaleString());
+			this.setText('rl-fsbi-wporg-version', wporg.version || '—');
+			this.setText('rl-fsbi-wporg-updated', wporg.last_updated ? String(wporg.last_updated).replace(' GMT', '') : '—');
+
+			const downloads = wporg.downloads || {};
+			const labels = Array.isArray(downloads.labels) ? downloads.labels : [];
+			const values = Array.isArray(downloads.values) ? downloads.values : [];
+
+			if (!labels.length || !window.Chart) {
+				return;
+			}
+
+			const canvas = document.getElementById('rl-fsbi-wporg-installs-chart');
+			if (!canvas) {
+				return;
+			}
+
+			this.attachChartTable('rl-fsbi-wporg-installs-chart', 'WordPress.org daily downloads', labels, [
+				{ name: 'Downloads', values: values, format: 'count' },
+			]);
+
+			if (this.charts.wporg_installs) {
+				this.charts.wporg_installs.destroy();
+			}
+
+			this.charts.wporg_installs = new Chart(canvas, {
+				type: 'bar',
+				data: {
+					labels: labels,
+					datasets: [{
+						label: 'Daily downloads',
+						data: values,
+						backgroundColor: 'rgba(56,189,248,0.55)',
+						borderRadius: 1,
+						barPercentage: 0.9,
+						categoryPercentage: 0.95,
+					}],
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					plugins: { legend: { display: false } },
+					scales: {
+						x: { display: false },
+						y: { beginAtZero: true, ticks: { color: '#9ca8d6', maxTicksLimit: 4, precision: 0 }, grid: { color: 'rgba(255,255,255,0.08)' } },
+					},
+				},
+			});
 		},
 
 		/**
